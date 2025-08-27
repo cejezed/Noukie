@@ -393,8 +393,6 @@ export default function Rooster() {
                     <SelectItem value="3">Woensdag</SelectItem>
                     <SelectItem value="4">Donderdag</SelectItem>
                     <SelectItem value="5">Vrijdag</SelectItem>
-                    <SelectItem value="6">Zaterdag</SelectItem>
-                    <SelectItem value="7">Zondag</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
