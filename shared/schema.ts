@@ -4,7 +4,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").primaryKey(), // Allow external UUIDs from Supabase auth
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   role: text("role", { enum: ["student", "parent"] }).notNull(),
@@ -74,9 +74,8 @@ export const quizResults = pgTable("quiz_results", {
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
   createdAt: true,
-});
+}); // Allow id to be provided (for Supabase auth sync)
 
 export const insertCourseSchema = createInsertSchema(courses).omit({
   id: true,
