@@ -70,7 +70,8 @@ export default function Vandaag() {
   const playLastCoachAudio = () => {
     if (lastSession?.coachText) {
       // In production, this would play the actual TTS audio
-      playAudio("/api/tts/dummy.mp3");
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+      playAudio(`${apiBaseUrl}/api/tts/dummy.mp3`);
     }
   };
 
