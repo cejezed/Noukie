@@ -6,7 +6,8 @@ import path from "path";
 import { storage } from "./storage";
 import { transcribeAudio, generatePlan, generateExplanation } from "./services/openai";
 import { checkAndSendReminders } from "./services/cron";
-import { insertTaskSchema, insertSessionSchema, insertScheduleSchema } from "@shared/schema";
+import { signUp as supabaseSignUp, signIn as supabaseSignIn, signOut as supabaseSignOut } from "./services/supabase";
+import { insertTaskSchema, insertSessionSchema, insertScheduleSchema, insertUserSchema } from "@shared/schema";
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -14,6 +15,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date().toISOString() });
+  });
+
+  // Authentication routes
+  app.post("/api/auth/signup", async (req, res) => {
+    try {
+      const { email, password, name, role } = req.body;
+      
+      if (!email || !password || !name || !role) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Create user in Supabase Auth
+      const supabaseResult = await supabaseSignUp(email, password, name, role);
+      
+      // TODO: Sync with custom users table later when database connection is fixed
+      res.json(supabaseResult);
+    } catch (error) {
+      console.error("Signup error:", error);
+      res.status(500).json({ error: (error as Error).message || "Failed to create account" });
+    }
+  });
+
+  app.post("/api/auth/signin", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: "Missing email or password" });
+      }
+
+      const result = await supabaseSignIn(email, password);
+      res.json(result);
+    } catch (error) {
+      console.error("Signin error:", error);
+      res.status(500).json({ error: (error as Error).message || "Failed to sign in" });
+    }
+  });
+
+  app.post("/api/auth/signout", async (req, res) => {
+    try {
+      await supabaseSignOut();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Signout error:", error);
+      res.status(500).json({ error: (error as Error).message || "Failed to sign out" });
+    }
   });
 
   // ASR endpoint
