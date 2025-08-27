@@ -47,20 +47,9 @@ let inMemoryStorage: {
 };
 
 let db: any = null;
-let useInMemory = false;
+let useInMemory = true; // Force in-memory storage for now
 
-try {
-  if (databaseUrl) {
-    const connection = neon(databaseUrl);
-    db = drizzle(connection);
-  } else {
-    useInMemory = true;
-    console.log("Using in-memory storage - DATABASE_URL not set");
-  }
-} catch (error) {
-  useInMemory = true;
-  console.log("Database connection failed, using in-memory storage:", (error as Error).message);
-}
+console.log("Using in-memory storage - Database disabled for testing");
 
 export interface IStorage {
   // Users
