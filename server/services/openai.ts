@@ -47,7 +47,7 @@ export async function generatePlan(transcript: string, date: string): Promise<{
   }
 
   const response = await openai.chat.completions.create({
-    model: "gpt-5",
+    model: "gpt-4o",
     messages: [
       {
         role: "system",
@@ -100,7 +100,7 @@ export async function generateExplanation(
   const subject = course || "algemeen";
 
   const response = await openai.chat.completions.create({
-    model: "gpt-5",
+    model: "gpt-4o",
     messages: [
       {
         role: "system",
