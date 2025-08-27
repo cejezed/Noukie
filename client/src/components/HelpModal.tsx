@@ -98,7 +98,9 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
   });
 
   const playTTSAudio = (text: string) => {
-    ttsAudioMutation.mutate(text);
+    if (text && text.trim()) {
+      ttsAudioMutation.mutate(text);
+    }
   };
 
   const handleTextHelp = () => {

@@ -114,5 +114,21 @@ export async function generateExplanation(
     response_format: { type: "json_object" },
   });
 
-  return JSON.parse(response.choices[0].message.content || "{}");
+  const rawResponse = JSON.parse(response.choices[0].message.content || "{}");
+  console.log("Raw OpenAI response:", rawResponse);
+  
+  // Normalize the response to expected format
+  return {
+    steps: rawResponse.steps || rawResponse.uitleg_stappen || rawResponse.stappen?.map((s: any) => s.uitleg || s) || ["Geen stappen beschikbaar"],
+    example: rawResponse.example || rawResponse.voorbeeld || {
+      prompt: rawResponse.voorbeeld_opgave || "Geen voorbeeld beschikbaar", 
+      solution: rawResponse.voorbeeld_oplossing || "Geen oplossing beschikbaar"
+    },
+    quiz: rawResponse.quiz || rawResponse.controlevraag || {
+      question: rawResponse.quiz_vraag || "Geen vraag beschikbaar",
+      choices: rawResponse.quiz_opties || rawResponse.antwoord_opties || ["A) Optie niet beschikbaar"],
+      answer: rawResponse.quiz_antwoord || rawResponse.juiste_antwoord || "A"
+    },
+    coach_text: rawResponse.coach_text || rawResponse.advies || rawResponse.feedback || "Goed gedaan! Probeer de stappen te volgen."
+  };
 }
