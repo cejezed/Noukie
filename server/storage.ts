@@ -226,13 +226,16 @@ export class PostgresStorage implements IStorage {
   }
 
   async getTasksByDateRange(userId: string, startDate: Date, endDate: Date): Promise<Task[]> {
-    return await db.select().from(tasks)
+    const taskResults = await db.select().from(tasks)
       .where(and(
         eq(tasks.userId, userId),
         gte(tasks.dueAt, startDate),
         lte(tasks.dueAt, endDate)
       ))
       .orderBy(desc(tasks.priority), tasks.dueAt);
+    
+    console.log(`📋 Found ${taskResults.length} tasks for week ${startDate.toDateString()} - ${endDate.toDateString()}`);
+    return taskResults;
   }
 
   async createTask(task: InsertTask): Promise<Task> {

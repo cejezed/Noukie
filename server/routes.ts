@@ -247,6 +247,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { userId } = req.params;
       const scheduleItems = await storage.getScheduleByUserId(userId);
+      console.log(`📅 Found ${scheduleItems.length} schedule items for user ${userId}:`, scheduleItems);
       res.json(scheduleItems);
     } catch (error) {
       console.error("Schedule fetch error:", error);
