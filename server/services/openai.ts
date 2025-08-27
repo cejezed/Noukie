@@ -118,17 +118,51 @@ export async function generateExplanation(
   console.log("Raw OpenAI response:", rawResponse);
   
   // Normalize the response to expected format
+  let steps = ["Geen stappen beschikbaar"];
+  if (rawResponse.steps) {
+    steps = rawResponse.steps;
+  } else if (rawResponse.uitleg_stappen) {
+    steps = rawResponse.uitleg_stappen;
+  } else if (rawResponse.stappenUitleg) {
+    steps = rawResponse.stappenUitleg.map((s: any) => s.omschrijving || s.uitleg || `Stap ${s.stap}: ${s.omschrijving}`);
+  } else if (rawResponse.stappen) {
+    steps = rawResponse.stappen.map((s: any) => s.uitleg || s.omschrijving || s);
+  }
+
+  let example = { prompt: "Geen voorbeeld beschikbaar", solution: "Geen oplossing beschikbaar" };
+  if (rawResponse.example) {
+    example = rawResponse.example;
+  } else if (rawResponse.voorbeeld) {
+    const v = rawResponse.voorbeeld;
+    example = {
+      prompt: v.omschrijving || v.opgave || "Geen voorbeeld beschikbaar",
+      solution: v.resultaat || v.oplossing || (v.berekening ? v.berekening.join('; ') : "Geen oplossing beschikbaar")
+    };
+  }
+
+  let quiz = { question: "Geen vraag beschikbaar", choices: ["A) Optie niet beschikbaar"], answer: "A" };
+  if (rawResponse.quiz) {
+    quiz = rawResponse.quiz;
+  } else if (rawResponse.controlevraag) {
+    const c = rawResponse.controlevraag;
+    const choices = [];
+    if (c.opties) {
+      // Convert object {A: "...", B: "..."} to array ["A) ...", "B) ..."]
+      for (const [key, value] of Object.entries(c.opties)) {
+        choices.push(`${key}) ${value}`);
+      }
+    }
+    quiz = {
+      question: c.vraag || "Geen vraag beschikbaar",
+      choices: choices.length > 0 ? choices : ["A) Optie niet beschikbaar"],
+      answer: c.correcteAntwoord || c.antwoord || "A"
+    };
+  }
+
   return {
-    steps: rawResponse.steps || rawResponse.uitleg_stappen || rawResponse.stappen?.map((s: any) => s.uitleg || s) || ["Geen stappen beschikbaar"],
-    example: rawResponse.example || rawResponse.voorbeeld || {
-      prompt: rawResponse.voorbeeld_opgave || "Geen voorbeeld beschikbaar", 
-      solution: rawResponse.voorbeeld_oplossing || "Geen oplossing beschikbaar"
-    },
-    quiz: rawResponse.quiz || rawResponse.controlevraag || {
-      question: rawResponse.quiz_vraag || "Geen vraag beschikbaar",
-      choices: rawResponse.quiz_opties || rawResponse.antwoord_opties || ["A) Optie niet beschikbaar"],
-      answer: rawResponse.quiz_antwoord || rawResponse.juiste_antwoord || "A"
-    },
+    steps,
+    example,
+    quiz,
     coach_text: rawResponse.coach_text || rawResponse.advies || rawResponse.feedback || "Goed gedaan! Probeer de stappen te volgen."
   };
 }
