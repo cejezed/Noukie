@@ -234,7 +234,6 @@ export class PostgresStorage implements IStorage {
       ))
       .orderBy(desc(tasks.priority), tasks.dueAt);
     
-    console.log(`📋 Found ${taskResults.length} tasks for week ${startDate.toDateString()} - ${endDate.toDateString()}`);
     return taskResults;
   }
 
