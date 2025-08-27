@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useState, useEffect } from "react";
-import { Camera, Upload, Play, Volume2 } from "lucide-react";
+import { Camera, Upload, Play, Volume2, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -29,6 +29,7 @@ interface ExplanationResult {
   example: { prompt: string; solution: string };
   quiz: { question: string; choices: string[]; answer: string };
   coach_text: string;
+  resources: { title: string; url: string }[];
 }
 
 export default function HelpModal({ open, onOpenChange, task, course, helpData }: HelpModalProps) {
@@ -262,7 +263,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => playTTSAudio(explanation.coach_text || '')}
+                onClick={() => playTTSAudio(explanation?.coach_text || '')}
                 disabled={ttsAudioMutation.isPending}
                 data-testid="button-play-explanation"
               >
@@ -274,7 +275,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
             <div>
               <h4 className="text-sm font-medium mb-2">Stappen:</h4>
               <ol className="space-y-2 text-sm">
-                {explanation.steps?.map((step, index) => (
+                {explanation?.steps?.map((step, index) => (
                   <li key={index} className="flex" data-testid={`step-${index}`}>
                     <span className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs mr-3 flex-shrink-0">
                       {index + 1}
@@ -288,19 +289,19 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
             {/* Example */}
             <div className="bg-muted/50 rounded-lg p-3" data-testid="example-section">
               <h4 className="text-sm font-medium mb-2">Voorbeeld:</h4>
-              <p className="text-sm mb-2">{explanation.example?.prompt || 'Geen voorbeeld beschikbaar'}</p>
+              <p className="text-sm mb-2">{explanation?.example?.prompt || 'Geen voorbeeld beschikbaar'}</p>
               <p className="text-sm font-mono bg-background px-2 py-1 rounded">
-                {explanation.example?.solution || 'Geen oplossing beschikbaar'}
+                {explanation?.example?.solution || 'Geen oplossing beschikbaar'}
               </p>
             </div>
 
             {/* Quiz */}
             <div className="border border-border rounded-lg p-3" data-testid="quiz-section">
               <h4 className="text-sm font-medium mb-3">Controle vraag:</h4>
-              <p className="text-sm mb-3">{explanation.quiz?.question || 'Geen vraag beschikbaar'}</p>
+              <p className="text-sm mb-3">{explanation?.quiz?.question || 'Geen vraag beschikbaar'}</p>
               
               <div className="space-y-2 mb-4">
-                {explanation.quiz?.choices?.map((choice, index) => (
+                {explanation?.quiz?.choices?.map((choice, index) => (
                   <label key={index} className="flex items-center space-x-2 text-sm cursor-pointer">
                     <input
                       type="radio"
@@ -334,6 +335,31 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
                 </Button>
               </div>
             </div>
+
+            {/* Nuttige Links */}
+            {explanation?.resources && explanation.resources.length > 0 && (
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium mb-3 flex items-center">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Meer leren:
+                </h4>
+                <div className="space-y-2">
+                  {explanation.resources.map((resource, index) => (
+                    <a
+                      key={index}
+                      href={resource.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center text-sm text-primary hover:text-primary/80 underline transition-colors"
+                      data-testid={`resource-link-${index}`}
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1 flex-shrink-0" />
+                      {resource.title}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>

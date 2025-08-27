@@ -74,6 +74,7 @@ export async function generateExplanation(
   example: { prompt: string; solution: string };
   quiz: { question: string; choices: string[]; answer: string };
   coach_text: string;
+  resources: { title: string; url: string }[];
 }> {
   if (!openai) {
     // Dummy response when no API key
@@ -92,7 +93,17 @@ export async function generateExplanation(
         choices: ["A) 0.6", "B) 0.8", "C) 1.25"],
         answer: "B"
       },
-      coach_text: "Probeer eerst stap 1 en 2. Zeg 'help' als je vastloopt."
+      coach_text: "Probeer eerst stap 1 en 2. Zeg 'help' als je vastloopt.",
+      resources: [
+        {
+          title: "Khan Academy NL - Trigonometrie",
+          url: "https://nl.khanacademy.org/math/trigonometry"
+        },
+        {
+          title: "Wiskunde Online - Sinus en Cosinus",
+          url: "https://www.wiskundeonline.nl/sinus-cosinus"
+        }
+      ]
     };
   }
 
@@ -104,11 +115,11 @@ export async function generateExplanation(
     messages: [
       {
         role: "system",
-        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Voor 'Ik snap dit niet': geef 3–6 genummerde uitlegstappen, 1 uitgewerkt voorbeeld, en 1 controlevraag met meerkeuze opties. Gebruik exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\"}"
+        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Voor 'Ik snap dit niet': geef 3–6 genummerde uitlegstappen, 1 uitgewerkt voorbeeld, 1 controlevraag met meerkeuze opties, en 2-3 nuttige links. Gebruik exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\", \"resources\": [{\"title\": \"Khan Academy NL\", \"url\": \"https://nl.khanacademy.org/...\"}]}"
       },
       {
         role: "user",
-        content: `Onderwerp: ${content}\nVak: ${subject}\n\nGeef uitleg met exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\"}`
+        content: `Onderwerp: ${content}\nVak: ${subject}\n\nGeef uitleg met exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\", \"resources\": [{\"title\": \"Website naam\", \"url\": \"https://echte-url.nl\"}]}. Gebruik echte Nederlandse onderwijswebsites zoals Khan Academy NL, Malmberg, ThiemeMeulenhoff, Noordhoff, of Wikipedia.`
       }
     ],
     response_format: { type: "json_object" },
@@ -163,11 +174,25 @@ export async function generateExplanation(
     };
   }
 
+  let resources = [
+    { title: "Khan Academy NL", url: "https://nl.khanacademy.org" },
+    { title: "Studiewijzer.nl", url: "https://www.studiewijzer.nl" }
+  ];
+  if (rawResponse.resources && Array.isArray(rawResponse.resources)) {
+    resources = rawResponse.resources.filter((r: any) => r.title && r.url);
+  } else if (rawResponse.bronnen && Array.isArray(rawResponse.bronnen)) {
+    resources = rawResponse.bronnen.map((b: any) => ({
+      title: b.naam || b.title || "Nuttige bron",
+      url: b.link || b.url || "#"
+    }));
+  }
+
   const result = {
     steps,
     example,
     quiz,
-    coach_text: rawResponse.coach_text || rawResponse.advies || rawResponse.feedback || "Goed gedaan! Probeer de stappen te volgen."
+    coach_text: rawResponse.coach_text || rawResponse.advies || rawResponse.feedback || "Goed gedaan! Probeer de stappen te volgen.",
+    resources
   };
   
   console.log("Normalized result:", JSON.stringify(result, null, 2));
