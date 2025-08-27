@@ -60,6 +60,7 @@ export interface IStorage {
   // Courses
   getCoursesByUserId(userId: string): Promise<Course[]>;
   createCourse(course: InsertCourse): Promise<Course>;
+  deleteCourse(id: string): Promise<void>;
   
   // Schedule
   getScheduleByUserId(userId: string): Promise<Schedule[]>;
@@ -128,6 +129,15 @@ export class PostgresStorage implements IStorage {
     }
     const result = await db.insert(courses).values(course).returning();
     return result[0];
+  }
+
+  async deleteCourse(id: string): Promise<void> {
+    if (useInMemory) {
+      const index = inMemoryStorage.courses.findIndex(c => c.id === id);
+      if (index > -1) inMemoryStorage.courses.splice(index, 1);
+      return;
+    }
+    await db.delete(courses).where(eq(courses.id, id));
   }
 
   async getScheduleByUserId(userId: string): Promise<Schedule[]> {

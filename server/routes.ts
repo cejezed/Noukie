@@ -211,6 +211,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete("/api/courses/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteCourse(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Course delete error:", error);
+      res.status(500).json({ error: "Failed to delete course" });
+    }
+  });
+
   // Schedule management
   app.get("/api/schedule/:userId", async (req, res) => {
     try {

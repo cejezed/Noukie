@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -123,6 +123,29 @@ export default function Rooster() {
     }
   });
 
+  // Delete course mutation
+  const deleteCourseMutation = useMutation({
+    mutationFn: async (courseId: string) => {
+      const response = await apiRequest("DELETE", `/api/courses/${courseId}`);
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
+      toast({
+        title: "Vak verwijderd!",
+        description: "Het vak is succesvol verwijderd.",
+      });
+    },
+    onError: (error) => {
+      console.error("Delete course error:", error);
+      toast({
+        title: "Fout",
+        description: "Kon vak niet verwijderen.",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Delete schedule item mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -234,11 +257,24 @@ export default function Rooster() {
               {courses.map((course) => (
                 <div
                   key={course.id}
-                  className="bg-muted rounded-lg p-3 text-sm"
+                  className="bg-muted rounded-lg p-3 text-sm relative group"
                   data-testid={`course-${course.id}`}
                 >
                   <div className="font-medium">{course.name}</div>
                   <div className="text-xs text-muted-foreground">{course.level}</div>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Weet je zeker dat je het vak "${course.name}" wilt verwijderen?`)) {
+                        deleteCourseMutation.mutate(course.id);
+                      }
+                    }}
+                    disabled={deleteCourseMutation.isPending}
+                    className="absolute top-1 right-1 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                    data-testid={`button-delete-course-${course.id}`}
+                    title="Vak verwijderen"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               ))}
             </div>
