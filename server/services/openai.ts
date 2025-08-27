@@ -104,11 +104,11 @@ export async function generateExplanation(
     messages: [
       {
         role: "system",
-        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Voor 'Ik snap dit niet': geef 3–6 genummerde uitlegstappen, 1 uitgewerkt voorbeeld, en 1 controlevraag met meerkeuze opties. Formatteer in JSON."
+        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Voor 'Ik snap dit niet': geef 3–6 genummerde uitlegstappen, 1 uitgewerkt voorbeeld, en 1 controlevraag met meerkeuze opties. Gebruik exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\"}"
       },
       {
         role: "user",
-        content: `Onderwerp: ${content}\nVak: ${subject}\n\nGeef uitleg met stappen, voorbeeld en quiz in JSON formaat.`
+        content: `Onderwerp: ${content}\nVak: ${subject}\n\nGeef uitleg met exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\"}`
       }
     ],
     response_format: { type: "json_object" },

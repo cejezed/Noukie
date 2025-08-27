@@ -255,7 +255,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
               <Button
                 variant="outline"
                 size="icon"
-                onClick={() => playTTSAudio(explanation.coach_text)}
+                onClick={() => playTTSAudio(explanation.coach_text || '')}
                 disabled={ttsAudioMutation.isPending}
                 data-testid="button-play-explanation"
               >
@@ -267,7 +267,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
             <div>
               <h4 className="text-sm font-medium mb-2">Stappen:</h4>
               <ol className="space-y-2 text-sm">
-                {explanation.steps.map((step, index) => (
+                {explanation.steps?.map((step, index) => (
                   <li key={index} className="flex" data-testid={`step-${index}`}>
                     <span className="w-6 h-6 bg-primary text-primary-foreground rounded-full flex items-center justify-center text-xs mr-3 flex-shrink-0">
                       {index + 1}
@@ -281,19 +281,19 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
             {/* Example */}
             <div className="bg-muted/50 rounded-lg p-3" data-testid="example-section">
               <h4 className="text-sm font-medium mb-2">Voorbeeld:</h4>
-              <p className="text-sm mb-2">{explanation.example.prompt}</p>
+              <p className="text-sm mb-2">{explanation.example?.prompt || 'Geen voorbeeld beschikbaar'}</p>
               <p className="text-sm font-mono bg-background px-2 py-1 rounded">
-                {explanation.example.solution}
+                {explanation.example?.solution || 'Geen oplossing beschikbaar'}
               </p>
             </div>
 
             {/* Quiz */}
             <div className="border border-border rounded-lg p-3" data-testid="quiz-section">
               <h4 className="text-sm font-medium mb-3">Controle vraag:</h4>
-              <p className="text-sm mb-3">{explanation.quiz.question}</p>
+              <p className="text-sm mb-3">{explanation.quiz?.question || 'Geen vraag beschikbaar'}</p>
               
               <div className="space-y-2 mb-4">
-                {explanation.quiz.choices.map((choice, index) => (
+                {explanation.quiz?.choices?.map((choice, index) => (
                   <label key={index} className="flex items-center space-x-2 text-sm cursor-pointer">
                     <input
                       type="radio"
