@@ -31,47 +31,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/signin`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password }),
+    // For development, use direct Supabase auth
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Inloggen mislukt");
-    }
+    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string, name: string, role: "student" | "parent") => {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/signup`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ email, password, name, role }),
+    // For development, use direct Supabase auth
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          name,
+          role,
+        }
+      }
     });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Registratie mislukt");
-    }
+    if (error) throw error;
   };
 
   const signOut = async () => {
-    const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/auth/signout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || "Uitloggen mislukt");
-    }
+    // For development, use direct Supabase auth
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   const value = {
