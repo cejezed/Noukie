@@ -115,18 +115,22 @@ export async function generateExplanation(
   });
 
   const rawResponse = JSON.parse(response.choices[0].message.content || "{}");
-  console.log("Raw OpenAI response:", rawResponse);
+  console.log("Raw OpenAI response:", JSON.stringify(rawResponse, null, 2));
   
   // Normalize the response to expected format
   let steps = ["Geen stappen beschikbaar"];
   if (rawResponse.steps) {
     steps = rawResponse.steps;
   } else if (rawResponse.uitleg_stappen) {
-    steps = rawResponse.uitleg_stappen;
+    // Handle both array of strings and array of objects
+    steps = rawResponse.uitleg_stappen.map((s: any) => {
+      if (typeof s === 'string') return s;
+      return s.stap ? `${s.stap}. ${s.beschrijving || s.omschrijving || s.uitleg}` : (s.beschrijving || s.omschrijving || s.uitleg || s);
+    });
   } else if (rawResponse.stappenUitleg) {
-    steps = rawResponse.stappenUitleg.map((s: any) => s.omschrijving || s.uitleg || `Stap ${s.stap}: ${s.omschrijving}`);
+    steps = rawResponse.stappenUitleg.map((s: any) => s.omschrijving || s.uitleg || s.beschrijving || `Stap ${s.stap}: ${s.omschrijving || s.beschrijving}`);
   } else if (rawResponse.stappen) {
-    steps = rawResponse.stappen.map((s: any) => s.uitleg || s.omschrijving || s);
+    steps = rawResponse.stappen.map((s: any) => s.uitleg || s.omschrijving || s.beschrijving || s);
   }
 
   let example = { prompt: "Geen voorbeeld beschikbaar", solution: "Geen oplossing beschikbaar" };
@@ -159,10 +163,13 @@ export async function generateExplanation(
     };
   }
 
-  return {
+  const result = {
     steps,
     example,
     quiz,
     coach_text: rawResponse.coach_text || rawResponse.advies || rawResponse.feedback || "Goed gedaan! Probeer de stappen te volgen."
   };
+  
+  console.log("Normalized result:", JSON.stringify(result, null, 2));
+  return result;
 }
