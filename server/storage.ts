@@ -47,9 +47,23 @@ let inMemoryStorage: {
 };
 
 let db: any = null;
-let useInMemory = true; // Force in-memory storage for now
+let useInMemory = false; // Use real database now
 
-console.log("Using in-memory storage - Database disabled for testing");
+// Initialize database connection
+if (databaseUrl) {
+  try {
+    const sql = neon(databaseUrl);
+    db = drizzle(sql);
+    console.log("✅ Connected to PostgreSQL database");
+  } catch (error) {
+    console.error("❌ Database connection failed:", error);
+    useInMemory = true;
+    console.log("Falling back to in-memory storage");
+  }
+} else {
+  console.log("⚠️ No DATABASE_URL found, using in-memory storage");
+  useInMemory = true;
+}
 
 export interface IStorage {
   // Users
