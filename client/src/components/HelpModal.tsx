@@ -72,6 +72,11 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
     onSuccess: (data: ExplanationResult) => {
       setExplanation(data);
       
+      // If no currentTopic is set (edge case), use the first step as topic
+      if (!currentTopic && data.steps.length > 0) {
+        setCurrentTopic(data.steps[0].substring(0, 50)); // First 50 chars of first step
+      }
+      
       // Play coach audio
       if (data.coach_text) {
         playTTSAudio(data.coach_text);
@@ -112,11 +117,24 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
         throw new Error("Missing data for expansion");
       }
       
+      console.log("Sending expand request:", { 
+        topic: currentTopic, 
+        course: selectedCourse,
+        hasExplanation: !!explanation 
+      });
+      
       const response = await apiRequest("POST", "/api/explain/expand", {
         originalExplanation: explanation,
         topic: currentTopic,
         course: selectedCourse
       });
+      
+      if (!response.ok) {
+        const errorData = await response.text();
+        console.error("Expand API error:", errorData);
+        throw new Error(`Server error: ${response.status}`);
+      }
+      
       return await response.json();
     },
     onSuccess: (data: ExplanationResult) => {
@@ -162,8 +180,20 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
   };
 
   const handleMoreExplanation = () => {
+    console.log("More explanation clicked:", { explanation: !!explanation, currentTopic, selectedCourse });
     if (explanation && currentTopic && selectedCourse) {
       expandMutation.mutate();
+    } else {
+      console.log("Missing data for expansion:", { 
+        hasExplanation: !!explanation, 
+        currentTopic, 
+        selectedCourse 
+      });
+      toast({
+        title: "Fout",
+        description: "Kan geen uitgebreide uitleg genereren. Probeer eerst nieuwe hulp te vragen.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -183,6 +213,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
         const ocrResponse = await apiRequest("POST", "/api/ocr", formData);
         const { text } = await ocrResponse.json();
 
+        setCurrentTopic(text); // Store OCR text as topic for expansion
         helpMutation.mutate({
           mode: "image",
           text,
