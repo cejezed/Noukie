@@ -4,7 +4,7 @@ import multer from "multer";
 import fs from "fs";
 import path from "path";
 import { storage } from "./storage";
-import { transcribeAudio, generatePlan, generateExplanation } from "./services/openai";
+import { transcribeAudio, generatePlan, generateExplanation, expandExplanation } from "./services/openai";
 import { checkAndSendReminders } from "./services/cron";
 import { signUp as supabaseSignUp, signIn as supabaseSignIn, signOut as supabaseSignOut } from "./services/supabase";
 import { insertTaskSchema, insertSessionSchema, insertScheduleSchema, insertUserSchema, insertCourseSchema } from "@shared/schema";
@@ -184,6 +184,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Explanation error:", error);
       res.status(500).json({ error: "Failed to generate explanation" });
+    }
+  });
+
+  // Expand explanation endpoint
+  app.post("/api/explain/expand", async (req, res) => {
+    try {
+      const { originalExplanation, topic, course } = req.body;
+      
+      if (!originalExplanation || !topic || !course) {
+        return res.status(400).json({ error: "Missing required parameters" });
+      }
+
+      const expandedExplanation = await expandExplanation(originalExplanation, topic, course);
+      
+      res.json(expandedExplanation);
+    } catch (error) {
+      console.error("Expand explanation error:", error);
+      res.status(500).json({ error: "Failed to expand explanation" });
     }
   });
 

@@ -198,3 +198,124 @@ export async function generateExplanation(
   console.log("Normalized result:", JSON.stringify(result, null, 2));
   return result;
 }
+
+export async function expandExplanation(
+  originalExplanation: {
+    steps: string[];
+    example: { prompt: string; solution: string };
+    quiz: { question: string; choices: string[]; answer: string };
+    coach_text: string;
+    resources: { title: string; url: string }[];
+  },
+  topic: string,
+  course: string
+): Promise<{
+  steps: string[];
+  example: { prompt: string; solution: string };
+  quiz: { question: string; choices: string[]; answer: string };
+  coach_text: string;
+  resources: { title: string; url: string }[];
+}> {
+  if (!openai) {
+    // Dummy expanded response when no API key
+    return {
+      steps: [
+        ...originalExplanation.steps,
+        "Extra stap: Verdiep je kennis door de formule uit je hoofd te leren",
+        "Extra stap: Oefen met verschillende voorbeelden tot je het automatisch kunt",
+        "Extra stap: Leg het concept uit aan iemand anders - dat helpt je het beter te begrijpen"
+      ],
+      example: {
+        prompt: originalExplanation.example.prompt + " (uitgebreid voorbeeld)",
+        solution: originalExplanation.example.solution + " - Met meer detail: dit komt omdat de formule gebaseerd is op de verhouding tussen zijden in een rechthoekige driehoek."
+      },
+      quiz: originalExplanation.quiz,
+      coach_text: "Je wilt meer leren - dat is geweldig! Probeer de extra stappen en daag jezelf uit met moeilijkere opgaven.",
+      resources: originalExplanation.resources
+    };
+  }
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "system",
+        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Een student vraagt om MEER UITLEG over een onderwerp. Geef een uitgebreidere versie met: meer gedetailleerde stappen (5-8 stappen), uitgebreider voorbeeld met extra toelichting, nieuwe quiz vraag (iets moeilijker), en aanmoedigende coach tekst. Gebruik dezelfde JSON structuur maar met meer diepgang en detail."
+      },
+      {
+        role: "user", 
+        content: `De student wil meer uitleg over: ${topic} (vak: ${course})
+
+Huidige uitleg die ze al hebben:
+Stappen: ${originalExplanation.steps.join('; ')}
+Voorbeeld: ${originalExplanation.example.prompt} → ${originalExplanation.example.solution}
+
+Geef een UITGEBREIDERE versie met:
+- Meer gedetailleerde stappen (5-8 stappen met extra toelichting)
+- Uitgebreider voorbeeld met meer stappen en uitleg
+- Nieuwe, iets moeilijkere quiz vraag
+- Motiverende coach tekst
+- Zelfde nuttige links
+
+JSON structuur: {"steps": ["gedetailleerde stap1", "stap2"], "example": {"prompt": "complexer voorbeeld", "solution": "uitgebreide oplossing"}, "quiz": {"question": "vraag", "choices": ["A) optie1", "B) optie2", "C) optie3"], "answer": "A"}, "coach_text": "motiverende tekst", "resources": [{"title": "titel", "url": "url"}]}`
+      }
+    ],
+    response_format: { type: "json_object" },
+  });
+
+  const rawResponse = JSON.parse(response.choices[0].message.content || "{}");
+  console.log("Expanded explanation response:", JSON.stringify(rawResponse, null, 2));
+  
+  // Use same normalization logic
+  let steps = ["Geen uitgebreide stappen beschikbaar"];
+  if (rawResponse.steps) {
+    steps = rawResponse.steps;
+  } else if (rawResponse.uitleg_stappen) {
+    steps = rawResponse.uitleg_stappen.map((s: any) => {
+      if (typeof s === 'string') return s;
+      return s.stap ? `${s.stap}. ${s.beschrijving || s.omschrijving || s.uitleg}` : (s.beschrijving || s.omschrijving || s.uitleg || s);
+    });
+  }
+
+  let example = { prompt: "Geen uitgebreid voorbeeld beschikbaar", solution: "Geen uitgebreide oplossing beschikbaar" };
+  if (rawResponse.example) {
+    example = rawResponse.example;
+  } else if (rawResponse.voorbeeld) {
+    const v = rawResponse.voorbeeld;
+    example = {
+      prompt: v.omschrijving || v.opgave || "Geen uitgebreid voorbeeld beschikbaar",
+      solution: v.resultaat || v.oplossing || (v.berekening ? v.berekening.join('; ') : "Geen uitgebreide oplossing beschikbaar")
+    };
+  }
+
+  let quiz = { question: "Geen uitgebreide vraag beschikbaar", choices: ["A) Optie niet beschikbaar"], answer: "A" };
+  if (rawResponse.quiz) {
+    quiz = rawResponse.quiz;
+  } else if (rawResponse.controlevraag) {
+    const c = rawResponse.controlevraag;
+    const choices = [];
+    if (c.opties) {
+      for (const [key, value] of Object.entries(c.opties)) {
+        choices.push(`${key}) ${value}`);
+      }
+    }
+    quiz = {
+      question: c.vraag || "Geen uitgebreide vraag beschikbaar",
+      choices: choices.length > 0 ? choices : ["A) Optie niet beschikbaar"],
+      answer: c.correcteAntwoord || c.antwoord || "A"
+    };
+  }
+
+  let resources = originalExplanation.resources;
+  if (rawResponse.resources && Array.isArray(rawResponse.resources)) {
+    resources = rawResponse.resources.filter((r: any) => r.title && r.url);
+  }
+
+  return {
+    steps,
+    example,
+    quiz,
+    coach_text: rawResponse.coach_text || rawResponse.advies || rawResponse.feedback || "Geweldig dat je meer wilt leren! Blijf oefenen met deze uitgebreide stappen.",
+    resources
+  };
+}

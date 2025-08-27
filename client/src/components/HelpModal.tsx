@@ -39,6 +39,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
   const [selectedCourse, setSelectedCourse] = useState(helpData?.course || course?.name || "");
   const [explanation, setExplanation] = useState<ExplanationResult | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState("");
+  const [currentTopic, setCurrentTopic] = useState("");
 
   const courses = ["Wiskunde A", "Biologie", "Economie", "Nederlands"];
 
@@ -104,6 +105,44 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
     }
   };
 
+  // Expand explanation mutation
+  const expandMutation = useMutation({
+    mutationFn: async () => {
+      if (!explanation || !currentTopic || !selectedCourse) {
+        throw new Error("Missing data for expansion");
+      }
+      
+      const response = await apiRequest("POST", "/api/explain/expand", {
+        originalExplanation: explanation,
+        topic: currentTopic,
+        course: selectedCourse
+      });
+      return await response.json();
+    },
+    onSuccess: (data: ExplanationResult) => {
+      setExplanation(data);
+      setSelectedAnswer(""); // Reset quiz answer
+      
+      // Play new coach audio
+      if (data.coach_text) {
+        playTTSAudio(data.coach_text);
+      }
+      
+      toast({
+        title: "Uitgebreide uitleg",
+        description: "Je hebt nu meer gedetailleerde stappen en een moeilijkere vraag!"
+      });
+    },
+    onError: (error) => {
+      console.error("Expand error:", error);
+      toast({
+        title: "Fout",
+        description: "Kon geen uitgebreide uitleg genereren. Probeer opnieuw.",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleTextHelp = () => {
     if (!textInput.trim()) {
       toast({
@@ -114,11 +153,18 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
       return;
     }
 
+    setCurrentTopic(textInput); // Store the topic for potential expansion
     helpMutation.mutate({
       mode: "text",
       text: textInput,
       course: selectedCourse,
     });
+  };
+
+  const handleMoreExplanation = () => {
+    if (explanation && currentTopic && selectedCourse) {
+      expandMutation.mutate();
+    }
   };
 
   const handleFileUpload = (type: "photo" | "pdf") => {
@@ -325,6 +371,14 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
                   data-testid="button-check-answer"
                 >
                   Controleren
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleMoreExplanation}
+                  disabled={expandMutation.isPending}
+                  data-testid="button-more-explanation"
+                >
+                  {expandMutation.isPending ? "Bezig..." : "Meer uitleg"}
                 </Button>
                 <Button
                   variant="outline"
