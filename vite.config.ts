@@ -7,31 +7,29 @@ export default defineConfig({
   plugins: [
     react(),
     runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          await import("@replit/vite-plugin-cartographer").then((m) =>
-            m.cartographer(),
-          ),
-        ]
+    // Replit-only plugin in dev; wordt niet gebruikt op Vercel (NODE_ENV=production)
+    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID
+      ? [ (await import("@replit/vite-plugin-cartographer")).cartographer() ]
       : []),
   ],
+  // Vite root is de 'client' map
+  root: "client",
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      // Omdat root 'client' is, is 'src' al onder root.
+      "@": path.resolve(process.cwd(), "client/src"),
+      "@shared": path.resolve(process.cwd(), "shared"),
+      "@assets": path.resolve(process.cwd(), "attached_assets"),
     },
   },
-  root: path.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    // BELANGRIJK: relative outDir t.o.v. Vite root -> 'client/dist'
+    outDir: "dist",
+    assetsDir: "assets",
     emptyOutDir: true,
   },
+  base: "/", // correcte asset-paden in productie
   server: {
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
-    },
+    fs: { strict: true, deny: ["**/.*"] },
   },
 });
