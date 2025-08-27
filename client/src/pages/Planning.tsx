@@ -25,9 +25,14 @@ export default function Planning() {
 
   const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
 
-  // Get tasks for the week
+  // Get tasks for the week (stable cache key using date strings)
+  const weekKey = `${startOfWeek.toISOString().split('T')[0]}-${endOfWeek.toISOString().split('T')[0]}`;
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ['/api/tasks', user?.id, 'week', startOfWeek.toISOString(), endOfWeek.toISOString()],
+    queryKey: ['/api/tasks', user?.id, 'week', weekKey],
+    queryFn: async () => {
+      const response = await fetch(`/api/tasks/${user?.id}/week/${startOfWeek.toISOString()}/${endOfWeek.toISOString()}`);
+      return response.json();
+    },
     enabled: !!user?.id,
   });
 
