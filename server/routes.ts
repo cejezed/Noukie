@@ -246,6 +246,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get("/api/schedule/:userId/today", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const today = new Date();
+      const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, etc
+      const adjustedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Convert Sunday (0) to 7
+      
+      const scheduleItems = await storage.getScheduleByDay(userId, adjustedDayOfWeek);
+      res.json(scheduleItems);
+    } catch (error) {
+      console.error("Today schedule fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch today's schedule" });
+    }
+  });
+
   app.delete("/api/schedule/:id", async (req, res) => {
     try {
       const { id } = req.params;
