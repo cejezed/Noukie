@@ -162,7 +162,7 @@ export default function Help() {
       <HelpModal
         open={showHelpModal}
         onOpenChange={setShowHelpModal}
-        // Pass help data via props or context
+        helpData={helpData}
       />
     </div>
   );

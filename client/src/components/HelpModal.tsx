@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Camera, Upload, Play, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +16,12 @@ interface HelpModalProps {
   onOpenChange: (open: boolean) => void;
   task?: Task;
   course?: Course;
+  helpData?: {
+    mode: string;
+    text?: string;
+    course?: string;
+    file?: File;
+  };
 }
 
 interface ExplanationResult {
@@ -25,15 +31,36 @@ interface ExplanationResult {
   coach_text: string;
 }
 
-export default function HelpModal({ open, onOpenChange, task, course }: HelpModalProps) {
+export default function HelpModal({ open, onOpenChange, task, course, helpData }: HelpModalProps) {
   const { toast } = useToast();
   const { playAudio } = useAudio();
-  const [textInput, setTextInput] = useState("");
-  const [selectedCourse, setSelectedCourse] = useState(course?.name || "");
+  const [textInput, setTextInput] = useState(helpData?.text || "");
+  const [selectedCourse, setSelectedCourse] = useState(helpData?.course || course?.name || "");
   const [explanation, setExplanation] = useState<ExplanationResult | null>(null);
   const [selectedAnswer, setSelectedAnswer] = useState("");
 
   const courses = ["Wiskunde A", "Biologie", "Economie", "Nederlands"];
+
+  // Auto-start help request when helpData is provided
+  useEffect(() => {
+    if (helpData && open && !explanation) {
+      if (helpData.mode === "text" && helpData.text) {
+        helpMutation.mutate({
+          mode: "text",
+          text: helpData.text,
+          course: helpData.course,
+        });
+      }
+    }
+  }, [helpData, open, explanation]);
+
+  // Reset explanation when modal closes
+  useEffect(() => {
+    if (!open) {
+      setExplanation(null);
+      setSelectedAnswer("");
+    }
+  }, [open]);
 
   const helpMutation = useMutation({
     mutationFn: async (data: { mode: string; text?: string; course?: string }) => {
