@@ -140,9 +140,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "No text provided" });
       }
 
-      // For now, return a dummy audio URL
+      // For now, return null to indicate no audio available
       // In production, use Azure TTS or similar
-      res.json({ audioUrl: "/api/tts/dummy.mp3" });
+      res.json({ audioUrl: null });
     } catch (error) {
       console.error("TTS error:", error);
       res.status(500).json({ error: "Failed to generate speech" });

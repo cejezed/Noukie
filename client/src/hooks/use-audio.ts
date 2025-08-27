@@ -7,6 +7,12 @@ export function useAudio() {
 
   const playAudio = async (url: string) => {
     try {
+      // Don't play if no URL provided (dummy/disabled audio)
+      if (!url) {
+        console.log("No audio URL provided, skipping playback");
+        return;
+      }
+
       // Stop current audio if playing
       if (audioRef.current) {
         audioRef.current.pause();

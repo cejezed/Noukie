@@ -175,7 +175,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
           <DialogTitle>Ik snap dit niet</DialogTitle>
         </DialogHeader>
 
-        {!explanation ? (
+        {!explanation && !helpMutation.isPending ? (
           <div className="space-y-6">
             {/* Upload Options */}
             <div className="grid grid-cols-2 gap-4">
@@ -248,6 +248,11 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
                 </Button>
               </div>
             </div>
+          </div>
+        ) : helpMutation.isPending ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
+            <span className="ml-3">Bezig met uitleg genereren...</span>
           </div>
         ) : (
           <div className="space-y-6">
