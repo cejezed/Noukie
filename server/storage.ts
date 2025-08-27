@@ -26,12 +26,41 @@ import {
 } from "@shared/schema";
 
 const databaseUrl = process.env.DATABASE_URL;
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL environment variable is not set");
-}
 
-const connection = neon(databaseUrl);
-const db = drizzle(connection);
+// Temporary in-memory storage as fallback when database is not available
+let inMemoryStorage: {
+  users: any[];
+  courses: any[];
+  schedule: any[];
+  tasks: any[];
+  sessions: any[];
+  materials: any[];
+  quizResults: any[];
+} = {
+  users: [],
+  courses: [],
+  schedule: [],
+  tasks: [],
+  sessions: [],
+  materials: [],
+  quizResults: [],
+};
+
+let db: any = null;
+let useInMemory = false;
+
+try {
+  if (databaseUrl) {
+    const connection = neon(databaseUrl);
+    db = drizzle(connection);
+  } else {
+    useInMemory = true;
+    console.log("Using in-memory storage - DATABASE_URL not set");
+  }
+} catch (error) {
+  useInMemory = true;
+  console.log("Database connection failed, using in-memory storage:", (error as Error).message);
+}
 
 export interface IStorage {
   // Users
@@ -70,34 +99,61 @@ export interface IStorage {
 
 export class PostgresStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
+    if (useInMemory) {
+      return inMemoryStorage.users.find(u => u.id === id);
+    }
     const result = await db.select().from(users).where(eq(users.id, id));
     return result[0];
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
+    if (useInMemory) {
+      return inMemoryStorage.users.find(u => u.email === email);
+    }
     const result = await db.select().from(users).where(eq(users.email, email));
     return result[0];
   }
 
   async createUser(user: InsertUser): Promise<User> {
+    if (useInMemory) {
+      const newUser = { ...user, id: `user-${Date.now()}`, createdAt: new Date() };
+      inMemoryStorage.users.push(newUser);
+      return newUser;
+    }
     const result = await db.insert(users).values(user).returning();
     return result[0];
   }
 
   async getCoursesByUserId(userId: string): Promise<Course[]> {
+    if (useInMemory) {
+      return inMemoryStorage.courses.filter(c => c.userId === userId);
+    }
     return await db.select().from(courses).where(eq(courses.userId, userId));
   }
 
   async createCourse(course: InsertCourse): Promise<Course> {
+    if (useInMemory) {
+      const newCourse = { ...course, id: `course-${Date.now()}`, level: course.level || "havo5" };
+      inMemoryStorage.courses.push(newCourse);
+      return newCourse;
+    }
     const result = await db.insert(courses).values(course).returning();
     return result[0];
   }
 
   async getScheduleByUserId(userId: string): Promise<Schedule[]> {
+    if (useInMemory) {
+      return inMemoryStorage.schedule.filter(s => s.userId === userId);
+    }
     return await db.select().from(schedule).where(eq(schedule.userId, userId));
   }
 
   async getScheduleByDay(userId: string, dayOfWeek: number): Promise<Schedule[]> {
+    if (useInMemory) {
+      return inMemoryStorage.schedule.filter(s => 
+        s.userId === userId && s.dayOfWeek === dayOfWeek
+      );
+    }
     return await db.select().from(schedule)
       .where(and(
         eq(schedule.userId, userId),
@@ -106,11 +162,31 @@ export class PostgresStorage implements IStorage {
   }
 
   async createScheduleItem(scheduleItem: InsertSchedule): Promise<Schedule> {
+    if (useInMemory) {
+      const newItem = { 
+        ...scheduleItem, 
+        id: `schedule-${Date.now()}`,
+        date: scheduleItem.date || null,
+        courseId: scheduleItem.courseId || null,
+        dayOfWeek: scheduleItem.dayOfWeek || null,
+        startTime: scheduleItem.startTime || null,
+        endTime: scheduleItem.endTime || null,
+        kind: scheduleItem.kind || "les",
+        title: scheduleItem.title || null
+      };
+      inMemoryStorage.schedule.push(newItem);
+      return newItem;
+    }
     const result = await db.insert(schedule).values(scheduleItem).returning();
     return result[0];
   }
 
   async deleteScheduleItem(id: string): Promise<void> {
+    if (useInMemory) {
+      const index = inMemoryStorage.schedule.findIndex(s => s.id === id);
+      if (index > -1) inMemoryStorage.schedule.splice(index, 1);
+      return;
+    }
     await db.delete(schedule).where(eq(schedule.id, id));
   }
 
