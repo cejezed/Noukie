@@ -1,5 +1,5 @@
-import { drizzle } from "drizzle-orm/neon-http";
-import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import {
   users,
@@ -25,7 +25,8 @@ import {
   type InsertQuizResult,
 } from "@shared/schema";
 
-const databaseUrl = process.env.DATABASE_URL;
+// Use Supabase database URL
+const databaseUrl = process.env.SUPABASE_DATABASE_URL || process.env.DATABASE_URL;
 
 // Temporary in-memory storage as fallback when database is not available
 let inMemoryStorage: {
@@ -49,19 +50,19 @@ let inMemoryStorage: {
 let db: any = null;
 let useInMemory = false; // Use real database now
 
-// Initialize database connection
+// Initialize Supabase database connection
 if (databaseUrl) {
   try {
-    const sql = neon(databaseUrl);
+    const sql = postgres(databaseUrl);
     db = drizzle(sql);
-    console.log("✅ Connected to PostgreSQL database");
+    console.log("✅ Connected to Supabase database");
   } catch (error) {
-    console.error("❌ Database connection failed:", error);
+    console.error("❌ Supabase database connection failed:", error);
     useInMemory = true;
     console.log("Falling back to in-memory storage");
   }
 } else {
-  console.log("⚠️ No DATABASE_URL found, using in-memory storage");
+  console.log("⚠️ No Supabase DATABASE_URL found, using in-memory storage");
   useInMemory = true;
 }
 
