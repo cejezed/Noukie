@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,13 @@ export default function Rooster() {
     title: "",
   });
 
+  const [courseFormData, setCourseFormData] = useState({
+    name: "",
+    level: "havo5",
+  });
+
+  const [showCourseForm, setShowCourseForm] = useState(false);
+
   // Get user's schedule
   const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
     queryKey: ['/api/schedule', user?.id],
@@ -42,7 +49,7 @@ export default function Rooster() {
   });
 
   // Get user's courses
-  const { data: courses = [] } = useQuery<Course[]>({
+  const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
     queryKey: ['/api/courses', user?.id],
     enabled: !!user?.id,
   });
@@ -87,6 +94,35 @@ export default function Rooster() {
     }
   });
 
+  // Create course mutation
+  const createCourseMutation = useMutation({
+    mutationFn: async (data: { name: string; level: string }) => {
+      const response = await apiRequest("POST", "/api/courses", {
+        userId: user?.id,
+        name: data.name,
+        level: data.level,
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
+      setCourseFormData({ name: "", level: "havo5" });
+      setShowCourseForm(false);
+      toast({
+        title: "Vak toegevoegd!",
+        description: "Het vak is succesvol toegevoegd.",
+      });
+    },
+    onError: (error) => {
+      console.error("Create course error:", error);
+      toast({
+        title: "Fout",
+        description: "Kon vak niet toevoegen.",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Delete schedule item mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -124,6 +160,21 @@ export default function Rooster() {
     createMutation.mutate(formData);
   };
 
+  const handleCourseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!courseFormData.name.trim()) {
+      toast({
+        title: "Vak naam vereist",
+        description: "Vul een vaknaam in.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    createCourseMutation.mutate(courseFormData);
+  };
+
   const handleDelete = (id: string) => {
     if (confirm("Weet je zeker dat je dit roosteritem wilt verwijderen?")) {
       deleteMutation.mutate(id);
@@ -158,13 +209,119 @@ export default function Rooster() {
         <h2 className="text-xl font-semibold">Rooster</h2>
       </div>
 
+      {/* Add Courses Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Vakken beheren</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCourseForm(!showCourseForm)}
+              data-testid="button-toggle-course-form"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Vak toevoegen
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Current Courses */}
+          {coursesLoading ? (
+            <div className="text-sm text-muted-foreground">Laden...</div>
+          ) : courses.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+              {courses.map((course) => (
+                <div
+                  key={course.id}
+                  className="bg-muted rounded-lg p-3 text-sm"
+                  data-testid={`course-${course.id}`}
+                >
+                  <div className="font-medium">{course.name}</div>
+                  <div className="text-xs text-muted-foreground">{course.level}</div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground mb-4">
+              Geen vakken toegevoegd. Voeg eerst vakken toe voordat je lessen kunt inplannen.
+            </div>
+          )}
+
+          {/* Add Course Form */}
+          {showCourseForm && (
+            <form onSubmit={handleCourseSubmit} className="space-y-3 p-4 bg-muted/50 rounded-lg" data-testid="course-form">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="courseName">Vaknaam</Label>
+                  <Input
+                    id="courseName"
+                    value={courseFormData.name}
+                    onChange={(e) => setCourseFormData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Bijv. Wiskunde, Nederlands"
+                    data-testid="input-course-name"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="courseLevel">Niveau</Label>
+                  <Select
+                    value={courseFormData.level}
+                    onValueChange={(value) => setCourseFormData(prev => ({ ...prev, level: value }))}
+                  >
+                    <SelectTrigger data-testid="select-course-level">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="havo4">Havo 4</SelectItem>
+                      <SelectItem value="havo5">Havo 5</SelectItem>
+                      <SelectItem value="vwo5">VWO 5</SelectItem>
+                      <SelectItem value="vwo6">VWO 6</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex space-x-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={createCourseMutation.isPending}
+                  data-testid="button-add-course"
+                >
+                  {createCourseMutation.isPending ? "Bezig..." : "Vak toevoegen"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowCourseForm(false)}
+                  data-testid="button-cancel-course"
+                >
+                  Annuleren
+                </Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Add Schedule Form */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Nieuwe les/toets toevoegen</CardTitle>
+          {courses.length === 0 && (
+            <p className="text-sm text-muted-foreground">
+              Voeg eerst vakken toe om lessen te kunnen inplannen.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4" data-testid="schedule-form">
+            {courses.length === 0 && (
+              <div className="text-center py-4 text-muted-foreground bg-muted/50 rounded-lg">
+                <p>Geen vakken beschikbaar</p>
+                <p className="text-xs mt-1">Voeg eerst vakken toe hierboven.</p>
+              </div>
+            )}
             <div>
               <Label htmlFor="course">Vak</Label>
               <Select
@@ -261,7 +418,7 @@ export default function Rooster() {
             <Button
               type="submit"
               className="w-full"
-              disabled={createMutation.isPending}
+              disabled={createMutation.isPending || courses.length === 0}
               data-testid="button-add-schedule"
             >
               {createMutation.isPending ? "Bezig..." : "Toevoegen aan rooster"}

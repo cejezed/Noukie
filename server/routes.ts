@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import { transcribeAudio, generatePlan, generateExplanation } from "./services/openai";
 import { checkAndSendReminders } from "./services/cron";
 import { signUp as supabaseSignUp, signIn as supabaseSignIn, signOut as supabaseSignOut } from "./services/supabase";
-import { insertTaskSchema, insertSessionSchema, insertScheduleSchema, insertUserSchema } from "@shared/schema";
+import { insertTaskSchema, insertSessionSchema, insertScheduleSchema, insertUserSchema, insertCourseSchema } from "@shared/schema";
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -184,6 +184,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Explanation error:", error);
       res.status(500).json({ error: "Failed to generate explanation" });
+    }
+  });
+
+  // Courses management
+  app.get("/api/courses/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const courses = await storage.getCoursesByUserId(userId);
+      res.json(courses);
+    } catch (error) {
+      console.error("Courses fetch error:", error);
+      res.status(500).json({ error: "Failed to fetch courses" });
+    }
+  });
+
+  app.post("/api/courses", async (req, res) => {
+    try {
+      const courseData = insertCourseSchema.parse(req.body);
+      const created = await storage.createCourse(courseData);
+      res.json(created);
+    } catch (error) {
+      console.error("Course create error:", error);
+      res.status(500).json({ error: "Failed to create course" });
     }
   });
 
