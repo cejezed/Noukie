@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState } from "react";
 import { Camera, Upload, Play, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
