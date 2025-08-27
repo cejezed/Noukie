@@ -201,8 +201,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/courses", async (req, res) => {
     try {
-      // Skip validation for in-memory storage to allow flexible IDs
       const courseData = req.body;
+      
+      // Ensure user exists in our database (sync from Supabase auth)
+      const userId = courseData.userId;
+      if (userId) {
+        const existingUser = await storage.getUser(userId);
+        if (!existingUser) {
+          // Create user record from Supabase auth data
+          try {
+            await storage.createUser({
+              id: userId,
+              email: "user@example.com", // Will be updated with real data later
+              name: "User",
+              role: "student"
+            });
+            console.log(`✅ Created user record for ${userId}`);
+          } catch (userError) {
+            console.log(`User ${userId} might already exist, continuing...`);
+          }
+        }
+      }
+      
       const created = await storage.createCourse(courseData);
       res.json(created);
     } catch (error) {
