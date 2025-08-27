@@ -1,0 +1,105 @@
+Ja, ga bouwen met de beschikbare stack. Pas de specificatie als volgt aan en start met implementatie:
+
+Stack & structuur
+
+Frontend: React + Vite, PWA (manifest + service worker), mobile-first UI. Router: wouter.
+
+Backend: Express.
+
+Database: Supabase Postgres (geen in-memory). Gebruik Supabase JS client server-side.
+
+Auth: eenvoudige e-mail login via Supabase Auth (student/parent rollen).
+
+Env/Secrets (zet placeholders; ik vul de echte later):
+
+SUPABASE_URL=
+SUPABASE_ANON_KEY=
+OPENAI_API_KEY=          # Whisper/LLM - TODO
+AZURE_TTS_KEY=           # TTS - TODO
+AZURE_TTS_REGION=        # TTS - TODO
+GOOGLE_APPLICATION_CREDENTIALS_JSON=  # OCR - TODO
+EMAIL_PROVIDER_API_KEY=  # bijv. Postmark/SendGrid - TODO
+APP_REMINDER_HOUR=16     # 24h klok, lokale tijd
+
+
+DB tabellen (MVP)
+
+users(id, role student|parent, name, email, created_at)
+
+courses(id, user_id, name, level)
+
+schedule(id, user_id, course_id, day_of_week, start_time, end_time, kind les|toets, title, date)
+
+tasks(id, user_id, course_id, title, due_at, est_minutes, priority, status, source, created_at)
+
+sessions(id, user_id, happened_at, transcript, summary)
+
+Frontend pagina’s
+
+Vandaag: mic-knop (check-in), lijst taken van vandaag, lessen van vandaag, laatste coach-audio (play).
+
+Planning: weeklijst (lessen grijs, toetsen oranje), taken (afvinken).
+
+Rooster: formulier om les/toets toe te voegen (vak, dag, start/eind, type).
+
+Materiaal/Help: upload foto/PDF of tekst voor “Ik snap dit niet”.
+
+Endpoints (Express)
+
+POST /api/asr → ontvangt audio (webm/wav) → voor nu dummy { transcript: "Vandaag: wiskunde opgaven 5-10 en bio presentatie." }. Voorzie codepad voor Whisper integratie wanneer OPENAI_API_KEY gezet is.
+
+POST /api/plan → input { transcript, date } → maakt max 3 taken (vandaag/morgen) + coach_text. Voor nu dummy data; later LLM gebruiken.
+
+POST /api/tts → input { text } → dummy mp3 (statisch) zolang TTS keys ontbreken; als keys aanwezig zijn: Azure TTS.
+
+POST /api/ocr → upload → dummy { text: "Herkenning van paragraaf..." }; later Google Vision gebruiken.
+
+POST /api/explain → input { mode, text?, ocrText?, course? } → uitleg in 3–6 stappen + 1 voorbeeld + 1 quiz + coach_text. Voor nu hardcoded voorbeeld; later LLM.
+
+POST /api/schedule/import-ics → (feature-flag, mag TODO).
+
+GET /api/health → OK voor smoke tests.
+
+“Ik snap dit niet” flow
+
+Bij elke taak een knop. UI: upload foto of tekst invoer → call /api/ocr (indien foto) → call /api/explain → toon stappen, voorbeeldsom, 1 quizvraag + play coach-audio via /api/tts.
+
+Dagelijkse reminder (na school)
+
+Maak endpoint: POST /api/cron/daily-reminder.
+
+Functionaliteit: check in Supabase of er vandaag een entry in sessions is voor de student.
+
+Als NIET: stuur reminder (voor MVP: e-mail via EMAIL_PROVIDER_API_KEY). Subject: “Vergeet je huiswerk check-in niet”; body met deeplink naar de app.
+
+Als WEL: niets doen.
+
+Scheduler: implementeer twee opties (beide aanleveren):
+
+node-cron in de Express server: run elke dag om ${APP_REMINDER_HOUR}:00. (Waarschuwing in README: vereist always-on hosting.)
+
+Alternatief: documenteer dat een externe cron (bv. cron-job.org of Replit Scheduled) POST /api/cron/daily-reminder kan aanroepen om kosten laag te houden.
+
+In de Vandaag-pagina: als last_session_date < today én huidige tijd > reminder-uur → toon banner: “⚠️ Je check-in voor vandaag ontbreekt.”
+
+UX acceptance
+
+Mic → opname (max 60s) → /api/asr → bevestig transcript → /api/plan → toon aangemaakte taken → /api/tts → speel coach-audio (≤30s).
+
+Planning toont lessen/toetsen uit schedule; taken zijn af te vinken; toetsen krijgen hogere prioriteit styling.
+
+Rooster: handmatige invoer werkt (validatie tijden).
+
+“Ik snap dit niet”: levert altijd begrijpelijke stappen + voorbeeld + 1 quiz, met tekst én (indien TTS key) audio.
+
+PWA: installable + offline shell; push-notificaties nog niet nodig in MVP (komt later).
+
+Deliverables
+
+Werkende PWA + Express API.
+
+Supabase connectie (read/write) met bovengenoemde tabellen.
+
+.env.example en README met: setup, run, env, hoe cron/reminder werkt (node-cron en externe cron varianten), en waar echte API-integraties in te schakelen zijn zodra keys gezet worden.
+
+Begin met dummy-implementaties en toggle echte integraties zodra ENV-keys aanwezig zijn. Graag nu de code genereren en runnable maken binnen Replit.

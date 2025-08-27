@@ -1,0 +1,214 @@
+Build Spec Prompt — Huiswerkcoach Anouk (MVP)
+
+Doel
+Bouw een PWA “Huiswerkcoach Anouk” die 5 havo-leerlingen dagelijks helpt met planning én inhoudelijke uitleg via voice in/voice out. Focus op simpel, snel en privacy-proof.
+
+1) Functionaliteiten (MVP)
+
+Auth & rollen: student (Anouk) + parent (leesrechten).
+
+Home (Vandaag):
+
+Microfoonknop → check-in (max 60s).
+
+Laatste coach-audio afspelen.
+
+“Vandaag”: 2–3 prioriteitstaken + lessen van vandaag.
+
+Planning: weeklijst (dag/uur), taken (todo/done), toetsen.
+
+Rooster: handmatige invoer (vak, dag, start/eind, type: les/toets); optionele .ics-import.
+
+Taken: titel, vak, deadline, status, bron (check-in/handmatig).
+
+“Ik snap dit niet” bij elke taak:
+
+Upload foto/PDF of spreek in wat onduidelijk is.
+
+OCR (foto/PDF) → onderwerpherkenning → uitleg in stappen + 1 voorbeeldsom + 1 mini-oefenvraag.
+
+Antwoord in tekst + TTS-audio.
+
+Coach-antwoord (TTS) na check-in: korte bevestiging + 1 vervolgstap.
+
+Parent view: lijst met komende toetsen + % taken voltooid (read-only).
+
+2) UX/Acceptance Criteria
+
+PWA, mobile-first.
+
+4 tabs: Vandaag · Planning · Rooster · Materiaal/Help.
+
+Cards, duidelijke CTA’s, NL tekst.
+
+Check-in flow: Opnemen → “Dit heb je gezegd” (transcript) → “Deze taken zijn toegevoegd” → “Coach-audio afspelen”.
+
+“Ik snap dit niet”: upload/speak → uitlegkaart met stappen, voorbeeld, 1 vraag → “Snap ik nu” (ja/nee).
+
+Taken koppelen aan vak; taken bij toetsen krijgen hogere prioriteit.
+
+Foutafhandeling: ASR/OCR faalt → duidelijke melding + retry.
+
+3) Tech Stack
+
+Frontend: Next.js/React (PWA), shadcn/ui, MediaRecorder voor mic.
+
+Backend: Next.js API routes of Node/Express.
+
+DB/Storage/Auth: Supabase (Postgres + Auth + Storage + pgvector optioneel).
+
+ASR: Whisper API (OpenAI).
+
+TTS: Azure Cognitive Services (NL-stem) of ElevenLabs.
+
+OCR: Google Vision (basis), Tesseract fallback.
+
+LLM: GPT-4o/5-reasoning server-side.
+
+4) API Endpoints
+
+POST /api/asr → body: audio (webm/wav). return: { transcript }.
+
+POST /api/plan → body: { transcript, date } → maakt taken + korte coachtekst. return: { tasks:[…], coach_text }.
+
+POST /api/tts → body: { text } → return: audio/mp3.
+
+POST /api/ocr → multipart file → return: { text }.
+
+POST /api/explain → body: { mode: 'text'|'image', text?, ocrText?, course? } → return: { steps:[…], example:{…}, quiz:{question, choices?, answer}, coach_text }.
+
+POST /api/schedule/import-ics → upload .ics → persist lessons/tests.
+
+5) Database (SQL of Prisma/Supabase)
+create table users (
+  id uuid primary key default uuid_generate_v4(),
+  role text check (role in ('student','parent')) not null,
+  name text,
+  email text unique,
+  created_at timestamptz default now()
+);
+
+create table courses (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references users(id),
+  name text not null,           -- Wiskunde A/B, Biologie, etc.
+  level text default 'havo5'
+);
+
+create table schedule (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references users(id),
+  course_id uuid references courses(id),
+  day_of_week int,              -- 1=ma … 7=zo
+  start_time time,
+  end_time time,
+  kind text check (kind in ('les','toets')) default 'les',
+  title text,
+  date date                      -- voor losse toetsen
+);
+
+create table tasks (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references users(id),
+  course_id uuid references courses(id),
+  title text not null,
+  due_at timestamptz,
+  est_minutes int,
+  priority int default 0,
+  status text default 'todo',
+  source text,                   -- 'check-in' | 'manual'
+  created_at timestamptz default now()
+);
+
+create table sessions (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references users(id),
+  happened_at timestamptz default now(),
+  transcript text,
+  summary text
+);
+
+create table materials (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references users(id),
+  course_id uuid references courses(id),
+  title text,
+  chapter text,
+  paragraph text,
+  text_content text,             -- OCR-result
+  created_at timestamptz default now()
+);
+
+create table quiz_results (
+  id uuid primary key default uuid_generate_v4(),
+  user_id uuid references users(id),
+  course_id uuid references courses(id),
+  material_id uuid references materials(id),
+  score int,
+  weak_points text
+);
+
+6) Planning-logica (server)
+
+Prioriteit = functie(deadline nabij, is_toets, est_minutes, recente quizscore).
+
+Check-in maakt: max 3 taken voor vandaag/morgen; bundel lange taken in blokken van ±25 min.
+
+7) Prompt-kaders (server, niet zichtbaar in UI)
+
+System (Coach NL, beknopt, empathisch):
+“Je bent een Nederlandse huiswerkcoach voor 5 havo. Beoordeel transcript/ocr, maak concrete taken (Titel, Vak, Deadline, Tijdinschatting), houd rekening met komende toetsen en rooster. Antwoord kort en actiegericht. Voor ‘Ik snap dit niet’: geef 3–6 genummerde uitlegstappen, 1 uitgewerkt voorbeeld, en 1 controlevraag. Formatteer in JSON.”
+
+Plan-functie output JSON:
+
+{
+  "tasks":[
+    {"title":"Wiskunde opgaven 5–10","course":"Wiskunde A","due_at":"<ISO>","est_minutes":40,"priority":2}
+  ],
+  "coach_text":"Vandaag pak je wiskunde 5–10. Morgen 20 min herhalen."
+}
+
+
+Explain-functie output JSON:
+
+{
+  "steps":["...","..."],
+  "example":{"prompt":"...","solution":"..."},
+  "quiz":{"question":"...","choices":["A","B","C","D"],"answer":"B"},
+  "coach_text":"Probeer eerst stap 1 en 2. Zeg ‘help’ als je vastloopt."
+}
+
+8) Environment variables (.env)
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+OPENAI_API_KEY=                 # Whisper + LLM
+AZURE_TTS_KEY=
+AZURE_TTS_REGION=
+GOOGLE_VISION_KEY=              # of service account JSON
+
+9) Privacy/AVG
+
+Toon toestemming voor audioverwerking; standaard bewaar alleen transcript + samenvatting, niet de ruwe audio.
+
+Versleuteling in transit; bewaartermijn instelbaar; knop “Verwijder mijn data”.
+
+Geen trackers/reclame.
+
+10) Seed & Tests
+
+Seed 4 courses (Wiskunde A, Biologie, Economie, Nederlands).
+
+Seed 1 toets over 10 dagen (Economie).
+
+E2E test: check-in → taken aangemaakt → TTS audio terug → “Ik snap dit niet” met sample OCR → uitleg + quiz → status “done” zetten werkt.
+
+Deliverables
+
+PWA met service worker, gehost (Vercel/Netlify).
+
+Git repo met README (setup, env, run, deploy).
+
+Postman collectie voor /api/*.
+
+Bouw dit end-to-end. Als iets onduidelijk is, maak redelijke keuzes en documenteer in README.
+Schakel feature-flags in voor .ics import en vector/RAG (later aan).
