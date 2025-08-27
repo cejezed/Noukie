@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import HelpModal from "./HelpModal";
+import HelpModal from "@/components/HelpModal";
 import type { Task, Course } from "@shared/schema";
 
 interface TaskCardProps {
@@ -62,7 +62,7 @@ export default function TaskCard({ task, course }: TaskCardProps) {
               <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded">
                 {course?.name || "Algemeen"}
               </span>
-              {task.priority > 0 && (
+              {task.priority && task.priority > 0 && (
                 <span className={`text-xs font-medium ${getPriorityColor(task.priority)}`}>
                   {getPriorityLabel(task.priority)}
                 </span>

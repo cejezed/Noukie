@@ -39,7 +39,7 @@ export default function Vandaag() {
   const shouldShowReminder = () => {
     if (!lastSession) return false;
     const today = new Date();
-    const sessionDate = new Date(lastSession.happenedAt);
+    const sessionDate = new Date(lastSession.happenedAt || new Date());
     const reminderHour = parseInt(import.meta.env.VITE_APP_REMINDER_HOUR || "16", 10);
     
     return (
@@ -109,7 +109,7 @@ export default function Vandaag() {
                 </p>
                 <div className="flex items-center space-x-2 mt-1">
                   <div className="text-xs text-muted-foreground" data-testid="text-last-message-time">
-                    {formatRelativeTime(lastSession.happenedAt)}
+                    {lastSession.happenedAt ? formatRelativeTime(lastSession.happenedAt.toString()) : 'Onbekend'}
                   </div>
                   <div className="w-1 h-1 bg-muted-foreground rounded-full" />
                   <div className="text-xs text-muted-foreground">0:24</div>
