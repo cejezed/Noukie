@@ -253,7 +253,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const dayOfWeek = today.getDay(); // 0=Sunday, 1=Monday, etc
       const adjustedDayOfWeek = dayOfWeek === 0 ? 7 : dayOfWeek; // Convert Sunday (0) to 7
       
+      console.log(`Today is ${today.toDateString()}, day of week: ${dayOfWeek}, adjusted: ${adjustedDayOfWeek}`);
+      
       const scheduleItems = await storage.getScheduleByDay(userId, adjustedDayOfWeek);
+      console.log(`Found ${scheduleItems.length} schedule items for today:`, scheduleItems);
+      
       res.json(scheduleItems);
     } catch (error) {
       console.error("Today schedule fetch error:", error);
