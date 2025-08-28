@@ -170,7 +170,7 @@ export default function Vandaag() {
   return (
     <div data-testid="page-vandaag">
       {/* Parent Request Notifications (for students only) */}
-      {user?.user_metadata?.role === 'student' && parentRequests.length > 0 && (
+      {user?.user_metadata?.role === 'student' && Array.isArray(parentRequests) && parentRequests.length > 0 && (
         <div className="p-4 space-y-2">
           {parentRequests.map((request: any) => (
             <Alert key={request.id} className="border-blue-200 bg-blue-50">

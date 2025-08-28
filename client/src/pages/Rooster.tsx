@@ -28,7 +28,7 @@ export default function Rooster() {
   const queryClient = useQueryClient();
   
   const [formData, setFormData] = useState<ScheduleFormData>({
-    courseId: "",
+    courseId: "none",
     dayOfWeek: 1,
     startTime: "",
     endTime: "",
@@ -62,7 +62,7 @@ export default function Rooster() {
     mutationFn: async (data: ScheduleFormData) => {
       const response = await apiRequest("POST", "/api/schedule", {
         userId: user?.id,
-        courseId: data.courseId || null,
+        courseId: data.courseId === "none" ? null : data.courseId || null,
         dayOfWeek: data.dayOfWeek,
         startTime: data.startTime,
         endTime: data.endTime,
@@ -75,7 +75,7 @@ export default function Rooster() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
       setFormData({
-        courseId: "",
+        courseId: "none",
         dayOfWeek: 1,
         startTime: "",
         endTime: "",
@@ -480,7 +480,7 @@ export default function Rooster() {
                   <SelectValue placeholder="Selecteer een vak (optioneel voor non-school activiteiten)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Geen vak</SelectItem>
+                  <SelectItem value="none">Geen vak</SelectItem>
                   {courses.map((course) => (
                     <SelectItem key={course.id} value={course.id}>
                       {course.name}
