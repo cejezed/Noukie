@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
-import { Camera, Upload } from "lucide-react";
+import { Camera, Upload, Mic, Square } from "lucide-react";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +14,20 @@ export default function Help() {
   const [selectedCourse, setSelectedCourse] = useState("");
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [helpData, setHelpData] = useState<any>(null);
+  
+  // Voice recording
+  const { 
+    isRecording, 
+    startRecording, 
+    stopRecording, 
+    recordingTime
+  } = useVoiceRecorder({
+    maxDuration: 60,
+    onRecordingComplete: handleVoiceRecording,
+    onStatusChange: (status) => {
+      console.log("Voice recording status:", status);
+    }
+  });
 
   const courses = ["Wiskunde A", "Biologie", "Economie", "Nederlands"];
 
@@ -50,35 +65,66 @@ export default function Help() {
     setShowHelpModal(true);
   };
 
+  const handleVoiceRecording = (audioBlob: Blob) => {
+    // Convert audio to help data
+    setHelpData({
+      mode: "voice",
+      audioBlob,
+      course: selectedCourse,
+    });
+    setShowHelpModal(true);
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')} / 1:00`;
+  };
+
   return (
     <div className="p-6" data-testid="page-help">
       <h2 className="text-xl font-semibold mb-6">Ik snap dit niet</h2>
       
       {/* Upload Options */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-3 gap-3 mb-6">
         <Button
           variant="outline"
-          className="h-24 flex flex-col items-center justify-center space-y-2 border-dashed hover:border-primary transition-colors"
+          className="h-24 flex flex-col items-center justify-center space-y-1 border-dashed hover:border-primary transition-colors"
           onClick={() => handleFileUpload("photo")}
           data-testid="button-upload-photo"
         >
-          <Camera className="w-6 h-6" />
+          <Camera className="w-5 h-5" />
           <div className="text-center">
-            <p className="text-sm font-medium">Foto maken</p>
-            <p className="text-xs text-muted-foreground">Van opgave of boek</p>
+            <p className="text-xs font-medium">Foto</p>
+            <p className="text-xs text-muted-foreground">Opgave</p>
           </div>
         </Button>
 
         <Button
           variant="outline"
-          className="h-24 flex flex-col items-center justify-center space-y-2 border-dashed hover:border-primary transition-colors"
+          className="h-24 flex flex-col items-center justify-center space-y-1 border-dashed hover:border-primary transition-colors"
+          onClick={isRecording ? stopRecording : startRecording}
+          data-testid="button-voice-help"
+        >
+          {isRecording ? <Square className="w-5 h-5 text-destructive" /> : <Mic className="w-5 h-5" />}
+          <div className="text-center">
+            <p className="text-xs font-medium">{isRecording ? "Stop" : "Vraag"}</p>
+            <p className="text-xs text-muted-foreground">
+              {isRecording ? formatTime(recordingTime) : "Inspreek"}
+            </p>
+          </div>
+        </Button>
+
+        <Button
+          variant="outline"
+          className="h-24 flex flex-col items-center justify-center space-y-1 border-dashed hover:border-primary transition-colors"
           onClick={() => handleFileUpload("pdf")}
           data-testid="button-upload-pdf"
         >
-          <Upload className="w-6 h-6" />
+          <Upload className="w-5 h-5" />
           <div className="text-center">
-            <p className="text-sm font-medium">PDF uploaden</p>
-            <p className="text-xs text-muted-foreground">Digitaal bestand</p>
+            <p className="text-xs font-medium">PDF</p>
+            <p className="text-xs text-muted-foreground">Document</p>
           </div>
         </Button>
       </div>

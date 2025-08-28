@@ -23,20 +23,18 @@ export default function Layout({ children }: LayoutProps) {
       {/* Header */}
       <header className="bg-primary text-primary-foreground p-4 sticky top-0 z-50" data-testid="header">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-20 h-10 bg-white rounded-sm flex items-center justify-center p-1">
-              <img 
-                src="/noukie-logo.png" 
-                alt="Noukie Logo" 
-                className="w-full h-full object-contain"
-              />
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold">Hi Anouk! 👋</h1>
-              <p className="text-sm text-primary-foreground/80">
-                {user?.user_metadata?.role === "parent" ? "Ouder dashboard" : "Klaar voor vandaag?"}
-              </p>
-            </div>
+          <div className="w-20 h-10 bg-white rounded-sm flex items-center justify-center p-1">
+            <img 
+              src="/noukie-logo.png" 
+              alt="Noukie Logo" 
+              className="w-full h-full object-contain"
+            />
+          </div>
+          <div className="text-center flex-1 mx-4">
+            <h1 className="text-lg font-semibold">Hi Anouk! 👋</h1>
+            <p className="text-sm text-primary-foreground/80">
+              {user?.user_metadata?.role === "parent" ? "Ouder dashboard" : "Klaar voor vandaag?"}
+            </p>
           </div>
           <Button
             variant="ghost"
