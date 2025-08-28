@@ -24,8 +24,12 @@ export default function Layout({ children }: LayoutProps) {
       <header className="bg-primary text-primary-foreground p-4 sticky top-0 z-50" data-testid="header">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center">
-              <span className="text-primary font-bold text-sm">A</span>
+            <div className="w-10 h-6 bg-white rounded-sm flex items-center justify-center p-1">
+              <img 
+                src="/attached_assets/Noukie logo_1756365152220.png" 
+                alt="Noukie Logo" 
+                className="w-full h-full object-contain"
+              />
             </div>
             <div>
               <h1 className="text-lg font-semibold">Huiswerkcoach Anouk</h1>
