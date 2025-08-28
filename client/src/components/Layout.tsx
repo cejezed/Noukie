@@ -35,7 +35,7 @@ export default function Layout({ children }: LayoutProps) {
             />
           </div>
           <div className="text-center flex-1 mx-4">
-            <h1 className="text-lg font-semibold">Hi Anouk! 👋</h1>
+            <h1 className="text-lg font-semibold">Hi {user?.user_metadata?.name || 'Anouk'}! 👋</h1>
             <p className="text-sm text-primary-foreground/80">
               {user?.user_metadata?.role === "parent" ? "Ouder dashboard" : "Klaar voor vandaag?"}
             </p>

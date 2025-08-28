@@ -110,8 +110,12 @@ export default function Login() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4" data-testid="login-page">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-bold text-primary-foreground">N</span>
+          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 p-2">
+            <img 
+              src="/noukie-logo.png" 
+              alt="Noukie Logo" 
+              className="w-full h-full object-contain"
+            />
           </div>
           <CardTitle className="text-2xl">Huiswerkcoach Noukie</CardTitle>
           <p className="text-muted-foreground">Jouw persoonlijke AI huiswerkcoach - dagelijkse voice check-ins, taakplanning en uitlegvideo's</p>
