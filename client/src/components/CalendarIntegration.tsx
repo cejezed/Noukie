@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import * as React from "react";
+import { useState } from "react";
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { queryClient, apiRequest } from '@/lib/queryClient';
