@@ -15,7 +15,7 @@ export default function Layout({ children }: LayoutProps) {
     { id: "vandaag", label: "Vandaag", icon: Home, path: "/" },
     { id: "planning", label: "Planning", icon: Calendar, path: "/planning" },
     { id: "rooster", label: "Rooster", icon: Clock, path: "/rooster" },
-    { id: "help", label: "Help", icon: HelpCircle, path: "/help" },
+    { id: "help", label: "Uitleg", icon: HelpCircle, path: "/help" },
   ];
 
   return (

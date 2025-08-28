@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Plus, X } from "lucide-react";
+import { Trash2, Plus, X, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,8 @@ export default function Rooster() {
   });
 
   const [showCourseForm, setShowCourseForm] = useState(false);
+  const [icalUrl, setIcalUrl] = useState("");
+  const [showIcalForm, setShowIcalForm] = useState(false);
 
   // Get user's schedule
   const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
@@ -119,6 +121,35 @@ export default function Rooster() {
       toast({
         title: "Fout",
         description: "Kon vak niet toevoegen.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Import iCal mutation
+  const importIcalMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const response = await apiRequest("POST", "/api/schedule/import-ical", {
+        userId: user?.id,
+        icalUrl: url.trim(),
+      });
+      return await response.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
+      setIcalUrl("");
+      setShowIcalForm(false);
+      toast({
+        title: "iCal geïmporteerd!",
+        description: `${result.scheduleCount || 0} roosteritems en ${result.courseCount || 0} vakken toegevoegd.`,
+      });
+    },
+    onError: (error) => {
+      console.error("iCal import error:", error);
+      toast({
+        title: "Import mislukt",
+        description: "Kon iCal URL niet importeren. Controleer de URL en probeer opnieuw.",
         variant: "destructive",
       });
     }
@@ -232,6 +263,68 @@ export default function Rooster() {
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Rooster</h2>
       </div>
+
+      {/* iCal Import Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Rooster importeren</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowIcalForm(!showIcalForm)}
+              data-testid="button-toggle-ical-form"
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              iCal URL
+            </Button>
+          </div>
+        </CardHeader>
+        
+        {showIcalForm && (
+          <CardContent>
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (icalUrl.trim()) {
+                importIcalMutation.mutate(icalUrl);
+              }
+            }} className="space-y-4">
+              <div>
+                <Label htmlFor="ical-url">iCal/ICS URL</Label>
+                <Input
+                  id="ical-url"
+                  type="url"
+                  value={icalUrl}
+                  onChange={(e) => setIcalUrl(e.target.value)}
+                  placeholder="https://example.com/calendar.ics"
+                  data-testid="input-ical-url"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Plak hier de iCal URL van je school/studierooster
+                </p>
+              </div>
+              
+              <div className="flex space-x-2">
+                <Button
+                  type="submit"
+                  disabled={importIcalMutation.isPending || !icalUrl.trim()}
+                  data-testid="button-import-ical"
+                >
+                  {importIcalMutation.isPending ? "Importeren..." : "Importeren"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowIcalForm(false)}
+                  data-testid="button-cancel-ical"
+                >
+                  Annuleren
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        )}
+      </Card>
 
       {/* Add Courses Section */}
       <Card className="mb-6">

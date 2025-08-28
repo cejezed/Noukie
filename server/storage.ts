@@ -242,6 +242,15 @@ export class PostgresStorage implements IStorage {
     return result[0];
   }
 
+  async deleteTask(id: string): Promise<void> {
+    if (useInMemory) {
+      const index = inMemoryStorage.tasks.findIndex(t => t.id === id);
+      if (index > -1) inMemoryStorage.tasks.splice(index, 1);
+      return;
+    }
+    await db.delete(tasks).where(eq(tasks.id, id));
+  }
+
   async updateTaskStatus(id: string, status: string): Promise<void> {
     await db.update(tasks)
       .set({ status })

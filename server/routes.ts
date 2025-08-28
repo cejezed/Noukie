@@ -314,6 +314,140 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Import iCal schedule
+  app.post("/api/schedule/import-ical", async (req, res) => {
+    try {
+      const { userId, icalUrl } = req.body;
+      
+      if (!userId || !icalUrl) {
+        return res.status(400).json({ error: "Missing userId or icalUrl" });
+      }
+
+      // Ensure user exists in our database (sync from Supabase auth)
+      const existingUser = await storage.getUser(userId);
+      if (!existingUser) {
+        // Create user record from Supabase auth data
+        try {
+          await storage.createUser({
+            id: userId,
+            email: "user@example.com", // Will be updated with real data later
+            name: "User",
+            role: "student"
+          });
+          console.log(`✅ Created user record for ${userId}`);
+        } catch (userError) {
+          console.log(`User ${userId} might already exist, continuing...`);
+        }
+      }
+
+      // Import iCal events
+      const { default: ical } = await import('node-ical');
+      
+      console.log(`📅 Fetching iCal from: ${icalUrl}`);
+      const events = await ical.async.fromURL(icalUrl);
+      
+      let scheduleCount = 0;
+      const courseNames = new Set<string>();
+      
+      for (const key in events) {
+        const event = events[key];
+        
+        // Only process VEVENT components
+        if (event.type !== 'VEVENT') continue;
+        
+        const summary = event.summary || "Onbekend event";
+        const startDate = event.start;
+        const endDate = event.end;
+        
+        if (!startDate || !endDate) continue;
+        
+        // Extract course name from summary (common patterns)
+        let courseName = "Algemeen";
+        const summaryStr = summary.toString().toLowerCase();
+        
+        // Common Dutch school subjects
+        if (summaryStr.includes('wiskundig') || summaryStr.includes('wiskunde')) courseName = "Wiskunde";
+        else if (summaryStr.includes('nederlands')) courseName = "Nederlands";
+        else if (summaryStr.includes('engels')) courseName = "Engels";
+        else if (summaryStr.includes('geschiedenis')) courseName = "Geschiedenis";
+        else if (summaryStr.includes('aardrijkskunde')) courseName = "Aardrijkskunde";
+        else if (summaryStr.includes('biologie')) courseName = "Biologie";
+        else if (summaryStr.includes('scheikunde')) courseName = "Scheikunde";
+        else if (summaryStr.includes('natuurkunde')) courseName = "Natuurkunde";
+        else if (summaryStr.includes('economie')) courseName = "Economie";
+        else if (summaryStr.includes('frans')) courseName = "Frans";
+        else if (summaryStr.includes('duits')) courseName = "Duits";
+        else if (summaryStr.includes('sport') || summaryStr.includes('lichamel')) courseName = "Lichamelijke Opvoeding";
+        else if (summaryStr.includes('kunst') || summaryStr.includes('tekenen')) courseName = "Kunst";
+        else if (summaryStr.includes('muziek')) courseName = "Muziek";
+        else if (summaryStr.includes('informatica') || summaryStr.includes('computer')) courseName = "Informatica";
+        else if (summaryStr.includes('toets') || summaryStr.includes('test') || summaryStr.includes('exam')) {
+          // For tests, try to extract subject from the rest of the title
+          const words = summaryStr.split(/[^\w]+/);
+          for (const word of words) {
+            if (word.includes('wisk')) { courseName = "Wiskunde"; break; }
+            if (word.includes('ned')) { courseName = "Nederlands"; break; }
+            if (word.includes('eng')) { courseName = "Engels"; break; }
+            if (word.includes('gesch')) { courseName = "Geschiedenis"; break; }
+            if (word.includes('bio')) { courseName = "Biologie"; break; }
+          }
+        }
+        
+        courseNames.add(courseName);
+        
+        // Find or create course
+        let courses = await storage.getCoursesByUserId(userId);
+        let course = courses.find(c => c.name === courseName);
+        
+        if (!course) {
+          course = await storage.createCourse({
+            userId,
+            name: courseName,
+            level: "havo5"
+          });
+        }
+        
+        // Determine if it's a test or lesson
+        const isTest = summaryStr.includes('toets') || summaryStr.includes('test') || 
+                      summaryStr.includes('exam') || summaryStr.includes('proefwerk');
+        
+        // Create schedule item
+        const dayOfWeek = startDate.getDay() === 0 ? 7 : startDate.getDay(); // Convert Sunday from 0 to 7
+        const startTime = `${startDate.getHours().toString().padStart(2, '0')}:${startDate.getMinutes().toString().padStart(2, '0')}:00`;
+        const endTime = `${endDate.getHours().toString().padStart(2, '0')}:${endDate.getMinutes().toString().padStart(2, '0')}:00`;
+        
+        await storage.createScheduleItem({
+          userId,
+          courseId: course.id,
+          dayOfWeek,
+          startTime,
+          endTime,
+          kind: isTest ? "toets" : "les",
+          title: summary.toString(),
+          date: isTest ? startDate.toISOString().split('T')[0] : null
+        });
+        
+        scheduleCount++;
+      }
+      
+      console.log(`✅ Imported ${scheduleCount} schedule items and ${courseNames.size} courses`);
+      
+      res.json({
+        success: true,
+        scheduleCount,
+        courseCount: courseNames.size,
+        courses: Array.from(courseNames)
+      });
+      
+    } catch (error) {
+      console.error("iCal import error:", error);
+      res.status(500).json({ 
+        error: "Failed to import iCal", 
+        details: (error as Error).message 
+      });
+    }
+  });
+
   // Task management
   app.get("/api/tasks/:userId", async (req, res) => {
     try {
@@ -346,6 +480,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Task status update error:", error);
       res.status(500).json({ error: "Failed to update task status" });
+    }
+  });
+
+  // Create manual task
+  app.post("/api/tasks", async (req, res) => {
+    try {
+      const taskData = req.body;
+      
+      // Ensure user exists in our database (sync from Supabase auth)
+      const userId = taskData.userId;
+      if (userId) {
+        const existingUser = await storage.getUser(userId);
+        if (!existingUser) {
+          // Create user record from Supabase auth data
+          try {
+            await storage.createUser({
+              id: userId,
+              email: "user@example.com", // Will be updated with real data later
+              name: "User",
+              role: "student"
+            });
+            console.log(`✅ Created user record for ${userId}`);
+          } catch (userError) {
+            console.log(`User ${userId} might already exist, continuing...`);
+          }
+        }
+      }
+      
+      const created = await storage.createTask(taskData);
+      res.json(created);
+    } catch (error) {
+      console.error("Task create error:", error);
+      res.status(500).json({ error: "Failed to create task" });
+    }
+  });
+
+  // Delete task
+  app.delete("/api/tasks/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteTask(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Task delete error:", error);
+      res.status(500).json({ error: "Failed to delete task" });
     }
   });
 

@@ -1,16 +1,35 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import TaskCard from "@/components/TaskCard";
 import { Button } from "@/components/ui/button";
-import { Play } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Play, Plus } from "lucide-react";
 import { useAudio } from "@/hooks/use-audio";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { Task, Course, Session, Schedule } from "@shared/schema";
 
 export default function Vandaag() {
   const { user } = useAuth();
   const { playAudio } = useAudio();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  // Task form state
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskForm, setTaskForm] = useState({
+    title: "",
+    courseId: "",
+    estMinutes: 30,
+    priority: 1,
+    dueAt: new Date().toISOString().split('T')[0] // Today's date
+  });
 
   // Get today's tasks
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
@@ -34,6 +53,50 @@ export default function Vandaag() {
   const { data: todaySchedule = [] } = useQuery<Schedule[]>({
     queryKey: ['/api/schedule', user?.id, 'today'],
     enabled: !!user?.id,
+  });
+
+  // Create task mutation
+  const createTaskMutation = useMutation({
+    mutationFn: async () => {
+      if (!taskForm.title.trim()) {
+        throw new Error("Taak titel is verplicht");
+      }
+      
+      const response = await apiRequest("POST", "/api/tasks", {
+        userId: user?.id,
+        courseId: taskForm.courseId || null,
+        title: taskForm.title,
+        dueAt: new Date(taskForm.dueAt).toISOString(),
+        estMinutes: taskForm.estMinutes,
+        priority: taskForm.priority,
+        source: "manual",
+        status: "todo"
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      setTaskForm({
+        title: "",
+        courseId: "",
+        estMinutes: 30,
+        priority: 1,
+        dueAt: new Date().toISOString().split('T')[0]
+      });
+      setShowTaskForm(false);
+      toast({
+        title: "Taak toegevoegd!",
+        description: "Je nieuwe taak is succesvol toegevoegd."
+      });
+    },
+    onError: (error) => {
+      console.error("Create task error:", error);
+      toast({
+        title: "Fout bij toevoegen",
+        description: "Kon taak niet toevoegen. Probeer opnieuw.",
+        variant: "destructive"
+      });
+    }
   });
 
   // Check if reminder should be shown
@@ -124,7 +187,108 @@ export default function Vandaag() {
 
       {/* Today's Tasks */}
       <section className="px-6 pb-4" data-testid="today-tasks">
-        <h3 className="text-lg font-semibold mb-4">Vandaag</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Vandaag</h3>
+          <Dialog open={showTaskForm} onOpenChange={setShowTaskForm}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="h-8 w-8 p-0" data-testid="button-add-task">
+                <Plus className="w-4 h-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Nieuwe taak toevoegen</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="task-title">Taak titel</Label>
+                  <Input
+                    id="task-title"
+                    value={taskForm.title}
+                    onChange={(e) => setTaskForm({...taskForm, title: e.target.value})}
+                    placeholder="Bijv. Wiskunde hoofdstuk 3 lezen"
+                    data-testid="input-task-title"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="task-course">Vak</Label>
+                  <Select value={taskForm.courseId} onValueChange={(value) => setTaskForm({...taskForm, courseId: value})}>
+                    <SelectTrigger data-testid="select-task-course">
+                      <SelectValue placeholder="Selecteer vak (optioneel)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Geen vak</SelectItem>
+                      {courses.map((course) => (
+                        <SelectItem key={course.id} value={course.id}>
+                          {course.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="task-time">Geschatte tijd (min)</Label>
+                    <Input
+                      id="task-time"
+                      type="number"
+                      value={taskForm.estMinutes}
+                      onChange={(e) => setTaskForm({...taskForm, estMinutes: parseInt(e.target.value) || 30})}
+                      min="5"
+                      max="240"
+                      data-testid="input-task-time"
+                    />
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="task-priority">Prioriteit</Label>
+                    <Select value={taskForm.priority.toString()} onValueChange={(value) => setTaskForm({...taskForm, priority: parseInt(value)})}>
+                      <SelectTrigger data-testid="select-task-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0">Laag</SelectItem>
+                        <SelectItem value="1">Normaal</SelectItem>
+                        <SelectItem value="2">Hoog</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="task-due">Deadline</Label>
+                  <Input
+                    id="task-due"
+                    type="date"
+                    value={taskForm.dueAt}
+                    onChange={(e) => setTaskForm({...taskForm, dueAt: e.target.value})}
+                    data-testid="input-task-due"
+                  />
+                </div>
+
+                <div className="flex space-x-2 pt-4">
+                  <Button
+                    onClick={() => createTaskMutation.mutate()}
+                    disabled={createTaskMutation.isPending || !taskForm.title.trim()}
+                    className="flex-1"
+                    data-testid="button-save-task"
+                  >
+                    {createTaskMutation.isPending ? "Bezig..." : "Toevoegen"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTaskForm(false)}
+                    data-testid="button-cancel-task"
+                  >
+                    Annuleren
+                  </Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
         
         {tasksLoading ? (
           <div className="space-y-3">

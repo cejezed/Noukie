@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useState } from "react";
-import { HelpCircle, Check } from "lucide-react";
+import { HelpCircle, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -37,6 +37,27 @@ export default function TaskCard({ task, course }: TaskCardProps) {
       toast({
         title: "Fout",
         description: "Kon taakstatus niet bijwerken.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/tasks/${task.id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
+      toast({
+        title: "Taak verwijderd",
+        description: "De voltooide taak is verwijderd.",
+      });
+    },
+    onError: (error) => {
+      console.error("Task delete error:", error);
+      toast({
+        title: "Fout bij verwijderen",
+        description: "Kon taak niet verwijderen. Probeer opnieuw.",
         variant: "destructive",
       });
     }
@@ -87,6 +108,19 @@ export default function TaskCard({ task, course }: TaskCardProps) {
             >
               <HelpCircle className="w-5 h-5" />
             </Button>
+            {isCompleted && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-destructive p-1"
+                onClick={() => deleteTaskMutation.mutate()}
+                disabled={deleteTaskMutation.isPending}
+                data-testid={`button-delete-${task.id}`}
+                title="Verwijder voltooide taak"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
             <Button
               variant="outline"
               size="icon"
