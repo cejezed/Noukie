@@ -387,40 +387,65 @@ export default function Vandaag() {
         )}
       </section>
 
-      {/* Today's Lessons */}
-      <section className="px-6 pb-6" data-testid="today-lessons">
-        <h3 className="text-lg font-semibold mb-4">Lessen Vandaag</h3>
+      {/* Today's Schedule */}
+      <section className="px-6 pb-6" data-testid="today-schedule">
+        <h3 className="text-lg font-semibold mb-4">Vandaag op de planning</h3>
         
         {todaySchedule.length > 0 ? (
           <div className="space-y-3">
             {todaySchedule.map((item) => {
               const course = getCourseById(item.courseId);
-              const isTest = item.kind === "toets";
+              
+              const getKindLabel = (kind: string) => {
+                switch (kind) {
+                  case "les": return "Les";
+                  case "toets": return "Toets";
+                  case "sport": return "Sport/Training";
+                  case "werk": return "Bijbaan/Werk";
+                  case "afspraak": return "Afspraak";
+                  case "hobby": return "Hobby/Activiteit";
+                  case "anders": return "Anders";
+                  default: return kind;
+                }
+              };
+
+              const getKindColor = (kind: string) => {
+                switch (kind) {
+                  case "les": return "bg-blue-100 text-blue-800 border-blue-200";
+                  case "toets": return "bg-red-100 text-red-800 border-red-200";
+                  case "sport": return "bg-green-100 text-green-800 border-green-200";
+                  case "werk": return "bg-purple-100 text-purple-800 border-purple-200";
+                  case "afspraak": return "bg-orange-100 text-orange-800 border-orange-200";
+                  case "hobby": return "bg-pink-100 text-pink-800 border-pink-200";
+                  case "anders": return "bg-gray-100 text-gray-800 border-gray-200";
+                  default: return "bg-muted text-muted-foreground border-border";
+                }
+              };
               
               return (
                 <div
                   key={item.id}
-                  className={`border rounded-lg p-4 ${
-                    isTest ? 'bg-accent/10 border-accent/30' : 'bg-muted/50 border-border'
-                  }`}
-                  data-testid={`lesson-${item.id}`}
+                  className={`border rounded-lg p-4 ${getKindColor(item.kind || 'les')}`}
+                  data-testid={`schedule-item-${item.id}`}
                 >
                   <div className="flex items-center justify-between">
                     <div>
                       <div className="flex items-center space-x-2 mb-1">
-                        <h4 className="font-medium">{course?.name || "Onbekend vak"}</h4>
-                        {isTest && (
-                          <span className="text-xs font-medium text-accent bg-accent/20 px-2 py-0.5 rounded">
-                            TOETS
-                          </span>
-                        )}
+                        <h4 className="font-medium">
+                          {item.title || course?.name || "Activiteit"}
+                        </h4>
+                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-white/50">
+                          {getKindLabel(item.kind || 'les')}
+                        </span>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {item.title || `${isTest ? 'Toets' : 'Les'} ${course?.name || ''}`}
-                      </p>
+                      {course && (
+                        <p className="text-sm opacity-75">
+                          Vak: {course.name}
+                        </p>
+                      )}
                     </div>
                     <div className="text-right text-sm">
-                      <div className="font-medium">
+                      <div className="font-medium opacity-90">
                         {item.startTime && item.endTime && 
                           `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`
                         }
@@ -432,9 +457,9 @@ export default function Vandaag() {
             })}
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground" data-testid="no-lessons">
-            <p>Geen lessen vandaag</p>
-            <p className="text-sm mt-1">Voeg lessen toe via het Rooster tabblad.</p>
+          <div className="text-center py-8 text-muted-foreground" data-testid="no-schedule">
+            <p>Geen activiteiten vandaag</p>
+            <p className="text-sm mt-1">Voeg activiteiten toe via het Rooster tabblad.</p>
           </div>
         )}
       </section>

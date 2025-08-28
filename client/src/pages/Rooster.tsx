@@ -17,7 +17,7 @@ interface ScheduleFormData {
   dayOfWeek: number;
   startTime: string;
   endTime: string;
-  kind: "les" | "toets";
+  kind: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders";
   title: string;
   date?: string;
 }
@@ -203,10 +203,10 @@ export default function Rooster() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.startTime || !formData.endTime) {
+    if (!formData.startTime || !formData.endTime || !formData.title.trim()) {
       toast({
         title: "Incomplete gegevens",
-        description: "Vul alle verplichte velden in.",
+        description: "Vul alle verplichte velden in (titel, start- en eindtijd).",
         variant: "destructive",
       });
       return;
@@ -248,6 +248,32 @@ export default function Rooster() {
 
   const formatTime = (timeString: string) => {
     return timeString.slice(0, 5); // "HH:MM"
+  };
+
+  const getKindLabel = (kind: string) => {
+    switch (kind) {
+      case "les": return "Les";
+      case "toets": return "Toets";
+      case "sport": return "Sport/Training";
+      case "werk": return "Bijbaan/Werk";
+      case "afspraak": return "Afspraak";
+      case "hobby": return "Hobby/Activiteit";
+      case "anders": return "Anders";
+      default: return kind;
+    }
+  };
+
+  const getKindColor = (kind: string) => {
+    switch (kind) {
+      case "les": return "bg-blue-100 text-blue-800";
+      case "toets": return "bg-red-100 text-red-800";
+      case "sport": return "bg-green-100 text-green-800";
+      case "werk": return "bg-purple-100 text-purple-800";
+      case "afspraak": return "bg-orange-100 text-orange-800";
+      case "hobby": return "bg-pink-100 text-pink-800";
+      case "anders": return "bg-gray-100 text-gray-800";
+      default: return "bg-muted text-muted-foreground";
+    }
   };
 
   // Group schedule by day for better display
@@ -437,31 +463,24 @@ export default function Rooster() {
       {/* Add Schedule Form */}
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Nieuwe les/toets toevoegen</CardTitle>
-          {courses.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Voeg eerst vakken toe om lessen te kunnen inplannen.
-            </p>
-          )}
+          <CardTitle>Nieuwe activiteit toevoegen</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Voeg lessen, toetsen, sporttrainingen en andere activiteiten toe aan je rooster.
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4" data-testid="schedule-form">
-            {courses.length === 0 && (
-              <div className="text-center py-4 text-muted-foreground bg-muted/50 rounded-lg">
-                <p>Geen vakken beschikbaar</p>
-                <p className="text-xs mt-1">Voeg eerst vakken toe hierboven.</p>
-              </div>
-            )}
             <div>
-              <Label htmlFor="course">Vak</Label>
+              <Label htmlFor="course">Vak (optioneel)</Label>
               <Select
                 value={formData.courseId}
                 onValueChange={(value) => setFormData(prev => ({ ...prev, courseId: value }))}
               >
                 <SelectTrigger data-testid="select-course">
-                  <SelectValue placeholder="Selecteer een vak" />
+                  <SelectValue placeholder="Selecteer een vak (optioneel voor non-school activiteiten)" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="">Geen vak</SelectItem>
                   {courses.map((course) => (
                     <SelectItem key={course.id} value={course.id}>
                       {course.name}
@@ -492,10 +511,10 @@ export default function Rooster() {
               </div>
               
               <div>
-                <Label htmlFor="kind">Type</Label>
+                <Label htmlFor="kind">Type activiteit</Label>
                 <Select
                   value={formData.kind}
-                  onValueChange={(value: "les" | "toets") => setFormData(prev => ({ ...prev, kind: value }))}
+                  onValueChange={(value: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders") => setFormData(prev => ({ ...prev, kind: value }))}
                 >
                   <SelectTrigger data-testid="select-kind">
                     <SelectValue />
@@ -503,6 +522,11 @@ export default function Rooster() {
                   <SelectContent>
                     <SelectItem value="les">Les</SelectItem>
                     <SelectItem value="toets">Toets</SelectItem>
+                    <SelectItem value="sport">Sport/Training</SelectItem>
+                    <SelectItem value="werk">Bijbaan/Werk</SelectItem>
+                    <SelectItem value="afspraak">Afspraak</SelectItem>
+                    <SelectItem value="hobby">Hobby/Activiteit</SelectItem>
+                    <SelectItem value="anders">Anders</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -533,20 +557,27 @@ export default function Rooster() {
             </div>
             
             <div>
-              <Label htmlFor="title">Titel (optioneel)</Label>
+              <Label htmlFor="title">Titel</Label>
               <Input
                 id="title"
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="Bijv. Hoofdstuk 3 - Goniometrie"
+                placeholder={
+                  formData.kind === "sport" ? "Bijv. Voetbaltraining Ajax" :
+                  formData.kind === "werk" ? "Bijv. Albert Heijn - kassamededer" :
+                  formData.kind === "afspraak" ? "Bijv. Tandarts afspraak" :
+                  formData.kind === "hobby" ? "Bijv. Gitaarles" :
+                  "Bijv. Hoofdstuk 3 - Goniometrie"
+                }
                 data-testid="input-title"
+                required
               />
             </div>
             
             <Button
               type="submit"
               className="w-full"
-              disabled={createMutation.isPending || courses.length === 0}
+              disabled={createMutation.isPending}
               data-testid="button-add-schedule"
             >
               {createMutation.isPending ? "Bezig..." : "Toevoegen aan rooster"}
@@ -581,7 +612,6 @@ export default function Rooster() {
                   <div className="space-y-2">
                     {items.map((item) => {
                       const course = getCourseById(item.courseId);
-                      const isTest = item.kind === 'toets';
                       
                       return (
                         <div
@@ -592,14 +622,10 @@ export default function Rooster() {
                           <div>
                             <div className="flex items-center space-x-2 mb-1">
                               <h5 className="font-medium">
-                                {course?.name || "Onbekend vak"}
+                                {item.title || course?.name || "Activiteit"}
                               </h5>
-                              <span className={`text-xs px-2 py-0.5 rounded ${
-                                isTest 
-                                  ? 'bg-accent/20 text-accent' 
-                                  : 'bg-muted text-muted-foreground'
-                              }`}>
-                                {isTest ? 'Toets' : 'Les'}
+                              <span className={`text-xs px-2 py-0.5 rounded font-medium ${getKindColor(item.kind || 'les')}`}>
+                                {getKindLabel(item.kind || 'les')}
                               </span>
                             </div>
                             <p className="text-sm text-muted-foreground">
@@ -607,9 +633,9 @@ export default function Rooster() {
                                 `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`
                               }
                             </p>
-                            {item.title && (
+                            {course && (
                               <p className="text-sm text-muted-foreground">
-                                {item.title}
+                                Vak: {course.name}
                               </p>
                             )}
                           </div>

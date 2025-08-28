@@ -28,7 +28,7 @@ export const schedule = pgTable("schedule", {
   dayOfWeek: integer("day_of_week"), // 1=ma, 7=zo
   startTime: time("start_time"),
   endTime: time("end_time"),
-  kind: text("kind", { enum: ["les", "toets"] }).default("les"),
+  kind: text("kind", { enum: ["les", "toets", "sport", "werk", "afspraak", "hobby", "anders"] }).default("les"),
   title: text("title"),
   date: date("date"), // for one-off tests
 });
