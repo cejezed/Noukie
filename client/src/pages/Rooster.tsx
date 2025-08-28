@@ -46,8 +46,6 @@ export default function Rooster() {
   });
 
   const [showCourseForm, setShowCourseForm] = useState(false);
-  const [icalUrl, setIcalUrl] = useState("");
-  const [showIcalForm, setShowIcalForm] = useState(false);
   const [showDefaultSubjects, setShowDefaultSubjects] = useState(false);
 
   // Get user's schedule
@@ -133,34 +131,6 @@ export default function Rooster() {
     }
   });
 
-  // Import iCal mutation
-  const importIcalMutation = useMutation({
-    mutationFn: async (url: string) => {
-      const response = await apiRequest("POST", "/api/schedule/import-ical", {
-        userId: user?.id,
-        icalUrl: url.trim(),
-      });
-      return await response.json();
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
-      setIcalUrl("");
-      setShowIcalForm(false);
-      toast({
-        title: "iCal geïmporteerd!",
-        description: `${result.scheduleCount || 0} roosteritems en ${result.courseCount || 0} vakken toegevoegd.`,
-      });
-    },
-    onError: (error) => {
-      console.error("iCal import error:", error);
-      toast({
-        title: "Import mislukt",
-        description: "Kon iCal URL niet importeren. Controleer de URL en probeer opnieuw.",
-        variant: "destructive",
-      });
-    }
-  });
 
   // Delete course mutation
   const deleteCourseMutation = useMutation({
@@ -554,76 +524,6 @@ export default function Rooster() {
         </CardContent>
       </Card>
 
-      {/* iCal Import Section */}
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Rooster importeren</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowIcalForm(!showIcalForm)}
-              data-testid="button-toggle-ical-form"
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              iCal URL
-            </Button>
-          </div>
-        </CardHeader>
-        
-        {showIcalForm && (
-          <CardContent>
-            <Alert className="mb-4">
-              <HelpCircle className="h-4 w-4" />
-              <AlertDescription>
-                <strong>📚 SomToday gebruikers:</strong> Log in op SomToday → Rooster → Exporteren → Kopieer de iCal URL. 
-                Plak deze hieronder om je hele rooster in één keer te importeren!
-              </AlertDescription>
-            </Alert>
-            
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (icalUrl.trim()) {
-                importIcalMutation.mutate(icalUrl.trim());
-              }
-            }} className="space-y-3">
-              <div>
-                <Label htmlFor="icalUrl">iCal URL</Label>
-                <Input
-                  id="icalUrl"
-                  value={icalUrl}
-                  onChange={(e) => setIcalUrl(e.target.value)}
-                  placeholder="https://example.com/calendar.ics"
-                  data-testid="input-ical-url"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Plak hier de iCal link van je school rooster (SomToday, Zermelo, etc.)
-                </p>
-              </div>
-              
-              <div className="flex space-x-2">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={importIcalMutation.isPending || !icalUrl.trim()}
-                  data-testid="button-import-ical"
-                >
-                  {importIcalMutation.isPending ? "Importeren..." : "Rooster importeren"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowIcalForm(false)}
-                  data-testid="button-cancel-ical"
-                >
-                  Annuleren
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        )}
-      </Card>
 
       {/* Current Schedule */}
       <div>

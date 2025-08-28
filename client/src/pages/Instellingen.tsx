@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Upload, 
   Palette, 
@@ -16,9 +18,12 @@ import {
   Clock,
   Calendar,
   Download,
-  Upload as UploadIcon
+  Upload as UploadIcon,
+  FileText,
+  HelpCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 // App kleur thema's
 const colorThemes = [
@@ -59,11 +64,43 @@ const educationLevels = {
 export default function Instellingen() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [selectedTheme, setSelectedTheme] = useState("purple");
   const [selectedEducation, setSelectedEducation] = useState("havo");
   const [selectedGrade, setSelectedGrade] = useState("havo 5");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState("18:00");
+  const [icalUrl, setIcalUrl] = useState("");
+  const [showIcalForm, setShowIcalForm] = useState(false);
+
+  // Import iCal mutation
+  const importIcalMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const response = await apiRequest("POST", "/api/schedule/import-ical", {
+        userId: user?.id,
+        icalUrl: url.trim(),
+      });
+      return await response.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
+      setIcalUrl("");
+      setShowIcalForm(false);
+      toast({
+        title: "iCal geïmporteerd!",
+        description: `${result.scheduleCount || 0} roosteritems en ${result.courseCount || 0} vakken toegevoegd.`,
+      });
+    },
+    onError: (error) => {
+      console.error("iCal import error:", error);
+      toast({
+        title: "Import mislukt",
+        description: "Kon iCal URL niet importeren. Controleer de URL en probeer opnieuw.",
+        variant: "destructive",
+      });
+    }
+  });
 
   const handleThemeChange = (themeId: string) => {
     setSelectedTheme(themeId);
@@ -298,25 +335,78 @@ export default function Instellingen() {
         </CardContent>
       </Card>
 
-      {/* Rooster Import */}
+      {/* Rooster Import via iCal URL */}
       <Card data-testid="calendar-integration">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Rooster Import
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="p-4 bg-muted/50 rounded-lg">
-            <h4 className="font-semibold mb-2">📅 Rooster Import</h4>
-            <p className="text-sm text-muted-foreground mb-3">
-              Importeer je school rooster via iCal URL (SomToday, Zermelo, etc.)
-            </p>
-            <p className="text-xs text-muted-foreground">
-              💡 Ga naar het Rooster tabblad om je rooster te importeren
-            </p>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Calendar className="w-5 h-5" />
+              Rooster Import via iCal
+            </CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowIcalForm(!showIcalForm)}
+              data-testid="button-toggle-ical-form"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              iCal URL
+            </Button>
           </div>
-        </CardContent>
+        </CardHeader>
+        
+        {showIcalForm && (
+          <CardContent>
+            <Alert className="mb-4">
+              <HelpCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>📚 SomToday gebruikers:</strong> Log in op SomToday → Rooster → Exporteren → Kopieer de iCal URL. 
+                Plak deze hieronder om je hele rooster in één keer te importeren!
+              </AlertDescription>
+            </Alert>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (icalUrl.trim()) {
+                importIcalMutation.mutate(icalUrl.trim());
+              }
+            }} className="space-y-3">
+              <div>
+                <Label htmlFor="icalUrl">iCal URL</Label>
+                <Input
+                  id="icalUrl"
+                  value={icalUrl}
+                  onChange={(e) => setIcalUrl(e.target.value)}
+                  placeholder="https://example.com/calendar.ics"
+                  data-testid="input-ical-url"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Plak hier de iCal link van je school rooster (SomToday, Zermelo, etc.)
+                </p>
+              </div>
+              
+              <div className="flex space-x-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={importIcalMutation.isPending || !icalUrl.trim()}
+                  data-testid="button-import-ical"
+                >
+                  {importIcalMutation.isPending ? "Importeren..." : "Rooster importeren"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowIcalForm(false)}
+                  data-testid="button-cancel-ical"
+                >
+                  Annuleren
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        )}
       </Card>
 
       {/* Account Info */}
