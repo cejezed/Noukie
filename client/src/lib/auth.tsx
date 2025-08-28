@@ -7,7 +7,14 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string, role: "student" | "parent") => Promise<void>;
+  signUp: (
+    email: string, 
+    password: string, 
+    name: string, 
+    role: "student" | "parent", 
+    educationLevel?: string, 
+    grade?: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -40,16 +47,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const signUp = async (email: string, password: string, name: string, role: "student" | "parent") => {
-    // For development, use direct Supabase auth
+  const signUp = async (
+    email: string, 
+    password: string, 
+    name: string, 
+    role: "student" | "parent", 
+    educationLevel?: string, 
+    grade?: string
+  ) => {
+    // For development, use direct Supabase auth with extended data
+    const userData: any = { name, role };
+    if (role === 'student' && educationLevel && grade) {
+      userData.educationLevel = educationLevel;
+      userData.grade = grade;
+    }
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        data: {
-          name,
-          role,
-        }
+        data: userData
       }
     });
     if (error) throw error;

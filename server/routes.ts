@@ -20,16 +20,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
   app.post("/api/auth/signup", async (req, res) => {
     try {
-      const { email, password, name, role } = req.body;
+      const { email, password, name, role, educationLevel, grade } = req.body;
       
       if (!email || !password || !name || !role) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
+      // For students, require education level and grade
+      if (role === 'student' && (!educationLevel || !grade)) {
+        return res.status(400).json({ error: "Students must provide education level and grade" });
+      }
+
       // Create user in Supabase Auth
       const supabaseResult = await supabaseSignUp(email, password, name, role);
       
-      // TODO: Sync with custom users table later when database connection is fixed
+      // Create user in our database with additional fields
+      try {
+        const userData = {
+          id: supabaseResult.user?.id || `user-${Date.now()}`,
+          email,
+          name,
+          role,
+          educationLevel: role === 'student' ? educationLevel : null,
+          grade: role === 'student' ? parseInt(grade) : null,
+        };
+        
+        await storage.createUser(userData);
+      } catch (dbError) {
+        console.warn("Database sync failed, but auth succeeded:", dbError);
+      }
+      
       res.json(supabaseResult);
     } catch (error) {
       console.error("Signup error:", error);
@@ -536,6 +556,110 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Daily reminder error:", error);
       res.status(500).json({ error: "Failed to process daily reminders" });
+    }
+  });
+
+  // Parent-Child relationship routes
+  app.post("/api/parent/add-child", async (req, res) => {
+    try {
+      const { parentId, childEmail, childName } = req.body;
+      
+      if (!parentId || !childEmail || !childName) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Check if child exists
+      const child = await storage.findChildByEmail(childEmail);
+      if (!child) {
+        return res.status(404).json({ error: "Child not found with this email address" });
+      }
+
+      if (child.role !== 'student') {
+        return res.status(400).json({ error: "Only student accounts can be added as children" });
+      }
+
+      // Create the relationship
+      const relationship = await storage.createParentChildRelationship({
+        parentId,
+        childId: child.id,
+        childEmail,
+        childName,
+        isConfirmed: false, // Child needs to confirm
+      });
+
+      res.json({ success: true, relationship });
+    } catch (error) {
+      console.error("Add child error:", error);
+      res.status(500).json({ error: "Failed to add child" });
+    }
+  });
+
+  app.get("/api/parent/:parentId/children", async (req, res) => {
+    try {
+      const { parentId } = req.params;
+      const relationships = await storage.getChildrenByParentId(parentId);
+      
+      // Get full child user data
+      const childrenData = await Promise.all(
+        relationships.map(async (rel) => {
+          const child = await storage.getUser(rel.childId);
+          return {
+            relationship: rel,
+            child: child
+          };
+        })
+      );
+
+      res.json(childrenData);
+    } catch (error) {
+      console.error("Get children error:", error);
+      res.status(500).json({ error: "Failed to get children" });
+    }
+  });
+
+  app.post("/api/student/confirm-parent/:relationshipId", async (req, res) => {
+    try {
+      const { relationshipId } = req.params;
+      await storage.confirmRelationship(relationshipId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Confirm parent error:", error);
+      res.status(500).json({ error: "Failed to confirm parent relationship" });
+    }
+  });
+
+  // Get child data for parent (tasks, schedule, etc)
+  app.get("/api/parent/child/:childId/tasks", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const tasks = await storage.getTasksByUserId(childId);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Get child tasks error:", error);
+      res.status(500).json({ error: "Failed to get child tasks" });
+    }
+  });
+
+  app.get("/api/parent/child/:childId/schedule", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const schedule = await storage.getScheduleByUserId(childId);
+      res.json(schedule);
+    } catch (error) {
+      console.error("Get child schedule error:", error);
+      res.status(500).json({ error: "Failed to get child schedule" });
+    }
+  });
+
+  // Get pending parent requests for student
+  app.get("/api/student/:studentId/parent-requests", async (req, res) => {
+    try {
+      const { studentId } = req.params;
+      const relationships = await storage.getPendingParentRequests(studentId);
+      res.json(relationships);
+    } catch (error) {
+      console.error("Get parent requests error:", error);
+      res.status(500).json({ error: "Failed to get parent requests" });
     }
   });
 

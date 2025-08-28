@@ -8,6 +8,9 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull(),
   role: text("role", { enum: ["student", "parent"] }).notNull(),
+  // Student-specific fields
+  educationLevel: text("education_level", { enum: ["vmbo", "havo", "vwo", "mbo"] }), // null for parents
+  grade: integer("grade"), // 1-6 for all levels, null for parents
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
@@ -72,6 +75,16 @@ export const quizResults = pgTable("quiz_results", {
   weakPoints: text("weak_points"),
 });
 
+export const parentChildRelationships = pgTable("parent_child_relationships", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  parentId: uuid("parent_id").references(() => users.id).notNull(),
+  childId: uuid("child_id").references(() => users.id).notNull(),
+  childEmail: text("child_email").notNull(), // For lookup during setup
+  childName: text("child_name").notNull(), // For display in parent dashboard
+  isConfirmed: boolean("is_confirmed").default(false), // Child can confirm/deny
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
@@ -104,6 +117,11 @@ export const insertQuizResultSchema = createInsertSchema(quizResults).omit({
   id: true,
 });
 
+export const insertParentChildRelationshipSchema = createInsertSchema(parentChildRelationships).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -119,3 +137,5 @@ export type Material = typeof materials.$inferSelect;
 export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
 export type QuizResult = typeof quizResults.$inferSelect;
 export type InsertQuizResult = z.infer<typeof insertQuizResultSchema>;
+export type ParentChildRelationship = typeof parentChildRelationships.$inferSelect;
+export type InsertParentChildRelationship = z.infer<typeof insertParentChildRelationshipSchema>;

@@ -25,6 +25,8 @@ export default function Login() {
     confirmPassword: "",
     name: "",
     role: "student" as "student" | "parent",
+    educationLevel: "" as "vmbo" | "havo" | "vwo" | "mbo" | "",
+    grade: "",
   });
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -69,10 +71,26 @@ export default function Login() {
       return;
     }
     
+    if (signUpData.role === 'student' && (!signUpData.educationLevel || !signUpData.grade)) {
+      toast({
+        title: "Ontbrekende gegevens",
+        description: "Studenten moeten hun schoolniveau en jaargang invullen.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
-      await signUp(signUpData.email, signUpData.password, signUpData.name, signUpData.role);
+      await signUp(
+        signUpData.email, 
+        signUpData.password, 
+        signUpData.name, 
+        signUpData.role,
+        signUpData.role === 'student' ? signUpData.educationLevel : undefined,
+        signUpData.role === 'student' ? signUpData.grade : undefined
+      );
       toast({
         title: "Account aangemaakt!",
         description: "Check je email voor verificatie en log daarna in.",
@@ -178,7 +196,13 @@ export default function Login() {
                   <Label htmlFor="signup-role">Rol</Label>
                   <Select
                     value={signUpData.role}
-                    onValueChange={(value: "student" | "parent") => setSignUpData(prev => ({ ...prev, role: value }))}
+                    onValueChange={(value: "student" | "parent") => setSignUpData(prev => ({ 
+                      ...prev, 
+                      role: value, 
+                      // Reset student fields when switching to parent
+                      educationLevel: value === 'parent' ? "" : prev.educationLevel,
+                      grade: value === 'parent' ? "" : prev.grade
+                    }))}
                   >
                     <SelectTrigger data-testid="select-role">
                       <SelectValue />
@@ -189,6 +213,49 @@ export default function Login() {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* Student-specific fields */}
+                {signUpData.role === 'student' && (
+                  <>
+                    <div>
+                      <Label htmlFor="education-level">Schoolniveau</Label>
+                      <Select
+                        value={signUpData.educationLevel}
+                        onValueChange={(value: "vmbo" | "havo" | "vwo" | "mbo") => setSignUpData(prev => ({ ...prev, educationLevel: value }))}
+                      >
+                        <SelectTrigger data-testid="select-education-level">
+                          <SelectValue placeholder="Kies je schoolniveau" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="vmbo">VMBO</SelectItem>
+                          <SelectItem value="havo">HAVO</SelectItem>
+                          <SelectItem value="vwo">VWO</SelectItem>
+                          <SelectItem value="mbo">MBO</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div>
+                      <Label htmlFor="grade">Klas/Jaargang</Label>
+                      <Select
+                        value={signUpData.grade}
+                        onValueChange={(value) => setSignUpData(prev => ({ ...prev, grade: value }))}
+                      >
+                        <SelectTrigger data-testid="select-grade">
+                          <SelectValue placeholder="Kies je klas" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="1">Klas 1</SelectItem>
+                          <SelectItem value="2">Klas 2</SelectItem>
+                          <SelectItem value="3">Klas 3</SelectItem>
+                          <SelectItem value="4">Klas 4</SelectItem>
+                          <SelectItem value="5">Klas 5</SelectItem>
+                          <SelectItem value="6">Klas 6</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </>
+                )}
                 
                 <div>
                   <Label htmlFor="signup-password">Wachtwoord</Label>

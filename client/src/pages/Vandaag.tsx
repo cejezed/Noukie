@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Play, Plus } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Play, Plus, UserCheck, X } from "lucide-react";
 import { useAudio } from "@/hooks/use-audio";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +54,12 @@ export default function Vandaag() {
   const { data: todaySchedule = [] } = useQuery<Schedule[]>({
     queryKey: ['/api/schedule', user?.id, 'today'],
     enabled: !!user?.id,
+  });
+
+  // Get pending parent requests (for students only)
+  const { data: parentRequests = [] } = useQuery({
+    queryKey: ['/api/student', user?.id, 'parent-requests'],
+    enabled: !!user?.id && user?.user_metadata?.role === 'student',
   });
 
   // Create task mutation
@@ -99,6 +106,27 @@ export default function Vandaag() {
     }
   });
 
+  // Confirm parent relationship mutation
+  const confirmParentMutation = useMutation({
+    mutationFn: async (relationshipId: string) => {
+      return await apiRequest('POST', '/api/parent/confirm', { relationshipId });
+    },
+    onSuccess: () => {
+      toast({
+        title: "Ouder bevestigd",
+        description: "Je ouder kan nu je voortgang bekijken.",
+      });
+      queryClient.invalidateQueries({ queryKey: ['/api/student'] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Kon ouder niet bevestigen",
+        description: error.message || "Probeer het later opnieuw.",
+        variant: "destructive",
+      });
+    }
+  });
+
   // Check if reminder should be shown
   const shouldShowReminder = () => {
     if (!lastSession) return false;
@@ -141,6 +169,47 @@ export default function Vandaag() {
 
   return (
     <div data-testid="page-vandaag">
+      {/* Parent Request Notifications (for students only) */}
+      {user?.user_metadata?.role === 'student' && parentRequests.length > 0 && (
+        <div className="p-4 space-y-2">
+          {parentRequests.map((request: any) => (
+            <Alert key={request.id} className="border-blue-200 bg-blue-50">
+              <UserCheck className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <div>
+                  <strong>{request.parentName}</strong> wil je ouder worden.
+                  <br />
+                  <span className="text-sm text-muted-foreground">{request.parentEmail}</span>
+                </div>
+                <div className="flex gap-2 ml-4">
+                  <Button
+                    size="sm"
+                    onClick={() => confirmParentMutation.mutate(request.id)}
+                    disabled={confirmParentMutation.isPending}
+                    data-testid={`button-confirm-parent-${request.id}`}
+                  >
+                    Bevestigen
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      toast({
+                        title: "Binnenkort beschikbaar",
+                        description: "Afwijzen functionaliteit wordt nog ontwikkeld."
+                      });
+                    }}
+                    data-testid={`button-reject-parent-${request.id}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          ))}
+        </div>
+      )}
+    
       {/* Reminder Banner */}
       {shouldShowReminder() && (
         <div className="bg-accent text-accent-foreground p-4 m-4 rounded-lg flex items-center space-x-3" data-testid="reminder-banner">

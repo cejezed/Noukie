@@ -18,6 +18,9 @@ export default function Layout({ children }: LayoutProps) {
     { id: "help", label: "Uitleg", icon: HelpCircle, path: "/help" },
   ];
 
+  // No tabs for parents - they only have the dashboard
+  const isParent = user?.user_metadata?.role === "parent";
+
   return (
     <div className="max-w-md mx-auto bg-white shadow-xl min-h-screen relative" data-testid="app-container">
       {/* Header */}
@@ -51,38 +54,40 @@ export default function Layout({ children }: LayoutProps) {
       </header>
 
       {/* Main Content */}
-      <main className="pb-20" data-testid="main-content">
+      <main className={isParent ? "pb-4" : "pb-20"} data-testid="main-content">
         {children}
       </main>
 
-      {/* Bottom Navigation */}
-      <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-card border-t border-border" data-testid="bottom-navigation">
-        <div className="grid grid-cols-4 gap-0">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = location === tab.path;
-            
-            return (
-              <Link key={tab.id} href={tab.path}>
-                <div className="w-full flex justify-center">
-                  <button
-                    className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors ${
-                      isActive ? "text-primary" : "text-muted-foreground"
-                    }`}
-                    data-testid={`tab-${tab.id}`}
-                  >
-                    <Icon className="w-5 h-5 mb-1" />
-                    <span className="text-xs font-medium">{tab.label}</span>
-                    {isActive && (
-                      <div className="tab-indicator" />
-                    )}
-                  </button>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Bottom Navigation - Only for students */}
+      {!isParent && (
+        <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-card border-t border-border" data-testid="bottom-navigation">
+          <div className="grid grid-cols-4 gap-0">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = location === tab.path;
+              
+              return (
+                <Link key={tab.id} href={tab.path}>
+                  <div className="w-full flex justify-center">
+                    <button
+                      className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors ${
+                        isActive ? "text-primary" : "text-muted-foreground"
+                      }`}
+                      data-testid={`tab-${tab.id}`}
+                    >
+                      <Icon className="w-5 h-5 mb-1" />
+                      <span className="text-xs font-medium">{tab.label}</span>
+                      {isActive && (
+                        <div className="tab-indicator" />
+                      )}
+                    </button>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }

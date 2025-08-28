@@ -9,6 +9,7 @@ import {
   sessions,
   materials,
   quizResults,
+  parentChildRelationships,
   type User,
   type InsertUser,
   type Course,
@@ -23,6 +24,8 @@ import {
   type InsertMaterial,
   type QuizResult,
   type InsertQuizResult,
+  type ParentChildRelationship,
+  type InsertParentChildRelationship,
 } from "@shared/schema";
 
 // Use Supabase database URL
@@ -100,6 +103,13 @@ export interface IStorage {
   
   // Quiz Results
   createQuizResult(result: InsertQuizResult): Promise<QuizResult>;
+  
+  // Parent-Child Relationships
+  createParentChildRelationship(relationship: InsertParentChildRelationship): Promise<ParentChildRelationship>;
+  getChildrenByParentId(parentId: string): Promise<ParentChildRelationship[]>;
+  findChildByEmail(childEmail: string): Promise<User | undefined>;
+  confirmRelationship(relationshipId: string): Promise<void>;
+  getPendingParentRequests(childId: string): Promise<ParentChildRelationship[]>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -121,7 +131,13 @@ export class PostgresStorage implements IStorage {
 
   async createUser(user: InsertUser): Promise<User> {
     if (useInMemory) {
-      const newUser = { ...user, id: `user-${Date.now()}`, createdAt: new Date() };
+      const newUser = { 
+        ...user, 
+        id: `user-${Date.now()}`, 
+        createdAt: new Date(),
+        educationLevel: user.educationLevel ?? null,
+        grade: user.grade ?? null,
+      };
       inMemoryStorage.users.push(newUser);
       return newUser;
     }
@@ -294,6 +310,37 @@ export class PostgresStorage implements IStorage {
   async createQuizResult(result: InsertQuizResult): Promise<QuizResult> {
     const queryResult = await db.insert(quizResults).values(result).returning();
     return queryResult[0];
+  }
+
+  // Parent-Child Relationship methods
+  async createParentChildRelationship(relationship: InsertParentChildRelationship): Promise<ParentChildRelationship> {
+    const result = await db.insert(parentChildRelationships).values(relationship).returning();
+    return result[0];
+  }
+
+  async getChildrenByParentId(parentId: string): Promise<ParentChildRelationship[]> {
+    return await db.select().from(parentChildRelationships)
+      .where(eq(parentChildRelationships.parentId, parentId));
+  }
+
+  async findChildByEmail(childEmail: string): Promise<User | undefined> {
+    const result = await db.select().from(users)
+      .where(eq(users.email, childEmail));
+    return result[0];
+  }
+
+  async confirmRelationship(relationshipId: string): Promise<void> {
+    await db.update(parentChildRelationships)
+      .set({ isConfirmed: true })
+      .where(eq(parentChildRelationships.id, relationshipId));
+  }
+
+  async getPendingParentRequests(childId: string): Promise<ParentChildRelationship[]> {
+    return await db.select().from(parentChildRelationships)
+      .where(and(
+        eq(parentChildRelationships.childId, childId),
+        eq(parentChildRelationships.isConfirmed, false)
+      ));
   }
 }
 

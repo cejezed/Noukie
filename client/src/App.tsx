@@ -11,6 +11,7 @@ import Vandaag from "@/pages/Vandaag";
 import Planning from "@/pages/Planning";
 import Rooster from "@/pages/Rooster";
 import Help from "@/pages/Help";
+import ParentDashboard from "@/pages/ParentDashboard";
 import NotFound from "@/pages/not-found";
 
 function AuthenticatedApp() {
@@ -28,6 +29,19 @@ function AuthenticatedApp() {
     return <Login />;
   }
 
+  // Different interface for parents
+  if (user.user_metadata?.role === 'parent') {
+    return (
+      <Layout>
+        <Switch>
+          <Route path="/" component={ParentDashboard} />
+          <Route component={NotFound} />
+        </Switch>
+      </Layout>
+    );
+  }
+
+  // Student interface (default)
   return (
     <Layout>
       <Switch>
