@@ -251,6 +251,13 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
       <DialogContent className="max-w-md mx-auto max-h-[90vh] overflow-y-auto" data-testid="help-modal">
         <DialogHeader>
           <DialogTitle>Ik snap dit niet</DialogTitle>
+          {explanation && (
+            <div className="bg-amber-50 border border-amber-200 rounded-md p-3 mt-2">
+              <p className="text-sm text-amber-800">
+                ⚠️ <strong>Verificatie aanbevolen:</strong> Controleer belangrijke informatie altijd met je schoolboek of vraag het na bij je docent.
+              </p>
+            </div>
+          )}
         </DialogHeader>
 
         {!explanation && !helpMutation.isPending ? (

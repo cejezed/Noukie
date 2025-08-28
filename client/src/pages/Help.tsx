@@ -201,6 +201,12 @@ export default function Help() {
               <span>Probeer eerst zelf te begrijpen voordat je de uitleg vraagt</span>
             </li>
           </ul>
+          
+          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+            <p className="text-sm text-amber-800">
+              <strong>⚠️ Belangrijk:</strong> Controleer belangrijke informatie altijd met je schoolboek, docent of andere betrouwbare bronnen. AI kan soms fouten maken.
+            </p>
+          </div>
         </CardContent>
       </Card>
 

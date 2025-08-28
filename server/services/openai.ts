@@ -115,11 +115,11 @@ export async function generateExplanation(
     messages: [
       {
         role: "system",
-        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Voor 'Ik snap dit niet': geef 3–6 genummerde uitlegstappen, 1 uitgewerkt voorbeeld, 1 controlevraag met meerkeuze opties, en 2-3 nuttige links. Gebruik exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\", \"resources\": [{\"title\": \"Khan Academy NL\", \"url\": \"https://nl.khanacademy.org/...\"}]}"
+        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. BELANGRIJK: Geef alleen correcte, geverifieerde informatie. Als je iets niet zeker weet, zeg dan expliciet 'Hier ben ik niet zeker van' of 'Dit moet je nakijken bij je docent'. Verzin nooit feiten, formules of antwoorden. Voor 'Ik snap dit niet': geef 3–6 genummerde uitlegstappen, 1 uitgewerkt voorbeeld, 1 controlevraag met meerkeuze opties, en 2-3 nuttige links. Gebruik alleen echte, bestaande websites in je bronnen. Gebruik exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\", \"resources\": [{\"title\": \"Khan Academy NL\", \"url\": \"https://nl.khanacademy.org/...\"}]}"
       },
       {
         role: "user",
-        content: `Onderwerp: ${content}\nVak: ${subject}\n\nGeef uitleg met exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\", \"resources\": [{\"title\": \"Website naam\", \"url\": \"https://echte-url.nl\"}]}. Gebruik echte Nederlandse onderwijswebsites zoals Khan Academy NL, Malmberg, ThiemeMeulenhoff, Noordhoff, of Wikipedia.`
+        content: `Onderwerp: ${content}\nVak: ${subject}\n\nLET OP: Geef alleen correcte informatie die je zeker weet. Als je twijfelt, vermeld dit expliciet. Verzin geen feiten, formules of URLs.\n\nGeef uitleg met exact deze JSON structuur: {\"steps\": [\"stap1\", \"stap2\"], \"example\": {\"prompt\": \"opgave\", \"solution\": \"antwoord\"}, \"quiz\": {\"question\": \"vraag\", \"choices\": [\"A) optie1\", \"B) optie2\", \"C) optie3\"], \"answer\": \"A\"}, \"coach_text\": \"moedigend advies\", \"resources\": [{\"title\": \"Website naam\", \"url\": \"https://echte-url.nl\"}]}. \n\nGebruik alleen echte Nederlandse onderwijswebsites zoals Khan Academy NL, Malmberg, ThiemeMeulenhoff, Noordhoff, of Wikipedia. Controleer dat de URLs bestaan - geef algemene domeinnamen zoals "https://nl.khanacademy.org" zonder specifieke paden als je onzeker bent.`
       }
     ],
     response_format: { type: "json_object" },
@@ -240,7 +240,7 @@ export async function expandExplanation(
     messages: [
       {
         role: "system",
-        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Een student vraagt om MEER UITLEG over een onderwerp. Geef een uitgebreidere versie met: meer gedetailleerde stappen (5-8 stappen), uitgebreider voorbeeld met extra toelichting, nieuwe quiz vraag (iets moeilijker), en aanmoedigende coach tekst. Gebruik dezelfde JSON structuur maar met meer diepgang en detail."
+        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. BELANGRIJK: Geef alleen correcte, geverifieerde informatie. Als je iets niet zeker weet, vermeld dit expliciet. Verzin nooit feiten of formules. Een student vraagt om MEER UITLEG over een onderwerp. Geef een uitgebreidere versie met: meer gedetailleerde stappen (5-8 stappen), uitgebreider voorbeeld met extra toelichting, nieuwe quiz vraag (iets moeilijker), en aanmoedigende coach tekst. Gebruik dezelfde JSON structuur maar met meer diepgang en detail."
       },
       {
         role: "user", 
