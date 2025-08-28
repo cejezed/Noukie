@@ -26,6 +26,7 @@ export default function Vandaag() {
   // Task form state
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showIntroModal, setShowIntroModal] = useState(false);
+  const [hasSeenIntro, setHasSeenIntro] = useState(false);
   const [taskForm, setTaskForm] = useState({
     title: "",
     courseId: "",
@@ -33,6 +34,31 @@ export default function Vandaag() {
     priority: 1,
     dueAt: new Date().toISOString().split('T')[0] // Today's date
   });
+
+  // Check if this is the first time visiting the app
+  React.useEffect(() => {
+    const hasSeenIntroKey = `hasSeenIntro_${user?.id}`;
+    const hasSeenBefore = localStorage.getItem(hasSeenIntroKey);
+    
+    if (!hasSeenBefore && user?.id) {
+      // First time visit - show intro automatically
+      setShowIntroModal(true);
+      setHasSeenIntro(false);
+    } else {
+      setHasSeenIntro(true);
+    }
+  }, [user?.id]);
+
+  // Handle intro modal close
+  const handleIntroModalClose = (open: boolean) => {
+    setShowIntroModal(open);
+    if (!open && user?.id) {
+      // Mark as seen when modal is closed
+      const hasSeenIntroKey = `hasSeenIntro_${user?.id}`;
+      localStorage.setItem(hasSeenIntroKey, 'true');
+      setHasSeenIntro(true);
+    }
+  };
 
   // Get today's tasks
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
@@ -264,11 +290,14 @@ export default function Vandaag() {
             <Button
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-primary relative"
               onClick={() => setShowIntroModal(true)}
               data-testid="button-app-intro"
             >
               <Info className="w-4 h-4" />
+              {!hasSeenIntro && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full border-2 border-white animate-pulse" />
+              )}
             </Button>
           </div>
           <Dialog open={showTaskForm} onOpenChange={setShowTaskForm}>
@@ -480,7 +509,7 @@ export default function Vandaag() {
       {/* App Introduction Modal */}
       <AppIntroModal
         open={showIntroModal}
-        onOpenChange={setShowIntroModal}
+        onOpenChange={handleIntroModalClose}
       />
     </div>
   );
