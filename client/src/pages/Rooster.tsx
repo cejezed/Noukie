@@ -292,75 +292,146 @@ export default function Rooster() {
 
   return (
     <div className="p-6" data-testid="page-rooster">
-      {/* Google Calendar Integration */}
-      <div className="mb-6">
-        <CalendarIntegration />
-      </div>
-      
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">Rooster</h2>
+        <h2 className="text-xl font-semibold">Activiteit toevoegen</h2>
       </div>
 
-      {/* iCal Import Section */}
+      {/* Schedule Form */}
       <Card className="mb-6">
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Rooster importeren</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowIcalForm(!showIcalForm)}
-              data-testid="button-toggle-ical-form"
-            >
-              <Calendar className="w-4 h-4 mr-2" />
-              iCal URL
-            </Button>
-          </div>
+          <CardTitle>Nieuwe activiteit</CardTitle>
         </CardHeader>
-        
-        {showIcalForm && (
-          <CardContent>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (icalUrl.trim()) {
-                importIcalMutation.mutate(icalUrl);
-              }
-            }} className="space-y-4">
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4" data-testid="schedule-form">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="ical-url">iCal/ICS URL</Label>
-                <Input
-                  id="ical-url"
-                  type="url"
-                  value={icalUrl}
-                  onChange={(e) => setIcalUrl(e.target.value)}
-                  placeholder="https://example.com/calendar.ics"
-                  data-testid="input-ical-url"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Plak hier de iCal URL van je school/studierooster
-                </p>
+                <Label htmlFor="kind">Type activiteit</Label>
+                <Select 
+                  value={formData.kind} 
+                  onValueChange={(value: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders") => 
+                    setFormData(prev => ({ ...prev, kind: value }))
+                  }
+                >
+                  <SelectTrigger data-testid="select-kind">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="les">Les</SelectItem>
+                    <SelectItem value="toets">Toets</SelectItem>
+                    <SelectItem value="sport">Sport/Training</SelectItem>
+                    <SelectItem value="werk">Bijbaan/Werk</SelectItem>
+                    <SelectItem value="afspraak">Afspraak</SelectItem>
+                    <SelectItem value="hobby">Hobby/Activiteit</SelectItem>
+                    <SelectItem value="anders">Anders</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               
-              <div className="flex space-x-2">
-                <Button
-                  type="submit"
-                  disabled={importIcalMutation.isPending || !icalUrl.trim()}
-                  data-testid="button-import-ical"
-                >
-                  {importIcalMutation.isPending ? "Importeren..." : "Importeren"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowIcalForm(false)}
-                  data-testid="button-cancel-ical"
-                >
-                  Annuleren
-                </Button>
+              <div>
+                <Label htmlFor="title">Titel</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder={formData.kind === 'sport' ? 'bijv. Hockeytraining AHC' : formData.kind === 'werk' ? 'bijv. Albert Heijn' : 'Titel van activiteit'}
+                  data-testid="input-title"
+                />
               </div>
-            </form>
-          </CardContent>
-        )}
+            </div>
+
+            {/* Only show course selection for lessons and tests */}
+            {(formData.kind === 'les' || formData.kind === 'toets') && (
+              <div>
+                <Label htmlFor="course">Vak</Label>
+                <Select 
+                  value={formData.courseId} 
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, courseId: value }))}
+                >
+                  <SelectTrigger data-testid="select-course">
+                    <SelectValue placeholder="Kies een vak" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Geen vak</SelectItem>
+                    {courses.map((course) => (
+                      <SelectItem key={course.id} value={course.id}>
+                        {course.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <Label htmlFor="day">Dag</Label>
+                <Select 
+                  value={formData.dayOfWeek.toString()} 
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, dayOfWeek: parseInt(value) }))}
+                >
+                  <SelectTrigger data-testid="select-day">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Maandag</SelectItem>
+                    <SelectItem value="2">Dinsdag</SelectItem>
+                    <SelectItem value="3">Woensdag</SelectItem>
+                    <SelectItem value="4">Donderdag</SelectItem>
+                    <SelectItem value="5">Vrijdag</SelectItem>
+                    <SelectItem value="6">Zaterdag</SelectItem>
+                    <SelectItem value="7">Zondag</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div>
+                <Label htmlFor="startTime">Begintijd</Label>
+                <Input
+                  id="startTime"
+                  type="time"
+                  value={formData.startTime}
+                  onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
+                  data-testid="input-start-time"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="endTime">Eindtijd</Label>
+                <Input
+                  id="endTime"
+                  type="time"
+                  value={formData.endTime}
+                  onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
+                  data-testid="input-end-time"
+                />
+              </div>
+            </div>
+
+            {/* Recurring checkbox (only for non-lesson activities) */}
+            {formData.kind !== 'les' && formData.kind !== 'toets' && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="recurring"
+                  checked={formData.isRecurring}
+                  onCheckedChange={(checked) => 
+                    setFormData(prev => ({ ...prev, isRecurring: checked === true }))
+                  }
+                  data-testid="checkbox-recurring"
+                />
+                <Label htmlFor="recurring">Elke week herhalen</Label>
+              </div>
+            )}
+
+            <Button 
+              type="submit" 
+              disabled={createMutation.isPending}
+              className="w-full"
+              data-testid="button-create-schedule"
+            >
+              {createMutation.isPending ? "Toevoegen..." : "Activiteit toevoegen"}
+            </Button>
+          </form>
+        </CardContent>
       </Card>
 
       {/* Add Courses Section */}
@@ -471,159 +542,6 @@ export default function Rooster() {
         </CardContent>
       </Card>
 
-      {/* Add Schedule Form */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Nieuwe activiteit toevoegen</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Voeg lessen, toetsen, sporttrainingen en andere activiteiten toe aan je rooster.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4" data-testid="schedule-form">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="dayOfWeek">Dag</Label>
-                <Select
-                  value={formData.dayOfWeek.toString()}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, dayOfWeek: parseInt(value) }))}
-                >
-                  <SelectTrigger data-testid="select-day">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Maandag</SelectItem>
-                    <SelectItem value="2">Dinsdag</SelectItem>
-                    <SelectItem value="3">Woensdag</SelectItem>
-                    <SelectItem value="4">Donderdag</SelectItem>
-                    <SelectItem value="5">Vrijdag</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <Label htmlFor="kind">Type activiteit</Label>
-                <Select
-                  value={formData.kind}
-                  onValueChange={(value: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders") => {
-                    setFormData(prev => ({ 
-                      ...prev, 
-                      kind: value,
-                      // Reset course selection when changing to non-school activities
-                      courseId: (value === "les" || value === "toets") ? prev.courseId : "none"
-                    }))
-                  }}
-                >
-                  <SelectTrigger data-testid="select-kind">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="les">Les</SelectItem>
-                    <SelectItem value="toets">Toets</SelectItem>
-                    <SelectItem value="sport">Sport/Training</SelectItem>
-                    <SelectItem value="werk">Bijbaan/Werk</SelectItem>
-                    <SelectItem value="afspraak">Afspraak</SelectItem>
-                    <SelectItem value="hobby">Hobby/Activiteit</SelectItem>
-                    <SelectItem value="anders">Anders</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Only show course selection for lessons and tests */}
-            {(formData.kind === "les" || formData.kind === "toets") && (
-              <div>
-                <Label htmlFor="course">Vak</Label>
-                <Select
-                  value={formData.courseId}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, courseId: value }))}
-                >
-                  <SelectTrigger data-testid="select-course">
-                    <SelectValue placeholder="Selecteer een vak" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Geen vak</SelectItem>
-                    {courses.map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="startTime">Start tijd</Label>
-                <Input
-                  id="startTime"
-                  type="time"
-                  value={formData.startTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                  data-testid="input-start-time"
-                />
-              </div>
-              
-              <div>
-                <Label htmlFor="endTime">Eind tijd</Label>
-                <Input
-                  id="endTime"
-                  type="time"
-                  value={formData.endTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                  data-testid="input-end-time"
-                />
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="title">Titel</Label>
-              <Input
-                id="title"
-                value={formData.title}
-                onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                placeholder={
-                  formData.kind === "sport" ? "Bijv. Hockeytraining AHC" :
-                  formData.kind === "werk" ? "Bijv. Albert Heijn - kassamededer" :
-                  formData.kind === "afspraak" ? "Bijv. Tandarts afspraak" :
-                  formData.kind === "hobby" ? "Bijv. Gitaarles" :
-                  "Bijv. Hoofdstuk 3 - Goniometrie"
-                }
-                data-testid="input-title"
-                required
-              />
-            </div>
-
-            {/* Recurring checkbox - only for non-lesson activities */}
-            {formData.kind !== "les" && formData.kind !== "toets" && (
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="recurring"
-                  checked={formData.isRecurring}
-                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isRecurring: checked as boolean }))}
-                  data-testid="checkbox-recurring"
-                />
-                <Label htmlFor="recurring" className="text-sm font-normal">
-                  Elke week herhalen
-                  <span className="text-xs text-muted-foreground block">
-                    Voor vaste activiteiten zoals trainingen en bijbaantjes
-                  </span>
-                </Label>
-              </div>
-            )}
-            
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={createMutation.isPending}
-              data-testid="button-add-schedule"
-            >
-              {createMutation.isPending ? "Bezig..." : "Toevoegen aan rooster"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
 
       {/* Current Schedule */}
       <div>
@@ -702,6 +620,80 @@ export default function Rooster() {
             <p className="text-sm mt-1">Voeg je eerste les of toets toe met het formulier hierboven.</p>
           </div>
         )}
+      </div>
+
+      {/* Settings Section */}
+      <div className="mt-8 pt-6 border-t border-border">
+        <h3 className="font-medium mb-4 text-muted-foreground">Instellingen</h3>
+        
+        {/* Google Calendar Integration */}
+        <div className="mb-6">
+          <CalendarIntegration />
+        </div>
+        
+        {/* iCal Import Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm">Rooster importeren</CardTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowIcalForm(!showIcalForm)}
+                data-testid="button-toggle-ical-form"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                iCal URL
+              </Button>
+            </div>
+          </CardHeader>
+          
+          {showIcalForm && (
+            <CardContent>
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (icalUrl.trim()) {
+                  importIcalMutation.mutate(icalUrl);
+                }
+              }} className="space-y-4">
+                <div>
+                  <Label htmlFor="ical-url">iCal/ICS URL</Label>
+                  <Input
+                    id="ical-url"
+                    type="url"
+                    value={icalUrl}
+                    onChange={(e) => setIcalUrl(e.target.value)}
+                    placeholder="https://example.com/calendar.ics"
+                    data-testid="input-ical-url"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Plak hier de iCal URL van je school/studierooster
+                  </p>
+                </div>
+                
+                <div className="flex space-x-2">
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={importIcalMutation.isPending || !icalUrl.trim()}
+                    data-testid="button-import-ical"
+                  >
+                    {importIcalMutation.isPending ? "Importeren..." : "Importeren"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowIcalForm(false)}
+                    data-testid="button-cancel-ical"
+                  >
+                    Annuleren
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          )}
+        </Card>
       </div>
     </div>
   );
