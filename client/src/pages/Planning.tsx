@@ -174,19 +174,47 @@ export default function Planning() {
                 {/* Schedule Items */}
                 {day.schedule.map((item, scheduleIndex) => {
                   const course = getCourseById(item.courseId);
-                  const isTest = item.kind === 'toets';
+                  
+                  const getKindLabel = (kind: string) => {
+                    switch (kind) {
+                      case "les": return "Les";
+                      case "toets": return "TOETS";
+                      case "sport": return "Sport/Training";
+                      case "werk": return "Bijbaan/Werk";
+                      case "afspraak": return "Afspraak";
+                      case "hobby": return "Hobby/Activiteit";
+                      case "anders": return "Anders";
+                      default: return kind;
+                    }
+                  };
+
+                  const getKindColor = (kind: string) => {
+                    switch (kind) {
+                      case "les": return "bg-blue-500";
+                      case "toets": return "bg-red-500";
+                      case "sport": return "bg-green-500";
+                      case "werk": return "bg-purple-500";
+                      case "afspraak": return "bg-orange-500";
+                      case "hobby": return "bg-pink-500";
+                      case "anders": return "bg-gray-500";
+                      default: return "bg-muted-foreground";
+                    }
+                  };
                   
                   return (
                     <div key={scheduleIndex} className="flex items-center space-x-3 text-sm" data-testid={`schedule-item-${index}-${scheduleIndex}`}>
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                        isTest ? 'bg-accent' : 'bg-muted-foreground'
-                      }`} />
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(item.kind || 'les')}`} />
                       <span className="text-muted-foreground w-16">
                         {item.startTime && formatTime(item.startTime)}
                       </span>
                       <span>
-                        {course?.name || 'Onbekend vak'} - {isTest ? 'TOETS' : 'Les'}
+                        {item.title || course?.name || 'Activiteit'} - {getKindLabel(item.kind || 'les')}
                       </span>
+                      {course && item.title && (
+                        <span className="text-xs text-muted-foreground">
+                          ({course.name})
+                        </span>
+                      )}
                     </div>
                   );
                 })}
