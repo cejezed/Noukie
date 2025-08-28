@@ -34,8 +34,21 @@ import {
   type InsertImportedEvent,
 } from "@shared/schema";
 
-// Use the existing DATABASE_URL that already has your data
-const databaseUrl = process.env.DATABASE_URL;
+// Use Supabase database URL - correct format
+const constructSupabaseDbUrl = () => {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    // Extract project reference from Supabase URL
+    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
+    if (projectRef) {
+      // Use transaction mode (port 6543) for serverless/Replit 
+      return `postgresql://postgres.${projectRef}:${process.env.SUPABASE_SERVICE_ROLE_KEY}@aws-0-us-west-1.pooler.supabase.com:6543/postgres`;
+    }
+  }
+  return process.env.DATABASE_URL; // fallback
+};
+
+const databaseUrl = constructSupabaseDbUrl();
 
 // Temporary in-memory storage as fallback when database is not available
 let inMemoryStorage: {
