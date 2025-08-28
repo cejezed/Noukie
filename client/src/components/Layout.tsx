@@ -26,7 +26,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Header */}
       <header className="bg-primary text-primary-foreground p-4 sticky top-0 z-50" data-testid="header">
         <div className="flex items-center justify-between">
-          <div className="w-20 h-10 bg-white rounded-sm flex items-center justify-center p-1">
+          <div className="w-28 h-14 bg-white rounded-sm flex items-center justify-center p-1">
             <img 
               src="/noukie-logo.png" 
               alt="Noukie Logo" 
