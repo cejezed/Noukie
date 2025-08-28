@@ -5,21 +5,49 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, User, Calendar, BookOpen, CheckCircle2 } from "lucide-react";
+import { Plus, User, Calendar, BookOpen, CheckCircle2, Info } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import ParentIntroModal from "@/components/ParentIntroModal";
 
 export default function ParentDashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showAddChild, setShowAddChild] = useState(false);
+  const [showIntroModal, setShowIntroModal] = useState(false);
+  const [hasSeenIntro, setHasSeenIntro] = useState(false);
   const [childData, setChildData] = useState({
     email: "",
     name: "",
   });
+
+  // Check if this is the first time visiting the parent dashboard
+  React.useEffect(() => {
+    const hasSeenIntroKey = `hasSeenParentIntro_${user?.id}`;
+    const hasSeenBefore = localStorage.getItem(hasSeenIntroKey);
+    
+    if (!hasSeenBefore && user?.id) {
+      // First time visit - show intro automatically
+      setShowIntroModal(true);
+      setHasSeenIntro(false);
+    } else {
+      setHasSeenIntro(true);
+    }
+  }, [user?.id]);
+
+  // Handle intro modal close
+  const handleIntroModalClose = (open: boolean) => {
+    setShowIntroModal(open);
+    if (!open && user?.id) {
+      // Mark as seen when modal is closed
+      const hasSeenIntroKey = `hasSeenParentIntro_${user?.id}`;
+      localStorage.setItem(hasSeenIntroKey, 'true');
+      setHasSeenIntro(true);
+    }
+  };
 
   // Fetch children relationships
   const { data: children, isLoading } = useQuery({
@@ -87,7 +115,21 @@ export default function ParentDashboard() {
   return (
     <div className="p-6 space-y-6" data-testid="parent-dashboard">
       <div>
-        <h2 className="text-2xl font-semibold mb-2">Mijn kinderen</h2>
+        <div className="flex items-center gap-3 mb-2">
+          <h2 className="text-2xl font-semibold">Mijn kinderen</h2>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 text-muted-foreground hover:text-primary relative"
+            onClick={() => setShowIntroModal(true)}
+            data-testid="button-parent-intro"
+          >
+            <Info className="w-4 h-4" />
+            {!hasSeenIntro && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-full border-2 border-white animate-pulse" />
+            )}
+          </Button>
+        </div>
         <p className="text-muted-foreground">
           Voeg je kinderen toe om hun voortgang te volgen
         </p>
@@ -242,6 +284,12 @@ export default function ParentDashboard() {
           </Card>
         )}
       </div>
+
+      {/* Parent Introduction Modal */}
+      <ParentIntroModal
+        open={showIntroModal}
+        onOpenChange={handleIntroModalClose}
+      />
     </div>
   );
 }
