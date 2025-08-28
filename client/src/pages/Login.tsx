@@ -110,7 +110,7 @@ export default function Login() {
     <div className="min-h-screen bg-background flex items-center justify-center p-4" data-testid="login-page">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 p-2">
+          <div className="w-48 h-48 bg-white rounded-full flex items-center justify-center mx-auto mb-4 p-4">
             <img 
               src="/noukie-logo.png" 
               alt="Noukie Logo" 

@@ -18,10 +18,14 @@ export async function apiRequest(
 ): Promise<Response> {
   const fullUrl = url.startsWith('/api') ? `${getApiBaseUrl()}${url}` : url;
   
+  // Handle FormData separately (don't set Content-Type for FormData)
+  const isFormData = data instanceof FormData;
+  const headers = !isFormData && data ? { "Content-Type": "application/json" } : {};
+  
   const res = await fetch(fullUrl, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
+    headers,
+    body: isFormData ? data : (data ? JSON.stringify(data) : undefined),
     credentials: "include",
   });
 
