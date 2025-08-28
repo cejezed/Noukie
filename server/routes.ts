@@ -8,6 +8,9 @@ import { transcribeAudio, generatePlan, generateExplanation, expandExplanation }
 import { checkAndSendReminders } from "./services/cron";
 import { signUp as supabaseSignUp, signIn as supabaseSignIn, signOut as supabaseSignOut } from "./services/supabase";
 import { insertTaskSchema, insertSessionSchema, insertScheduleSchema, insertUserSchema, insertCourseSchema } from "@shared/schema";
+import { GoogleCalendarService } from "./googleCalendar";
+import { calendarImporter } from "./calendarImport";
+import { cronManager } from "./cronJobs";
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -660,6 +663,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get parent requests error:", error);
       res.status(500).json({ error: "Failed to get parent requests" });
+    }
+  });
+
+  // ===== GOOGLE CALENDAR ROUTES =====
+  
+  const googleCalendar = new GoogleCalendarService();
+  
+  // Get calendar integration status
+  app.get("/api/calendar/status/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const integration = await storage.getCalendarIntegration(userId);
+      
+      res.json({
+        connected: !!integration,
+        syncEnabled: integration?.syncEnabled || false,
+        lastSync: integration?.lastSyncAt,
+        provider: integration?.provider || null
+      });
+    } catch (error) {
+      console.error("Calendar status error:", error);
+      res.status(500).json({ error: "Failed to get calendar status" });
+    }
+  });
+  
+  // Start OAuth flow
+  app.get("/api/calendar/connect/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const authUrl = googleCalendar.getAuthUrl(userId);
+      res.json({ authUrl });
+    } catch (error) {
+      console.error("Calendar connect error:", error);
+      res.status(500).json({ error: "Failed to initiate calendar connection" });
+    }
+  });
+  
+  // OAuth callback
+  app.get("/api/calendar/callback", async (req, res) => {
+    try {
+      const { code, state: userId } = req.query;
+      
+      if (!code || !userId) {
+        return res.status(400).json({ error: "Missing authorization code or user ID" });
+      }
+      
+      // Exchange code for tokens
+      const tokens = await googleCalendar.getTokensFromCode(code as string);
+      
+      // Get primary calendar ID
+      googleCalendar.setCredentials({
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        tokenExpires: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+      } as any);
+      
+      const calendarId = await googleCalendar.getPrimaryCalendarId();
+      
+      // Save integration
+      const integrationData = {
+        userId: userId as string,
+        provider: 'google' as const,
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        tokenExpires: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
+        calendarId,
+        syncEnabled: true,
+      };
+      
+      await storage.createCalendarIntegration(integrationData);
+      
+      // Trigger immediate import
+      setTimeout(async () => {
+        try {
+          await calendarImporter.importEventsForUser(userId as string);
+        } catch (importError) {
+          console.error('Initial import failed:', importError);
+        }
+      }, 1000);
+      
+      // Redirect to success page
+      res.redirect('/?calendar=connected');
+      
+    } catch (error) {
+      console.error("Calendar callback error:", error);
+      res.redirect('/?calendar=error');
+    }
+  });
+  
+  // Disconnect calendar
+  app.post("/api/calendar/disconnect/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      await storage.deleteCalendarIntegration(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Calendar disconnect error:", error);
+      res.status(500).json({ error: "Failed to disconnect calendar" });
+    }
+  });
+  
+  // Manual sync trigger
+  app.post("/api/calendar/sync/:userId", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const result = await calendarImporter.importEventsForUser(userId);
+      res.json(result);
+    } catch (error) {
+      console.error("Manual sync error:", error);
+      res.status(500).json({ error: "Failed to sync calendar" });
+    }
+  });
+  
+  // Get cron job status (admin)
+  app.get("/api/calendar/cron/status", async (req, res) => {
+    try {
+      const status = cronManager.getStatus();
+      res.json(status);
+    } catch (error) {
+      console.error("Cron status error:", error);
+      res.status(500).json({ error: "Failed to get cron status" });
     }
   });
 

@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import CalendarIntegration from "@/components/CalendarIntegration";
 import type { Schedule, Course } from "@shared/schema";
 
 interface ScheduleFormData {
@@ -291,6 +292,11 @@ export default function Rooster() {
 
   return (
     <div className="p-6" data-testid="page-rooster">
+      {/* Google Calendar Integration */}
+      <div className="mb-6">
+        <CalendarIntegration />
+      </div>
+      
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Rooster</h2>
       </div>

@@ -86,6 +86,29 @@ export const parentChildRelationships = pgTable("parent_child_relationships", {
   createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
+export const calendarIntegrations = pgTable("calendar_integrations", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id).notNull().unique(),
+  provider: text("provider", { enum: ["google"] }).notNull(),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpires: timestamp("token_expires", { withTimezone: true }),
+  calendarId: text("calendar_id"), // primary calendar ID to sync
+  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
+  syncEnabled: boolean("sync_enabled").default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const importedEvents = pgTable("imported_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  scheduleId: uuid("schedule_id").references(() => schedule.id).notNull(),
+  externalId: text("external_id").notNull(), // Google Calendar event ID
+  provider: text("provider", { enum: ["google"] }).notNull(),
+  lastModified: timestamp("last_modified", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   createdAt: true,
@@ -123,6 +146,16 @@ export const insertParentChildRelationshipSchema = createInsertSchema(parentChil
   createdAt: true,
 });
 
+export const insertCalendarIntegrationSchema = createInsertSchema(calendarIntegrations).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertImportedEventSchema = createInsertSchema(importedEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -140,3 +173,7 @@ export type QuizResult = typeof quizResults.$inferSelect;
 export type InsertQuizResult = z.infer<typeof insertQuizResultSchema>;
 export type ParentChildRelationship = typeof parentChildRelationships.$inferSelect;
 export type InsertParentChildRelationship = z.infer<typeof insertParentChildRelationshipSchema>;
+export type CalendarIntegration = typeof calendarIntegrations.$inferSelect;
+export type InsertCalendarIntegration = z.infer<typeof insertCalendarIntegrationSchema>;
+export type ImportedEvent = typeof importedEvents.$inferSelect;
+export type InsertImportedEvent = z.infer<typeof insertImportedEventSchema>;

@@ -2,6 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startDailyReminderCron } from "./services/cron";
+import { cronManager } from "./cronJobs";
 
 const app = express();
 app.use(express.json());
@@ -48,10 +49,14 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // Start the daily reminder cron job in production
+  // Start cron jobs
   if (app.get("env") === "production") {
     startDailyReminderCron();
     log("Daily reminder cron job started");
+    cronManager.start();
+  } else if (app.get("env") === "development") {
+    // Start calendar sync in development too (with test schedule)
+    cronManager.start();
   }
 
   // importantly only setup vite in development and after

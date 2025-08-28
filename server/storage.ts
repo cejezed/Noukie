@@ -10,6 +10,8 @@ import {
   materials,
   quizResults,
   parentChildRelationships,
+  calendarIntegrations,
+  importedEvents,
   type User,
   type InsertUser,
   type Course,
@@ -26,6 +28,10 @@ import {
   type InsertQuizResult,
   type ParentChildRelationship,
   type InsertParentChildRelationship,
+  type CalendarIntegration,
+  type InsertCalendarIntegration,
+  type ImportedEvent,
+  type InsertImportedEvent,
 } from "@shared/schema";
 
 // Use Supabase database URL
@@ -110,6 +116,17 @@ export interface IStorage {
   findChildByEmail(childEmail: string): Promise<User | undefined>;
   confirmRelationship(relationshipId: string): Promise<void>;
   getPendingParentRequests(childId: string): Promise<ParentChildRelationship[]>;
+  
+  // Calendar Integrations
+  getCalendarIntegration(userId: string): Promise<CalendarIntegration | undefined>;
+  createCalendarIntegration(integration: InsertCalendarIntegration): Promise<CalendarIntegration>;
+  updateCalendarIntegration(userId: string, updates: Partial<CalendarIntegration>): Promise<void>;
+  deleteCalendarIntegration(userId: string): Promise<void>;
+  
+  // Imported Events
+  getImportedEvent(userId: string, externalId: string): Promise<ImportedEvent | undefined>;
+  createImportedEvent(event: InsertImportedEvent): Promise<ImportedEvent>;
+  getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -342,6 +359,49 @@ export class PostgresStorage implements IStorage {
         eq(parentChildRelationships.childId, childId),
         eq(parentChildRelationships.isConfirmed, false)
       ));
+  }
+
+  // Calendar Integration methods
+  async getCalendarIntegration(userId: string): Promise<CalendarIntegration | undefined> {
+    const result = await db.select().from(calendarIntegrations)
+      .where(eq(calendarIntegrations.userId, userId));
+    return result[0];
+  }
+
+  async createCalendarIntegration(integration: InsertCalendarIntegration): Promise<CalendarIntegration> {
+    const result = await db.insert(calendarIntegrations).values(integration).returning();
+    return result[0];
+  }
+
+  async updateCalendarIntegration(userId: string, updates: Partial<CalendarIntegration>): Promise<void> {
+    await db.update(calendarIntegrations)
+      .set(updates)
+      .where(eq(calendarIntegrations.userId, userId));
+  }
+
+  async deleteCalendarIntegration(userId: string): Promise<void> {
+    await db.delete(calendarIntegrations)
+      .where(eq(calendarIntegrations.userId, userId));
+  }
+
+  // Imported Events methods
+  async getImportedEvent(userId: string, externalId: string): Promise<ImportedEvent | undefined> {
+    const result = await db.select().from(importedEvents)
+      .where(and(
+        eq(importedEvents.userId, userId),
+        eq(importedEvents.externalId, externalId)
+      ));
+    return result[0];
+  }
+
+  async createImportedEvent(event: InsertImportedEvent): Promise<ImportedEvent> {
+    const result = await db.insert(importedEvents).values(event).returning();
+    return result[0];
+  }
+
+  async getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]> {
+    return await db.select().from(importedEvents)
+      .where(eq(importedEvents.userId, userId));
   }
 }
 
