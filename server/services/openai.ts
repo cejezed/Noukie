@@ -51,11 +51,11 @@ export async function generatePlan(transcript: string, date: string): Promise<{
     messages: [
       {
         role: "system",
-        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. Beoordeel transcript, maak concrete taken (Titel, Vak, Deadline, Tijdinschatting), houd rekening met komende toetsen en rooster. Antwoord kort en actiegericht. Formatteer in JSON."
+        content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. BELANGRIJKE REGEL: Maak ALLEEN taken die de leerling expliciet noemt. Verzin NIETS extra. Als de input vaag is, vraag om verduidelijking. Maak concrete taken (Titel, Vak, Deadline, Tijdinschatting) ALLEEN van wat letterlijk wordt genoemd. Formatteer in JSON."
       },
       {
         role: "user",
-        content: `Transcript: ${transcript}\nDatum: ${date}\n\nMaak een planning met taken en coach advies in JSON formaat.`
+        content: `Transcript: ${transcript}\nDatum: ${date}\n\nMAAK ALLEEN TAKEN DIE EXPLICIET GENOEMD WORDEN. Verzin niets extra. Als de input te vaag is, antwoord dan met lege tasks array en coach_text die om verduidelijking vraagt. JSON formaat verwacht.`
       }
     ],
     response_format: { type: "json_object" },
