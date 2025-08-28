@@ -2,7 +2,7 @@ import * as React from "react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
-import VoiceRecorder from "@/components/VoiceRecorder";
+import TextCheckin from "@/components/TextCheckin";
 import TaskCard from "@/components/TaskCard";
 import AppIntroModal from "@/components/AppIntroModal";
 import { Button } from "@/components/ui/button";
@@ -248,8 +248,8 @@ export default function Vandaag() {
         </div>
       )}
 
-      {/* Voice Check-in */}
-      <VoiceRecorder />
+      {/* Text Check-in */}
+      <TextCheckin />
 
       {/* Last Coach Audio */}
       {lastSession && (
