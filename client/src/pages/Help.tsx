@@ -14,6 +14,18 @@ export default function Help() {
   const [selectedCourse, setSelectedCourse] = useState("");
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [helpData, setHelpData] = useState<any>(null);
+
+  const courses = ["Wiskunde A", "Biologie", "Economie", "Nederlands"];
+
+  const handleVoiceRecording = (audioBlob: Blob) => {
+    // Convert audio to help data
+    setHelpData({
+      mode: "voice",
+      audioBlob,
+      course: selectedCourse,
+    });
+    setShowHelpModal(true);
+  };
   
   // Voice recording
   const { 
@@ -28,8 +40,6 @@ export default function Help() {
       console.log("Voice recording status:", status);
     }
   });
-
-  const courses = ["Wiskunde A", "Biologie", "Economie", "Nederlands"];
 
   const handleFileUpload = (type: "photo" | "pdf") => {
     const input = document.createElement("input");
@@ -60,16 +70,6 @@ export default function Help() {
     setHelpData({
       mode: "text",
       text: textInput,
-      course: selectedCourse,
-    });
-    setShowHelpModal(true);
-  };
-
-  const handleVoiceRecording = (audioBlob: Blob) => {
-    // Convert audio to help data
-    setHelpData({
-      mode: "voice",
-      audioBlob,
       course: selectedCourse,
     });
     setShowHelpModal(true);
