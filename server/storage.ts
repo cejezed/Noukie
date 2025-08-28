@@ -37,14 +37,15 @@ import {
 // Use Supabase database URL - construct from SUPABASE_URL
 const constructSupabaseDbUrl = () => {
   const supabaseUrl = process.env.SUPABASE_URL;
-  if (supabaseUrl) {
+  if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
     // Extract project reference from Supabase URL
     const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
-    if (projectRef && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return `postgresql://postgres.${projectRef}:${process.env.SUPABASE_SERVICE_ROLE_KEY}@aws-0-eu-west-1.pooler.supabase.com:5432/postgres`;
+    if (projectRef) {
+      // Try direct connection first
+      return `postgresql://postgres:${process.env.SUPABASE_SERVICE_ROLE_KEY}@db.${projectRef}.supabase.co:5432/postgres`;
     }
   }
-  return process.env.DATABASE_URL; // fallback
+  return process.env.DATABASE_URL; // fallback to existing
 };
 
 const databaseUrl = constructSupabaseDbUrl();
