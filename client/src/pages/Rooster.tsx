@@ -211,10 +211,10 @@ export default function Rooster() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.startTime || !formData.endTime || !formData.title.trim()) {
+    if (!formData.startTime || !formData.endTime) {
       toast({
         title: "Incomplete gegevens",
-        description: "Vul alle verplichte velden in (titel, start- en eindtijd).",
+        description: "Vul alle verplichte velden in (start- en eindtijd).",
         variant: "destructive",
       });
       return;
