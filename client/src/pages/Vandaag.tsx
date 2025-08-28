@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Play, Plus, UserCheck, X, Info } from "lucide-react";
 import { useAudio } from "@/hooks/use-audio";
@@ -300,106 +300,112 @@ export default function Vandaag() {
               )}
             </Button>
           </div>
-          <Dialog open={showTaskForm} onOpenChange={setShowTaskForm}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="h-8 w-8 p-0" data-testid="button-add-task">
-                <Plus className="w-4 h-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Nieuwe taak toevoegen</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
+          <Button 
+            size="sm" 
+            className="h-8 w-8 p-0" 
+            onClick={() => setShowTaskForm(!showTaskForm)}
+            data-testid="button-add-task"
+          >
+            <Plus className="w-4 h-4" />
+          </Button>
+        </div>
+        
+        {/* Inline Task Form */}
+        {showTaskForm && (
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle className="text-lg">Nieuwe taak toevoegen</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="task-title">Taak titel</Label>
+                <Input
+                  id="task-title"
+                  value={taskForm.title}
+                  onChange={(e) => setTaskForm({...taskForm, title: e.target.value})}
+                  placeholder="Bijv. Wiskunde hoofdstuk 3 lezen"
+                  data-testid="input-task-title"
+                />
+              </div>
+              
+              <div>
+                <Label htmlFor="task-course">Vak</Label>
+                <select 
+                  id="task-course"
+                  value={taskForm.courseId} 
+                  onChange={(e) => setTaskForm({...taskForm, courseId: e.target.value})}
+                  className="w-full p-2 border rounded"
+                  data-testid="select-task-course"
+                >
+                  <option value="">Geen vak</option>
+                  {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="task-title">Taak titel</Label>
+                  <Label htmlFor="task-time">Geschatte tijd (min)</Label>
                   <Input
-                    id="task-title"
-                    value={taskForm.title}
-                    onChange={(e) => setTaskForm({...taskForm, title: e.target.value})}
-                    placeholder="Bijv. Wiskunde hoofdstuk 3 lezen"
-                    data-testid="input-task-title"
+                    id="task-time"
+                    type="number"
+                    value={taskForm.estMinutes}
+                    onChange={(e) => setTaskForm({...taskForm, estMinutes: parseInt(e.target.value) || 30})}
+                    min="5"
+                    max="240"
+                    data-testid="input-task-time"
                   />
                 </div>
                 
                 <div>
-                  <Label htmlFor="task-course">Vak</Label>
-                  <Select value={taskForm.courseId} onValueChange={(value) => setTaskForm({...taskForm, courseId: value})}>
-                    <SelectTrigger data-testid="select-task-course">
-                      <SelectValue placeholder="Selecteer vak (optioneel)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">Geen vak</SelectItem>
-                      {courses.map((course) => (
-                        <SelectItem key={course.id} value={course.id}>
-                          {course.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="task-time">Geschatte tijd (min)</Label>
-                    <Input
-                      id="task-time"
-                      type="number"
-                      value={taskForm.estMinutes}
-                      onChange={(e) => setTaskForm({...taskForm, estMinutes: parseInt(e.target.value) || 30})}
-                      min="5"
-                      max="240"
-                      data-testid="input-task-time"
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="task-priority">Prioriteit</Label>
-                    <Select value={taskForm.priority.toString()} onValueChange={(value) => setTaskForm({...taskForm, priority: parseInt(value)})}>
-                      <SelectTrigger data-testid="select-task-priority">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">Laag</SelectItem>
-                        <SelectItem value="1">Normaal</SelectItem>
-                        <SelectItem value="2">Hoog</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="task-due">Deadline</Label>
-                  <Input
-                    id="task-due"
-                    type="date"
-                    value={taskForm.dueAt}
-                    onChange={(e) => setTaskForm({...taskForm, dueAt: e.target.value})}
-                    data-testid="input-task-due"
-                  />
-                </div>
-
-                <div className="flex space-x-2 pt-4">
-                  <Button
-                    onClick={() => createTaskMutation.mutate()}
-                    disabled={createTaskMutation.isPending || !taskForm.title.trim()}
-                    className="flex-1"
-                    data-testid="button-save-task"
+                  <Label htmlFor="task-priority">Prioriteit</Label>
+                  <select 
+                    value={taskForm.priority.toString()} 
+                    onChange={(e) => setTaskForm({...taskForm, priority: parseInt(e.target.value)})}
+                    className="w-full p-2 border rounded"
+                    data-testid="select-task-priority"
                   >
-                    {createTaskMutation.isPending ? "Bezig..." : "Toevoegen"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowTaskForm(false)}
-                    data-testid="button-cancel-task"
-                  >
-                    Annuleren
-                  </Button>
+                    <option value="0">Laag</option>
+                    <option value="1">Normaal</option>
+                    <option value="2">Hoog</option>
+                  </select>
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
-        </div>
+
+              <div>
+                <Label htmlFor="task-due">Deadline</Label>
+                <Input
+                  id="task-due"
+                  type="date"
+                  value={taskForm.dueAt}
+                  onChange={(e) => setTaskForm({...taskForm, dueAt: e.target.value})}
+                  data-testid="input-task-due"
+                />
+              </div>
+
+              <div className="flex space-x-2 pt-4">
+                <Button
+                  onClick={() => createTaskMutation.mutate()}
+                  disabled={createTaskMutation.isPending || !taskForm.title.trim()}
+                  className="flex-1"
+                  data-testid="button-save-task"
+                >
+                  {createTaskMutation.isPending ? "Bezig..." : "Toevoegen"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowTaskForm(false)}
+                  data-testid="button-cancel-task"
+                >
+                  Annuleren
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
         
         {tasksLoading ? (
           <div className="space-y-3">
