@@ -470,26 +470,6 @@ export default function Rooster() {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4" data-testid="schedule-form">
-            <div>
-              <Label htmlFor="course">Vak (optioneel)</Label>
-              <Select
-                value={formData.courseId}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, courseId: value }))}
-              >
-                <SelectTrigger data-testid="select-course">
-                  <SelectValue placeholder="Selecteer een vak (optioneel voor non-school activiteiten)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Geen vak</SelectItem>
-                  {courses.map((course) => (
-                    <SelectItem key={course.id} value={course.id}>
-                      {course.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="dayOfWeek">Dag</Label>
@@ -514,7 +494,14 @@ export default function Rooster() {
                 <Label htmlFor="kind">Type activiteit</Label>
                 <Select
                   value={formData.kind}
-                  onValueChange={(value: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders") => setFormData(prev => ({ ...prev, kind: value }))}
+                  onValueChange={(value: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders") => {
+                    setFormData(prev => ({ 
+                      ...prev, 
+                      kind: value,
+                      // Reset course selection when changing to non-school activities
+                      courseId: (value === "les" || value === "toets") ? prev.courseId : "none"
+                    }))
+                  }}
                 >
                   <SelectTrigger data-testid="select-kind">
                     <SelectValue />
@@ -531,6 +518,29 @@ export default function Rooster() {
                 </Select>
               </div>
             </div>
+
+            {/* Only show course selection for lessons and tests */}
+            {(formData.kind === "les" || formData.kind === "toets") && (
+              <div>
+                <Label htmlFor="course">Vak</Label>
+                <Select
+                  value={formData.courseId}
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, courseId: value }))}
+                >
+                  <SelectTrigger data-testid="select-course">
+                    <SelectValue placeholder="Selecteer een vak" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Geen vak</SelectItem>
+                    {courses.map((course) => (
+                      <SelectItem key={course.id} value={course.id}>
+                        {course.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
             <div className="grid grid-cols-2 gap-4">
               <div>
