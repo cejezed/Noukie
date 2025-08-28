@@ -34,21 +34,8 @@ import {
   type InsertImportedEvent,
 } from "@shared/schema";
 
-// Use Supabase database URL - construct from SUPABASE_URL
-const constructSupabaseDbUrl = () => {
-  const supabaseUrl = process.env.SUPABASE_URL;
-  if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    // Extract project reference from Supabase URL
-    const projectRef = supabaseUrl.match(/https:\/\/([^.]+)\.supabase\.co/)?.[1];
-    if (projectRef) {
-      // Try direct connection first
-      return `postgresql://postgres:${process.env.SUPABASE_SERVICE_ROLE_KEY}@db.${projectRef}.supabase.co:5432/postgres`;
-    }
-  }
-  return process.env.DATABASE_URL; // fallback to existing
-};
-
-const databaseUrl = constructSupabaseDbUrl();
+// Use the existing DATABASE_URL that already has your data
+const databaseUrl = process.env.DATABASE_URL;
 
 // Temporary in-memory storage as fallback when database is not available
 let inMemoryStorage: {
