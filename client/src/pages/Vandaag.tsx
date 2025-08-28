@@ -4,13 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import VoiceRecorder from "@/components/VoiceRecorder";
 import TaskCard from "@/components/TaskCard";
+import AppIntroModal from "@/components/AppIntroModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Play, Plus, UserCheck, X } from "lucide-react";
+import { Play, Plus, UserCheck, X, Info } from "lucide-react";
 import { useAudio } from "@/hooks/use-audio";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +25,7 @@ export default function Vandaag() {
   
   // Task form state
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [showIntroModal, setShowIntroModal] = useState(false);
   const [taskForm, setTaskForm] = useState({
     title: "",
     courseId: "",
@@ -257,7 +259,18 @@ export default function Vandaag() {
       {/* Today's Tasks */}
       <section className="px-6 pb-4" data-testid="today-tasks">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Vandaag</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="text-lg font-semibold">Vandaag</h3>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+              onClick={() => setShowIntroModal(true)}
+              data-testid="button-app-intro"
+            >
+              <Info className="w-4 h-4" />
+            </Button>
+          </div>
           <Dialog open={showTaskForm} onOpenChange={setShowTaskForm}>
             <DialogTrigger asChild>
               <Button size="sm" className="h-8 w-8 p-0" data-testid="button-add-task">
@@ -463,6 +476,12 @@ export default function Vandaag() {
           </div>
         )}
       </section>
+
+      {/* App Introduction Modal */}
+      <AppIntroModal
+        open={showIntroModal}
+        onOpenChange={setShowIntroModal}
+      />
     </div>
   );
 }
