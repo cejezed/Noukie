@@ -11,6 +11,7 @@ import Vandaag from "@/pages/Vandaag";
 import Planning from "@/pages/Planning";
 import Rooster from "@/pages/Rooster";
 import Help from "@/pages/Help";
+import Instellingen from "@/pages/Instellingen";
 import ParentDashboard from "@/pages/ParentDashboard";
 import NotFound from "@/pages/not-found";
 
@@ -49,6 +50,7 @@ function AuthenticatedApp() {
         <Route path="/rooster" component={Planning} />
         <Route path="/toevoegen" component={Rooster} />
         <Route path="/help" component={Help} />
+        <Route path="/instellingen" component={Instellingen} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

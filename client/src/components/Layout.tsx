@@ -1,4 +1,4 @@
-import { Home, Calendar, Plus, HelpCircle } from "lucide-react";
+import { Home, Calendar, Plus, HelpCircle, Settings } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ export default function Layout({ children }: LayoutProps) {
     { id: "rooster", label: "Rooster", icon: Calendar, path: "/rooster" },
     { id: "toevoegen", label: "Toevoegen", icon: Plus, path: "/toevoegen" },
     { id: "help", label: "Uitleg", icon: HelpCircle, path: "/help" },
+    { id: "instellingen", label: "Instellingen", icon: Settings, path: "/instellingen" },
   ];
 
   // No tabs for parents - they only have the dashboard
@@ -61,7 +62,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Bottom Navigation - Only for students */}
       {!isParent && (
         <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-card border-t border-border" data-testid="bottom-navigation">
-          <div className="grid grid-cols-4 gap-0">
+          <div className="grid grid-cols-5 gap-0">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = location === tab.path;
