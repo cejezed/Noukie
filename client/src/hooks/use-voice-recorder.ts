@@ -58,7 +58,7 @@ export function useVoiceRecorder({
 
       mediaRecorder.addEventListener('stop', () => {
         const audioBlob = new Blob(audioChunksRef.current, {
-          type: mimeType,
+          type: mediaRecorder.mimeType || 'audio/webm',
         });
         onRecordingComplete?.(audioBlob);
         
