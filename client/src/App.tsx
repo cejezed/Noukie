@@ -46,8 +46,8 @@ function AuthenticatedApp() {
     <Layout>
       <Switch>
         <Route path="/" component={Vandaag} />
-        <Route path="/planning" component={Planning} />
-        <Route path="/rooster" component={Rooster} />
+        <Route path="/rooster" component={Planning} />
+        <Route path="/toevoegen" component={Rooster} />
         <Route path="/help" component={Help} />
         <Route component={NotFound} />
       </Switch>

@@ -1,4 +1,4 @@
-import { Home, Calendar, Clock, HelpCircle } from "lucide-react";
+import { Home, Calendar, Plus, HelpCircle } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,8 @@ export default function Layout({ children }: LayoutProps) {
 
   const tabs = [
     { id: "vandaag", label: "Vandaag", icon: Home, path: "/" },
-    { id: "planning", label: "Planning", icon: Calendar, path: "/planning" },
-    { id: "rooster", label: "Rooster", icon: Clock, path: "/rooster" },
+    { id: "rooster", label: "Rooster", icon: Calendar, path: "/rooster" },
+    { id: "toevoegen", label: "Toevoegen", icon: Plus, path: "/toevoegen" },
     { id: "help", label: "Uitleg", icon: HelpCircle, path: "/help" },
   ];
 
