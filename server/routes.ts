@@ -123,13 +123,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const courses = await storage.getCoursesByUserId(userId);
         const course = courses.find(c => c.name === taskData.course);
         
+        // Ensure valid date - if taskData.due_at is invalid, use tomorrow
+        let dueDate;
+        try {
+          dueDate = taskData.due_at ? new Date(taskData.due_at) : new Date();
+          if (isNaN(dueDate.getTime())) {
+            // Invalid date, default to tomorrow
+            dueDate = new Date();
+            dueDate.setDate(dueDate.getDate() + 1);
+          }
+        } catch {
+          // Fallback to tomorrow
+          dueDate = new Date();
+          dueDate.setDate(dueDate.getDate() + 1);
+        }
+        
         const task = await storage.createTask({
           userId,
           courseId: course?.id || null,
           title: taskData.title,
-          dueAt: new Date(taskData.due_at),
-          estMinutes: taskData.est_minutes,
-          priority: taskData.priority,
+          dueAt: dueDate,
+          estMinutes: taskData.est_minutes || 30,
+          priority: taskData.priority || 1,
           source: "check-in",
           status: "todo"
         });
@@ -529,6 +544,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log(`User ${userId} might already exist, continuing...`);
           }
         }
+      }
+      
+      // Ensure dueAt is a proper Date object
+      if (taskData.dueAt && typeof taskData.dueAt === 'string') {
+        taskData.dueAt = new Date(taskData.dueAt);
+        if (isNaN(taskData.dueAt.getTime())) {
+          // Invalid date, use tomorrow as fallback
+          taskData.dueAt = new Date();
+          taskData.dueAt.setDate(taskData.dueAt.getDate() + 1);
+        }
+      } else if (!taskData.dueAt) {
+        // No date provided, use tomorrow
+        taskData.dueAt = new Date();
+        taskData.dueAt.setDate(taskData.dueAt.getDate() + 1);
       }
       
       const created = await storage.createTask(taskData);
