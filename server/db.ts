@@ -15,27 +15,20 @@ if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   );
 }
 
-// Create Supabase client for auth
+// Create Supabase client for auth and database operations
 export const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Use the direct DATABASE_URL if it's a Supabase connection string
-// Or construct from SUPABASE_URL for database operations
-let connectionString = process.env.DATABASE_URL;
-
-// If DATABASE_URL points to Neon, try to use Supabase instead
-if (connectionString?.includes('neon') && process.env.SUPABASE_URL) {
-  // Extract project ref from Supabase URL
-  const supabaseUrl = process.env.SUPABASE_URL;
-  const projectRef = supabaseUrl.split('//')[1].split('.')[0];
-  connectionString = `postgresql://postgres:${process.env.SUPABASE_SERVICE_ROLE_KEY}@db.${projectRef}.supabase.co:5432/postgres?sslmode=require`;
-}
-
+// Create postgres connection for Drizzle
+// Use DATABASE_URL which should point to the correct database
+const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
-  throw new Error("No valid database connection string found");
+  throw new Error('DATABASE_URL must be set');
 }
 
 const sql = postgres(connectionString);
 export const db = drizzle(sql, { schema });
+
+console.log('✅ Connected to Supabase database');

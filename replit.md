@@ -8,6 +8,13 @@ Huiswerkcoach Anouk is a Dutch Progressive Web App designed to help 5 havo stude
 
 Preferred communication style: Simple, everyday language.
 
+**CRITICAL: SUPABASE ONLY DATABASE POLICY**
+- ONLY use Supabase for database operations - NEVER Neon or other providers
+- User has explicitly requested multiple times to ONLY use Supabase
+- Database should be visible in Supabase table editor
+- All data must go to Supabase database, not Neon
+- Do NOT ask for database passwords again - use existing Supabase setup
+
 ## System Architecture
 
 ### Frontend Architecture
@@ -29,7 +36,7 @@ The backend is an Express.js REST API server that handles all business logic and
 - **Scheduled Tasks**: Cron jobs for daily reminder emails
 
 ### Data Storage
-The application uses PostgreSQL as the primary database, accessed through Drizzle ORM for type-safe database operations. The database schema supports multiple user roles (student/parent), courses, schedules, tasks, and user sessions. The system is designed to work with either Supabase or Neon PostgreSQL providers.
+The application uses PostgreSQL as the primary database via SUPABASE ONLY, accessed through Drizzle ORM for type-safe database operations. The database schema supports multiple user roles (student/parent), courses, schedules, tasks, and user sessions. NEVER use Neon or any other database provider - ONLY Supabase.
 
 Key database entities include:
 - Users with role-based access (student/parent)
@@ -60,8 +67,7 @@ The homework assistance feature combines multiple AI services:
 ## External Dependencies
 
 ### Core Services
-- **Supabase**: Authentication and potentially database hosting
-- **Neon**: PostgreSQL database provider (alternative to Supabase)
+- **Supabase**: Authentication and PRIMARY database hosting (ONLY database provider)
 - **OpenAI**: Whisper for speech-to-text and GPT-5 for task planning and explanations
 - **Azure Cognitive Services**: Text-to-speech for Dutch audio generation
 - **Google Cloud Vision**: OCR processing for homework images and PDFs
