@@ -24,7 +24,7 @@ export default function Layout({ children }: LayoutProps) {
       <header className="bg-primary text-primary-foreground p-4 sticky top-0 z-50" data-testid="header">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-16 h-8 bg-white rounded-sm flex items-center justify-center p-1">
+            <div className="w-20 h-10 bg-white rounded-sm flex items-center justify-center p-1">
               <img 
                 src="/noukie-logo.png" 
                 alt="Noukie Logo" 
@@ -32,9 +32,9 @@ export default function Layout({ children }: LayoutProps) {
               />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Huiswerkcoach Anouk</h1>
+              <h1 className="text-lg font-semibold">Hi Anouk! 👋</h1>
               <p className="text-sm text-primary-foreground/80">
-                {user?.user_metadata?.role === "parent" ? "Ouder" : "Student"}
+                {user?.user_metadata?.role === "parent" ? "Ouder dashboard" : "Klaar voor vandaag?"}
               </p>
             </div>
           </div>
@@ -59,25 +59,27 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-card border-t border-border" data-testid="bottom-navigation">
-        <div className="grid grid-cols-4">
+        <div className="grid grid-cols-4 gap-0">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = location === tab.path;
             
             return (
               <Link key={tab.id} href={tab.path}>
-                <button
-                  className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors text-center ${
-                    isActive ? "text-primary" : "text-muted-foreground"
-                  }`}
-                  data-testid={`tab-${tab.id}`}
-                >
-                  <Icon className="w-5 h-5 mb-1" />
-                  <span className="text-xs font-medium">{tab.label}</span>
-                  {isActive && (
-                    <div className="tab-indicator" />
-                  )}
-                </button>
+                <div className="w-full flex justify-center">
+                  <button
+                    className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors ${
+                      isActive ? "text-primary" : "text-muted-foreground"
+                    }`}
+                    data-testid={`tab-${tab.id}`}
+                  >
+                    <Icon className="w-5 h-5 mb-1" />
+                    <span className="text-xs font-medium">{tab.label}</span>
+                    {isActive && (
+                      <div className="tab-indicator" />
+                    )}
+                  </button>
+                </div>
               </Link>
             );
           })}

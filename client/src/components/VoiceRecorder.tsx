@@ -75,7 +75,7 @@ export default function VoiceRecorder() {
     <section className="p-6" data-testid="voice-recorder">
       <div className="text-center">
         <h2 className="text-xl font-semibold mb-2">Dagelijkse Check-in</h2>
-        <p className="text-muted-foreground mb-6">Vertel Anouk over je huiswerk vandaag</p>
+        <p className="text-muted-foreground mb-6">Vertel me over je taken en huiswerk</p>
         
         <div className="relative">
           <Button
