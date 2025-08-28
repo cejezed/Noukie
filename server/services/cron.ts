@@ -53,14 +53,14 @@ export async function sendReminderEmail(userEmail: string, userName: string): Pr
   try {
     const emailData = {
       to: userEmail,
-      subject: "Vergeet je huiswerk check-in niet - Huiswerkcoach Anouk",
+      subject: "Vergeet je huiswerk check-in niet - Huiswerkcoach Noukie",
       html: `
         <h2>Hoi ${userName}!</h2>
-        <p>Je hebt vandaag nog geen check-in gedaan bij Huiswerkcoach Anouk.</p>
+        <p>Je hebt vandaag nog geen check-in gedaan bij Huiswerkcoach Noukie.</p>
         <p>Doe je dagelijkse check-in om je huiswerk planning bij te houden:</p>
         <p><a href="${process.env.APP_URL || 'http://localhost:5000'}" style="background: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px;">Doe Check-in</a></p>
         <p>Tot snel!</p>
-        <p><em>Huiswerkcoach Anouk</em></p>
+        <p><em>Huiswerkcoach Noukie</em></p>
       `,
     };
 

@@ -31,7 +31,7 @@ interface AppIntroModalProps {
 
 const introSteps = [
   {
-    title: "Welkom bij Huiswerkcoach Anouk! 👋",
+    title: "Welkom bij Huiswerkcoach Noukie! 👋",
     content: (
       <div className="space-y-4">
         <p className="text-muted-foreground">

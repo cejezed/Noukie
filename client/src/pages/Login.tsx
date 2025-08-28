@@ -111,9 +111,9 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-2xl font-bold text-primary-foreground">A</span>
+            <span className="text-2xl font-bold text-primary-foreground">N</span>
           </div>
-          <CardTitle className="text-2xl">Huiswerkcoach Anouk</CardTitle>
+          <CardTitle className="text-2xl">Huiswerkcoach Noukie</CardTitle>
           <p className="text-muted-foreground">Nederlandse huiswerkcoach voor 5 havo</p>
         </CardHeader>
         

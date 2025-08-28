@@ -1,4 +1,4 @@
-const CACHE_NAME = 'huiswerkcoach-anouk-v1';
+const CACHE_NAME = 'huiswerkcoach-noukie-v1';
 const urlsToCache = [
   '/',
   '/static/js/bundle.js',
