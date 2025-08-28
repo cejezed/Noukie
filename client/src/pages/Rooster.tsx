@@ -12,7 +12,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { getDefaultSubjects } from "@shared/defaultSubjects";
 import type { Schedule, Course } from "@shared/schema";
 
 interface ScheduleFormData {
@@ -208,49 +207,6 @@ export default function Rooster() {
     }
   });
 
-  // Add default subjects mutation
-  const addDefaultSubjectsMutation = useMutation({
-    mutationFn: async () => {
-      // Get user education level from user metadata or default
-      const educationLevel = user?.user_metadata?.educationLevel || "havo";
-      const grade = user?.user_metadata?.grade || "havo 5";
-      
-      const defaultSubjects = getDefaultSubjects(educationLevel, grade.split(' ')[0]);
-      const createdSubjects = [];
-      
-      for (const subject of defaultSubjects) {
-        try {
-          const response = await apiRequest("POST", "/api/courses", {
-            userId: user?.id,
-            name: subject.name,
-            level: subject.level,
-          });
-          const createdSubject = await response.json();
-          createdSubjects.push(createdSubject);
-        } catch (error) {
-          // Skip if subject already exists
-          console.log(`Subject ${subject.name} already exists, skipping...`);
-        }
-      }
-      
-      return createdSubjects;
-    },
-    onSuccess: (createdSubjects) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
-      toast({
-        title: "Standaard vakken toegevoegd!",
-        description: `${createdSubjects.length} vakken toegevoegd aan je lijst.`,
-      });
-    },
-    onError: (error) => {
-      console.error("Add default subjects error:", error);
-      toast({
-        title: "Fout",
-        description: "Kon standaard vakken niet toevoegen.",
-        variant: "destructive",
-      });
-    }
-  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -489,16 +445,6 @@ export default function Rooster() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => addDefaultSubjectsMutation.mutate()}
-                disabled={addDefaultSubjectsMutation.isPending}
-                data-testid="button-add-default-subjects"
-              >
-                <FileText className="w-4 h-4 mr-2" />
-                {addDefaultSubjectsMutation.isPending ? "Bezig..." : "Standaard vakken"}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
                 onClick={() => setShowCourseForm(!showCourseForm)}
                 data-testid="button-toggle-course-form"
               >
@@ -546,7 +492,7 @@ export default function Rooster() {
               <Alert>
                 <HelpCircle className="h-4 w-4" />
                 <AlertDescription>
-                  💡 <strong>Tip:</strong> Klik op "Standaard vakken" om automatisch de vakken voor jouw onderwijsniveau toe te voegen (Nederlands, Engels, Wiskunde, etc.).
+                  💡 <strong>Tip:</strong> Voeg je vakken toe met de "Vak toevoegen" knop zodat je lessen kunt inplannen.
                 </AlertDescription>
               </Alert>
             </div>
