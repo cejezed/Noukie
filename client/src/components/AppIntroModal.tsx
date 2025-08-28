@@ -234,7 +234,7 @@ const introSteps = [
           </div>
           <div className="space-y-2">
             <h5 className="font-medium">📅 Import</h5>
-            <p className="text-xs text-muted-foreground">Google Calendar sync</p>
+            <p className="text-xs text-muted-foreground">iCal rooster import</p>
           </div>
         </div>
       </div>
@@ -256,6 +256,13 @@ const introSteps = [
             <h4 className="font-semibold text-blue-800 mb-2">📱 Gebruik foto's</h4>
             <p className="text-sm text-blue-700">
               Als je ergens niet uitkomt, maak een foto van de opdracht. Ik geef je dan stap-voor-stap uitleg.
+            </p>
+          </div>
+          
+          <div className="p-3 bg-indigo-50 rounded-lg">
+            <h4 className="font-semibold text-indigo-800 mb-2">📅 SomToday rooster</h4>
+            <p className="text-sm text-indigo-700">
+              Gebruik je SomToday? Exporteer je rooster als iCal URL en importeer het in één keer via het Rooster tabblad!
             </p>
           </div>
           

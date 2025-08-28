@@ -8,7 +8,6 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import CalendarIntegration from "@/components/CalendarIntegration";
 import { 
   Upload, 
   Palette, 
@@ -299,16 +298,24 @@ export default function Instellingen() {
         </CardContent>
       </Card>
 
-      {/* Google Calendar Integratie */}
+      {/* Rooster Import */}
       <Card data-testid="calendar-integration">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Calendar className="w-5 h-5" />
-            Google Calendar
+            Rooster Import
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <CalendarIntegration />
+          <div className="p-4 bg-muted/50 rounded-lg">
+            <h4 className="font-semibold mb-2">📅 Rooster Import</h4>
+            <p className="text-sm text-muted-foreground mb-3">
+              Importeer je school rooster via iCal URL (SomToday, Zermelo, etc.)
+            </p>
+            <p className="text-xs text-muted-foreground">
+              💡 Ga naar het Rooster tabblad om je rooster te importeren
+            </p>
+          </div>
         </CardContent>
       </Card>
 

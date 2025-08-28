@@ -1,17 +1,18 @@
 import * as React from "react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Plus, X, Calendar } from "lucide-react";
+import { Trash2, Plus, X, FileText, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import CalendarIntegration from "@/components/CalendarIntegration";
+import { getDefaultSubjects } from "@shared/defaultSubjects";
 import type { Schedule, Course } from "@shared/schema";
 
 interface ScheduleFormData {
@@ -48,6 +49,7 @@ export default function Rooster() {
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [icalUrl, setIcalUrl] = useState("");
   const [showIcalForm, setShowIcalForm] = useState(false);
+  const [showDefaultSubjects, setShowDefaultSubjects] = useState(false);
 
   // Get user's schedule
   const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
@@ -201,6 +203,50 @@ export default function Rooster() {
       toast({
         title: "Fout",
         description: "Kon roosteritem niet verwijderen.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  // Add default subjects mutation
+  const addDefaultSubjectsMutation = useMutation({
+    mutationFn: async () => {
+      // Get user education level from user metadata or default
+      const educationLevel = user?.user_metadata?.educationLevel || "havo";
+      const grade = user?.user_metadata?.grade || "havo 5";
+      
+      const defaultSubjects = getDefaultSubjects(educationLevel, grade.split(' ')[0]);
+      const createdSubjects = [];
+      
+      for (const subject of defaultSubjects) {
+        try {
+          const response = await apiRequest("POST", "/api/courses", {
+            userId: user?.id,
+            name: subject.name,
+            level: subject.level,
+          });
+          const createdSubject = await response.json();
+          createdSubjects.push(createdSubject);
+        } catch (error) {
+          // Skip if subject already exists
+          console.log(`Subject ${subject.name} already exists, skipping...`);
+        }
+      }
+      
+      return createdSubjects;
+    },
+    onSuccess: (createdSubjects) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
+      toast({
+        title: "Standaard vakken toegevoegd!",
+        description: `${createdSubjects.length} vakken toegevoegd aan je lijst.`,
+      });
+    },
+    onError: (error) => {
+      console.error("Add default subjects error:", error);
+      toast({
+        title: "Fout",
+        description: "Kon standaard vakken niet toevoegen.",
         variant: "destructive",
       });
     }
@@ -439,15 +485,27 @@ export default function Rooster() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>Vakken beheren</CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowCourseForm(!showCourseForm)}
-              data-testid="button-toggle-course-form"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Vak toevoegen
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => addDefaultSubjectsMutation.mutate()}
+                disabled={addDefaultSubjectsMutation.isPending}
+                data-testid="button-add-default-subjects"
+              >
+                <FileText className="w-4 h-4 mr-2" />
+                {addDefaultSubjectsMutation.isPending ? "Bezig..." : "Standaard vakken"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowCourseForm(!showCourseForm)}
+                data-testid="button-toggle-course-form"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                Vak toevoegen
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -481,8 +539,16 @@ export default function Rooster() {
               ))}
             </div>
           ) : (
-            <div className="text-sm text-muted-foreground mb-4">
-              Geen vakken toegevoegd. Voeg eerst vakken toe voordat je lessen kunt inplannen.
+            <div className="space-y-3 mb-4">
+              <div className="text-sm text-muted-foreground">
+                Geen vakken toegevoegd. Voeg eerst vakken toe voordat je lessen kunt inplannen.
+              </div>
+              <Alert>
+                <HelpCircle className="h-4 w-4" />
+                <AlertDescription>
+                  💡 <strong>Tip:</strong> Klik op "Standaard vakken" om automatisch de vakken voor jouw onderwijsniveau toe te voegen (Nederlands, Engels, Wiskunde, etc.).
+                </AlertDescription>
+              </Alert>
             </div>
           )}
 
@@ -542,6 +608,76 @@ export default function Rooster() {
         </CardContent>
       </Card>
 
+      {/* iCal Import Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Rooster importeren</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowIcalForm(!showIcalForm)}
+              data-testid="button-toggle-ical-form"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              iCal URL
+            </Button>
+          </div>
+        </CardHeader>
+        
+        {showIcalForm && (
+          <CardContent>
+            <Alert className="mb-4">
+              <HelpCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>📚 SomToday gebruikers:</strong> Log in op SomToday → Rooster → Exporteren → Kopieer de iCal URL. 
+                Plak deze hieronder om je hele rooster in één keer te importeren!
+              </AlertDescription>
+            </Alert>
+            
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              if (icalUrl.trim()) {
+                importIcalMutation.mutate(icalUrl.trim());
+              }
+            }} className="space-y-3">
+              <div>
+                <Label htmlFor="icalUrl">iCal URL</Label>
+                <Input
+                  id="icalUrl"
+                  value={icalUrl}
+                  onChange={(e) => setIcalUrl(e.target.value)}
+                  placeholder="https://example.com/calendar.ics"
+                  data-testid="input-ical-url"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Plak hier de iCal link van je school rooster (SomToday, Zermelo, etc.)
+                </p>
+              </div>
+              
+              <div className="flex space-x-2">
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={importIcalMutation.isPending || !icalUrl.trim()}
+                  data-testid="button-import-ical"
+                >
+                  {importIcalMutation.isPending ? "Importeren..." : "Rooster importeren"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowIcalForm(false)}
+                  data-testid="button-cancel-ical"
+                >
+                  Annuleren
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        )}
+      </Card>
 
       {/* Current Schedule */}
       <div>
