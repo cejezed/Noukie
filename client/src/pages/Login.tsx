@@ -114,7 +114,7 @@ export default function Login() {
             <span className="text-2xl font-bold text-primary-foreground">N</span>
           </div>
           <CardTitle className="text-2xl">Huiswerkcoach Noukie</CardTitle>
-          <p className="text-muted-foreground">Nederlandse huiswerkcoach voor 5 havo</p>
+          <p className="text-muted-foreground">Jouw persoonlijke AI huiswerkcoach - dagelijkse voice check-ins, taakplanning en uitlegvideo's</p>
         </CardHeader>
         
         <CardContent>
