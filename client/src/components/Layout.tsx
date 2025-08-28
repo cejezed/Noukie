@@ -24,9 +24,9 @@ export default function Layout({ children }: LayoutProps) {
       <header className="bg-primary text-primary-foreground p-4 sticky top-0 z-50" data-testid="header">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-6 bg-white rounded-sm flex items-center justify-center p-1">
+            <div className="w-16 h-8 bg-white rounded-sm flex items-center justify-center p-1">
               <img 
-                src="/attached_assets/Noukie logo_1756365152220.png" 
+                src="/noukie-logo.png" 
                 alt="Noukie Logo" 
                 className="w-full h-full object-contain"
               />
@@ -67,7 +67,7 @@ export default function Layout({ children }: LayoutProps) {
             return (
               <Link key={tab.id} href={tab.path}>
                 <button
-                  className={`relative flex flex-col items-center py-3 px-2 transition-colors ${
+                  className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors text-center ${
                     isActive ? "text-primary" : "text-muted-foreground"
                   }`}
                   data-testid={`tab-${tab.id}`}
