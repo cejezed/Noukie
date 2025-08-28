@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +21,7 @@ interface ScheduleFormData {
   kind: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders";
   title: string;
   date?: string;
+  isRecurring: boolean;
 }
 
 export default function Rooster() {
@@ -34,6 +36,7 @@ export default function Rooster() {
     endTime: "",
     kind: "les",
     title: "",
+    isRecurring: true,
   });
 
   const [courseFormData, setCourseFormData] = useState({
@@ -69,6 +72,7 @@ export default function Rooster() {
         kind: data.kind,
         title: data.title || null,
         date: data.date || null,
+        isRecurring: data.isRecurring,
       });
       return await response.json();
     },
@@ -81,6 +85,7 @@ export default function Rooster() {
         endTime: "",
         kind: "les",
         title: "",
+        isRecurring: true,
       });
       toast({
         title: "Toegevoegd!",
@@ -573,7 +578,7 @@ export default function Rooster() {
                 value={formData.title}
                 onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                 placeholder={
-                  formData.kind === "sport" ? "Bijv. Voetbaltraining Ajax" :
+                  formData.kind === "sport" ? "Bijv. Hockeytraining AHC" :
                   formData.kind === "werk" ? "Bijv. Albert Heijn - kassamededer" :
                   formData.kind === "afspraak" ? "Bijv. Tandarts afspraak" :
                   formData.kind === "hobby" ? "Bijv. Gitaarles" :
@@ -583,6 +588,24 @@ export default function Rooster() {
                 required
               />
             </div>
+
+            {/* Recurring checkbox - only for non-lesson activities */}
+            {formData.kind !== "les" && formData.kind !== "toets" && (
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="recurring"
+                  checked={formData.isRecurring}
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isRecurring: checked as boolean }))}
+                  data-testid="checkbox-recurring"
+                />
+                <Label htmlFor="recurring" className="text-sm font-normal">
+                  Elke week herhalen
+                  <span className="text-xs text-muted-foreground block">
+                    Voor vaste activiteiten zoals trainingen en bijbaantjes
+                  </span>
+                </Label>
+              </div>
+            )}
             
             <Button
               type="submit"

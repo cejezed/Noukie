@@ -202,7 +202,8 @@ export class PostgresStorage implements IStorage {
         startTime: scheduleItem.startTime || null,
         endTime: scheduleItem.endTime || null,
         kind: scheduleItem.kind || "les",
-        title: scheduleItem.title || null
+        title: scheduleItem.title || null,
+        isRecurring: scheduleItem.isRecurring !== undefined ? scheduleItem.isRecurring : true
       };
       inMemoryStorage.schedule.push(newItem);
       return newItem;
