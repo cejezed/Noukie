@@ -31,7 +31,7 @@ export const schedule = pgTable("schedule", {
   kind: text("kind", { enum: ["les", "toets", "sport", "werk", "afspraak", "hobby", "anders"] }).default("les"),
   title: text("title"),
   date: date("date"), // for one-off tests
-  isRecurring: boolean("is_recurring").default(true), // true for weekly recurring items, false for one-time events
+  isRecurring: boolean("is_recurring").default(false), // true for weekly recurring items, false for one-time events
 });
 
 export const tasks = pgTable("tasks", {

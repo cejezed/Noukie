@@ -36,7 +36,7 @@ export default function Rooster() {
     endTime: "",
     kind: "les",
     title: "",
-    isRecurring: true,
+    isRecurring: false,
   });
 
   const [courseFormData, setCourseFormData] = useState({
@@ -85,7 +85,7 @@ export default function Rooster() {
         endTime: "",
         kind: "les",
         title: "",
-        isRecurring: true,
+        isRecurring: false,
       });
       toast({
         title: "Toegevoegd!",
