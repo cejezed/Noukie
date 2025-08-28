@@ -34,12 +34,17 @@ export function useVoiceRecorder({
         },
       });
 
-      // Create MediaRecorder instance
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-          ? 'audio/webm;codecs=opus' 
-          : 'audio/webm',
-      });
+      // Create MediaRecorder instance with supported format
+      let mimeType = 'audio/webm';
+      if (MediaRecorder.isTypeSupported('audio/wav')) {
+        mimeType = 'audio/wav';
+      } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+        mimeType = 'audio/ogg;codecs=opus';
+      } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+        mimeType = 'audio/mp4';
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
 
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -53,7 +58,7 @@ export function useVoiceRecorder({
 
       mediaRecorder.addEventListener('stop', () => {
         const audioBlob = new Blob(audioChunksRef.current, {
-          type: 'audio/webm',
+          type: mimeType,
         });
         onRecordingComplete?.(audioBlob);
         

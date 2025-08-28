@@ -28,7 +28,10 @@ export default function VoiceRecorder() {
     mutationFn: async (audioBlob: Blob) => {
       // First, transcribe the audio
       const formData = new FormData();
-      formData.append("audio", audioBlob, "recording.webm");
+      const fileExtension = audioBlob.type.includes('wav') ? 'wav' : 
+                           audioBlob.type.includes('ogg') ? 'ogg' : 
+                           audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
+      formData.append("audio", audioBlob, `recording.${fileExtension}`);
       
       const asrResponse = await apiRequest("POST", "/api/asr", formData);
       const { transcript } = await asrResponse.json();
