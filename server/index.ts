@@ -3,10 +3,12 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startDailyReminderCron } from "./services/cron";
 import { cronManager } from "./cronJobs";
+import voiceTestRouter from "./routes/voiceTest";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use("/api/voice-test", voiceTestRouter);
 
 app.use((req, res, next) => {
   const start = Date.now();
