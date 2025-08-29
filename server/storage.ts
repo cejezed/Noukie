@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { supabase } from "./db";
 import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
 import {
   users,

@@ -1,45 +1,33 @@
-import { createClient } from "@supabase/supabase-js";
+// server/services/supabase.ts
+// Tolerante service: geen throws bij ontbreken van env.
+// Gebruikt de supabase client uit ../db (die zelf tolerant is).
+import { supabase } from "../db";
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-export async function getUserFromToken(token: string) {
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error) throw error;
-  return user;
-}
-
+// ---- Auth wrappers (veelgebruikte functies) ----
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
+  return supabase.auth.signInWithPassword({ email, password });
 }
 
-export async function signUp(email: string, password: string, name: string, role: "student" | "parent") {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: {
-        name,
-        role,
-      }
-    }
-  });
-  if (error) throw error;
-  return data;
+export async function signUp(email: string, password: string) {
+  return supabase.auth.signUp({ email, password });
 }
 
 export async function signOut() {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  return supabase.auth.signOut();
 }
+
+export async function getUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) throw error;
+  return data.user ?? null;
+}
+
+export async function getSession() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session ?? null;
+}
+
+// Exporteer ook de client zelf (named + default), voor bestaande imports
+export { supabase };
+export default supabase;
