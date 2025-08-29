@@ -1,0 +1,603 @@
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Huiswerkcoach Anouk</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1976D2">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+    tailwind.config = {
+        theme: {
+            extend: {
+                borderRadius: {
+                    lg: "var(--radius)",
+                    md: "calc(var(--radius) - 2px)",
+                    sm: "calc(var(--radius) - 4px)",
+                },
+                colors: {
+                    background: "var(--background)",
+                    foreground: "var(--foreground)",
+                    card: {
+                        DEFAULT: "var(--card)",
+                        foreground: "var(--card-foreground)",
+                    },
+                    popover: {
+                        DEFAULT: "var(--popover)",
+                        foreground: "var(--popover-foreground)",
+                    },
+                    primary: {
+                        DEFAULT: "var(--primary)",
+                        foreground: "var(--primary-foreground)",
+                    },
+                    secondary: {
+                        DEFAULT: "var(--secondary)",
+                        foreground: "var(--secondary-foreground)",
+                    },
+                    muted: {
+                        DEFAULT: "var(--muted)",
+                        foreground: "var(--muted-foreground)",
+                    },
+                    accent: {
+                        DEFAULT: "var(--accent)",
+                        foreground: "var(--accent-foreground)",
+                    },
+                    destructive: {
+                        DEFAULT: "var(--destructive)",
+                        foreground: "var(--destructive-foreground)",
+                    },
+                    border: "var(--border)",
+                    input: "var(--input)",
+                    ring: "var(--ring)",
+                    success: "var(--success)",
+                    warning: "var(--warning)",
+                }
+            },
+            fontFamily: {
+                sans: ["Inter", "system-ui", "sans-serif"],
+            }
+        }
+    };
+    </script>
+    <style>
+        :root {
+            --background: hsl(0 0% 96%);
+            --foreground: hsl(0 0% 15%);
+            --card: hsl(0 0% 100%);
+            --card-foreground: hsl(0 0% 15%);
+            --popover: hsl(0 0% 100%);
+            --popover-foreground: hsl(0 0% 15%);
+            --primary: hsl(207 90% 40%);
+            --primary-foreground: hsl(0 0% 98%);
+            --secondary: hsl(36 100% 50%);
+            --secondary-foreground: hsl(0 0% 15%);
+            --muted: hsl(0 0% 92%);
+            --muted-foreground: hsl(0 0% 45%);
+            --accent: hsl(122 39% 49%);
+            --accent-foreground: hsl(0 0% 98%);
+            --destructive: hsl(0 84% 60%);
+            --destructive-foreground: hsl(0 0% 98%);
+            --border: hsl(0 0% 88%);
+            --input: hsl(0 0% 88%);
+            --ring: hsl(207 90% 40%);
+            --success: hsl(122 39% 49%);
+            --warning: hsl(45 93% 47%);
+            --radius: 8px;
+            --font-sans: "Inter";
+        }
+
+        .gradient-bg {
+            background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--secondary)) 100%);
+        }
+
+        .voice-pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: .7;
+            }
+        }
+
+        .task-checkbox:checked {
+            background-color: hsl(var(--success));
+            border-color: hsl(var(--success));
+        }
+
+        .wave-animation {
+            animation: wave 1.5s ease-in-out infinite;
+        }
+
+        @keyframes wave {
+            0%, 100% { transform: scaleY(1); }
+            50% { transform: scaleY(1.5); }
+        }
+
+        .tab-active {
+            color: hsl(var(--primary));
+            border-bottom: 2px solid hsl(var(--primary));
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, hsl(var(--accent)) 0%, hsl(var(--success)) 100%);
+        }
+    </style>
+</head>
+<body class="bg-background text-foreground font-sans">
+    <!-- @COMPONENT: AppHeader -->
+    <header class="gradient-bg text-primary-foreground p-4 shadow-lg">
+        <div class="flex items-center justify-between max-w-md mx-auto">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                    <i class="fas fa-graduation-cap text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold">Huiswerkcoach Anouk</h1>
+                    <p class="text-sm opacity-90" data-bind="user.name">Hoi Emma!</p>
+                </div>
+            </div>
+            <button class="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center" data-event="click:openProfile">
+                <i class="fas fa-user text-sm"></i>
+            </button>
+        </div>
+    </header>
+    <!-- @END_COMPONENT: AppHeader -->
+
+    <!-- @COMPONENT: MainContent -->
+    <main class="max-w-md mx-auto pb-20">
+        <!-- Voice Check-in Section -->
+        <!-- @COMPONENT: VoiceCheckin -->
+        <section class="p-4">
+            <div class="bg-card rounded-lg shadow-sm p-6 mb-4">
+                <div class="text-center">
+                    <h2 class="text-lg font-semibold mb-2">Dagelijkse Check-in</h2>
+                    <p class="text-muted-foreground text-sm mb-6">Vertel wat je vandaag wilt doen (max 60 sec)</p>
+                    
+                    <!-- Voice Recording Interface -->
+                    <div class="relative mb-4">
+                        <button id="voiceButton" class="w-20 h-20 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center voice-pulse" data-event="click:startRecording" data-implementation="MediaRecorder API with 60s limit">
+                            <i class="fas fa-microphone text-2xl"></i>
+                        </button>
+                        
+                        <!-- Recording Visual Feedback -->
+                        <div id="recordingIndicator" class="hidden absolute -bottom-2 left-1/2 transform -translate-x-1/2">
+                            <div class="flex space-x-1">
+                                <div class="w-1 h-8 bg-accent rounded wave-animation" style="animation-delay: 0s;"></div>
+                                <div class="w-1 h-6 bg-accent rounded wave-animation" style="animation-delay: 0.1s;"></div>
+                                <div class="w-1 h-10 bg-accent rounded wave-animation" style="animation-delay: 0.2s;"></div>
+                                <div class="w-1 h-4 bg-accent rounded wave-animation" style="animation-delay: 0.3s;"></div>
+                                <div class="w-1 h-8 bg-accent rounded wave-animation" style="animation-delay: 0.4s;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Last Coach Audio -->
+                    <div class="bg-muted rounded-lg p-4 mb-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-volume-up text-primary"></i>
+                                <span class="text-sm font-medium">Laatste coach-audio</span>
+                            </div>
+                            <button class="bg-primary text-primary-foreground px-3 py-1 rounded-md text-sm" data-event="click:playLastAudio" data-implementation="Audio playback with TTS integration">
+                                <i class="fas fa-play mr-1"></i>Afspelen
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: VoiceCheckin -->
+
+        <!-- Today's Tasks Section -->
+        <!-- @COMPONENT: TodayTasks -->
+        <section class="p-4">
+            <div class="bg-card rounded-lg shadow-sm p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-lg font-semibold">Vandaag</h2>
+                    <span class="text-sm text-muted-foreground" data-bind="formattedDate">Woensdag 15 januari</span>
+                </div>
+                
+                <!-- Priority Tasks -->
+                <div class="space-y-3 mb-6">
+                    <!-- @MAP: priorityTasks.map(task => ( -->
+                    <div class="border rounded-lg p-4 hover:shadow-sm transition-shadow">
+                        <div class="flex items-start space-x-3">
+                            <input type="checkbox" class="task-checkbox w-5 h-5 mt-1 rounded border-2 border-border" data-bind="task.completed">
+                            <div class="flex-1">
+                                <h3 class="font-medium text-sm" data-bind="task.title">Wiskunde hoofdstuk 5 opgaven 1-10</h3>
+                                <div class="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
+                                    <span data-bind="task.course">Wiskunde A</span>
+                                    <span data-bind="task.duration">~40 min</span>
+                                    <span class="bg-warning/20 text-warning px-2 py-1 rounded" data-bind="task.priority">Hoge prioriteit</span>
+                                </div>
+                            </div>
+                            <button class="text-muted-foreground hover:text-foreground" data-event="click:explainTask" data-implementation="Opens explanation modal">
+                                <i class="fas fa-question-circle"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Help Button -->
+                        <div class="mt-3 pt-3 border-t border-border">
+                            <button class="text-primary text-sm font-medium" data-event="click:openHelpModal" data-implementation="Opens help modal with OCR/voice input">
+                                <i class="fas fa-lightbulb mr-1"></i>Ik snap dit niet
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="border rounded-lg p-4 hover:shadow-sm transition-shadow">
+                        <div class="flex items-start space-x-3">
+                            <input type="checkbox" class="task-checkbox w-5 h-5 mt-1 rounded border-2 border-border checked" data-bind="task.completed">
+                            <div class="flex-1">
+                                <h3 class="font-medium text-sm line-through opacity-60" data-bind="task.title">Biologie samenvatting hoofdstuk 3</h3>
+                                <div class="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
+                                    <span data-bind="task.course">Biologie</span>
+                                    <span data-bind="task.duration">~25 min</span>
+                                    <span class="bg-success/20 text-success px-2 py-1 rounded">Voltooid</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="border rounded-lg p-4 hover:shadow-sm transition-shadow">
+                        <div class="flex items-start space-x-3">
+                            <input type="checkbox" class="task-checkbox w-5 h-5 mt-1 rounded border-2 border-border" data-bind="task.completed">
+                            <div class="flex-1">
+                                <h3 class="font-medium text-sm" data-bind="task.title">Nederlands essay opstellen</h3>
+                                <div class="flex items-center space-x-4 mt-2 text-xs text-muted-foreground">
+                                    <span data-bind="task.course">Nederlands</span>
+                                    <span data-bind="task.duration">~60 min</span>
+                                    <span class="bg-secondary/20 text-secondary px-2 py-1 rounded">Medium prioriteit</span>
+                                </div>
+                            </div>
+                            <button class="text-muted-foreground hover:text-foreground" data-event="click:explainTask">
+                                <i class="fas fa-question-circle"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="mt-3 pt-3 border-t border-border">
+                            <button class="text-primary text-sm font-medium" data-event="click:openHelpModal">
+                                <i class="fas fa-lightbulb mr-1"></i>Ik snap dit niet
+                            </button>
+                        </div>
+                    </div>
+                    <!-- @END_MAP )) -->
+                </div>
+                
+                <!-- Today's Lessons -->
+                <div class="border-t border-border pt-4">
+                    <h3 class="font-medium text-sm mb-3">Lessen vandaag</h3>
+                    <div class="space-y-2">
+                        <!-- @MAP: todayLessons.map(lesson => ( -->
+                        <div class="flex items-center justify-between py-2">
+                            <div>
+                                <span class="font-medium text-sm" data-bind="lesson.course">Wiskunde A</span>
+                                <span class="text-muted-foreground text-xs ml-2" data-bind="lesson.topic">Goniometrie</span>
+                            </div>
+                            <span class="text-xs text-muted-foreground" data-bind="lesson.time">13:30 - 14:20</span>
+                        </div>
+                        
+                        <div class="flex items-center justify-between py-2">
+                            <div>
+                                <span class="font-medium text-sm" data-bind="lesson.course">Economie</span>
+                                <span class="text-muted-foreground text-xs ml-2" data-bind="lesson.topic">Marktvormen</span>
+                            </div>
+                            <span class="text-xs text-muted-foreground" data-bind="lesson.time">14:30 - 15:20</span>
+                        </div>
+                        <!-- @END_MAP )) -->
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: TodayTasks -->
+
+        <!-- Progress Overview -->
+        <!-- @COMPONENT: ProgressOverview -->
+        <section class="p-4">
+            <div class="bg-card rounded-lg shadow-sm p-6">
+                <h2 class="text-lg font-semibold mb-4">Voortgang deze week</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span>Taken voltooid</span>
+                            <span data-bind="taskProgress">7 van 12</span>
+                        </div>
+                        <div class="w-full bg-muted rounded-full h-2">
+                            <div class="progress-bar h-2 rounded-full" style="width: 58%" data-bind="taskProgressPercentage"></div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <div class="flex justify-between text-sm mb-2">
+                            <span>Komende toetsen</span>
+                            <span class="text-warning font-medium" data-bind="upcomingTests">3 deze week</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- @END_COMPONENT: ProgressOverview -->
+    </main>
+    <!-- @END_COMPONENT: MainContent -->
+
+    <!-- Help Modal -->
+    <!-- @COMPONENT: HelpModal -->
+    <div id="helpModal" class="fixed inset-0 bg-black/50 z-50 hidden">
+        <div class="fixed bottom-0 left-0 right-0 bg-card rounded-t-xl p-6 max-w-md mx-auto">
+            <div class="w-8 h-1 bg-muted rounded-full mx-auto mb-4"></div>
+            
+            <h3 class="text-lg font-semibold mb-4 text-center">Ik snap dit niet</h3>
+            
+            <div class="space-y-4 mb-6">
+                <button class="w-full bg-primary text-primary-foreground p-4 rounded-lg flex items-center justify-center space-x-3" data-event="click:uploadPhoto" data-implementation="Camera/gallery access for OCR">
+                    <i class="fas fa-camera text-xl"></i>
+                    <span class="font-medium">Foto uploaden</span>
+                </button>
+                
+                <button class="w-full bg-secondary text-secondary-foreground p-4 rounded-lg flex items-center justify-center space-x-3" data-event="click:recordQuestion" data-implementation="Voice recording for question">
+                    <i class="fas fa-microphone text-xl"></i>
+                    <span class="font-medium">Vraag inspeken</span>
+                </button>
+                
+                <button class="w-full border border-border p-4 rounded-lg flex items-center justify-center space-x-3" data-event="click:typeQuestion" data-implementation="Text input for question">
+                    <i class="fas fa-keyboard text-xl"></i>
+                    <span class="font-medium">Tekst typen</span>
+                </button>
+            </div>
+            
+            <button class="w-full text-muted-foreground text-center" data-event="click:closeHelpModal">
+                Annuleren
+            </button>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: HelpModal -->
+
+    <!-- Explanation Result Modal -->
+    <!-- @COMPONENT: ExplanationModal -->
+    <div id="explanationModal" class="fixed inset-0 bg-black/50 z-50 hidden">
+        <div class="fixed inset-4 bg-card rounded-xl p-6 max-w-md mx-auto overflow-y-auto">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold">Uitleg</h3>
+                <button class="text-muted-foreground" data-event="click:closeExplanationModal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <!-- Steps -->
+            <div class="mb-6">
+                <h4 class="font-medium mb-3">Stappen:</h4>
+                <ol class="space-y-2 text-sm">
+                    <!-- @MAP: explanation.steps.map((step, index) => ( -->
+                    <li class="flex space-x-3" data-mock="true">
+                        <span class="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium">1</span>
+                        <span>Bepaal eerst welke formule je moet gebruiken voor goniometrische vergelijkingen</span>
+                    </li>
+                    
+                    <li class="flex space-x-3" data-mock="true">
+                        <span class="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium">2</span>
+                        <span>Schrijf de vergelijking om naar de standaardvorm</span>
+                    </li>
+                    
+                    <li class="flex space-x-3" data-mock="true">
+                        <span class="bg-primary text-primary-foreground w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium">3</span>
+                        <span>Los op met behulp van de eenheidscirkel</span>
+                    </li>
+                    <!-- @END_MAP )) -->
+                </ol>
+            </div>
+            
+            <!-- Example -->
+            <div class="bg-muted rounded-lg p-4 mb-6">
+                <h4 class="font-medium mb-2">Voorbeeld:</h4>
+                <div class="text-sm space-y-2" data-mock="true">
+                    <p><strong>Opgave:</strong> Los op: sin(x) = 0.5 voor 0° ≤ x ≤ 360°</p>
+                    <p><strong>Oplossing:</strong> x = 30° en x = 150°</p>
+                </div>
+            </div>
+            
+            <!-- Quiz Question -->
+            <div class="border border-border rounded-lg p-4 mb-6">
+                <h4 class="font-medium mb-3">Controlevraag:</h4>
+                <p class="text-sm mb-4" data-mock="true">Voor welke waarden van x geldt cos(x) = -0.5 in het interval [0°, 360°]?</p>
+                
+                <div class="space-y-2">
+                    <!-- @MAP: quiz.choices.map((choice, index) => ( -->
+                    <button class="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors" data-event="click:selectAnswer" data-mock="true">
+                        A) x = 120° en x = 240°
+                    </button>
+                    
+                    <button class="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors" data-event="click:selectAnswer" data-mock="true">
+                        B) x = 60° en x = 300°
+                    </button>
+                    
+                    <button class="w-full text-left p-3 rounded-lg border hover:bg-muted transition-colors" data-event="click:selectAnswer" data-mock="true">
+                        C) x = 150° en x = 210°
+                    </button>
+                    <!-- @END_MAP )) -->
+                </div>
+            </div>
+            
+            <!-- Coach Audio -->
+            <div class="bg-accent/10 rounded-lg p-4 mb-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-volume-up text-accent"></i>
+                        <span class="text-sm font-medium">Coach-tip</span>
+                    </div>
+                    <button class="bg-accent text-accent-foreground px-3 py-1 rounded-md text-sm" data-event="click:playCoachTip" data-implementation="TTS playback">
+                        <i class="fas fa-play mr-1"></i>Beluister
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Understanding Check -->
+            <div class="flex space-x-3">
+                <button class="flex-1 bg-success text-success-foreground p-3 rounded-lg font-medium" data-event="click:markUnderstood">
+                    <i class="fas fa-check mr-2"></i>Snap ik nu!
+                </button>
+                <button class="flex-1 border border-border p-3 rounded-lg font-medium" data-event="click:needMoreHelp">
+                    Nog vragen
+                </button>
+            </div>
+        </div>
+    </div>
+    <!-- @END_COMPONENT: ExplanationModal -->
+
+    <!-- Bottom Navigation -->
+    <!-- @COMPONENT: BottomNavigation -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-card border-t border-border">
+        <div class="max-w-md mx-auto">
+            <div class="flex">
+                <button class="flex-1 py-3 px-4 text-center tab-active" data-event="click:switchTab" data-tab="today">
+                    <i class="fas fa-home text-xl mb-1 block"></i>
+                    <span class="text-xs">Vandaag</span>
+                </button>
+                
+                <button class="flex-1 py-3 px-4 text-center text-muted-foreground" data-event="click:switchTab" data-tab="planning">
+                    <i class="fas fa-calendar text-xl mb-1 block"></i>
+                    <span class="text-xs">Planning</span>
+                </button>
+                
+                <button class="flex-1 py-3 px-4 text-center text-muted-foreground" data-event="click:switchTab" data-tab="schedule">
+                    <i class="fas fa-clock text-xl mb-1 block"></i>
+                    <span class="text-xs">Rooster</span>
+                </button>
+                
+                <button class="flex-1 py-3 px-4 text-center text-muted-foreground" data-event="click:switchTab" data-tab="materials">
+                    <i class="fas fa-book text-xl mb-1 block"></i>
+                    <span class="text-xs">Materiaal</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+    <!-- @END_COMPONENT: BottomNavigation -->
+
+    <!-- @STATE: currentTab:string = 'today' -->
+    <!-- @STATE: isRecording:boolean = false -->
+    <!-- @STATE: helpModalOpen:boolean = false -->
+    <!-- @STATE: explanationModalOpen:boolean = false -->
+
+    <script>
+        // TODO: Implement service worker registration for PWA capabilities
+        // TODO: Implement MediaRecorder API for voice check-in functionality  
+        // TODO: Implement speech-to-text integration with OpenAI Whisper
+        // TODO: Implement text-to-speech for coach responses
+        // TODO: Implement task management with database persistence
+        // TODO: Implement AI-powered homework explanations via GPT-4
+        // TODO: Implement parent dashboard view
+        // TODO: Implement offline functionality with service worker
+
+        (function() {
+            // Basic modal functionality for demo purposes
+            const helpModal = document.getElementById('helpModal');
+            const explanationModal = document.getElementById('explanationModal');
+            
+            // Help modal controls
+            document.querySelectorAll('[data-event="click:openHelpModal"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    helpModal.classList.remove('hidden');
+                });
+            });
+            
+            document.querySelectorAll('[data-event="click:closeHelpModal"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    helpModal.classList.add('hidden');
+                });
+            });
+            
+            // Voice recording simulation
+            const voiceButton = document.getElementById('voiceButton');
+            const recordingIndicator = document.getElementById('recordingIndicator');
+            let isRecording = false;
+            
+            voiceButton.addEventListener('click', () => {
+                if (!isRecording) {
+                    // Start recording
+                    isRecording = true;
+                    voiceButton.innerHTML = '<i class="fas fa-stop text-2xl"></i>';
+                    voiceButton.classList.add('bg-destructive');
+                    voiceButton.classList.remove('bg-primary');
+                    recordingIndicator.classList.remove('hidden');
+                    
+                    // Auto-stop after 60 seconds (simulation)
+                    setTimeout(() => {
+                        if (isRecording) {
+                            stopRecording();
+                        }
+                    }, 60000);
+                } else {
+                    stopRecording();
+                }
+            });
+            
+            function stopRecording() {
+                isRecording = false;
+                voiceButton.innerHTML = '<i class="fas fa-microphone text-2xl"></i>';
+                voiceButton.classList.remove('bg-destructive');
+                voiceButton.classList.add('bg-primary');
+                recordingIndicator.classList.add('hidden');
+                
+                // Simulate processing and show result
+                setTimeout(() => {
+                    alert('Check-in verwerkt! Er zijn 2 nieuwe taken toegevoegd.');
+                }, 1000);
+            }
+            
+            // Tab switching simulation
+            document.querySelectorAll('[data-event="click:switchTab"]').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const tab = e.currentTarget.dataset.tab;
+                    
+                    // Update active tab
+                    document.querySelectorAll('.tab-active').forEach(activeTab => {
+                        activeTab.classList.remove('tab-active');
+                        activeTab.classList.add('text-muted-foreground');
+                    });
+                    
+                    e.currentTarget.classList.add('tab-active');
+                    e.currentTarget.classList.remove('text-muted-foreground');
+                    
+                    // TODO: Implement actual tab content switching
+                    console.log('Switching to tab:', tab);
+                });
+            });
+            
+            // Task completion simulation
+            document.querySelectorAll('.task-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const taskDiv = e.target.closest('.border');
+                    const title = taskDiv.querySelector('h3');
+                    
+                    if (e.target.checked) {
+                        title.classList.add('line-through', 'opacity-60');
+                        // TODO: Update task status in database
+                    } else {
+                        title.classList.remove('line-through', 'opacity-60');
+                    }
+                });
+            });
+            
+            // Demo explanation modal
+            document.querySelectorAll('[data-event="click:explainTask"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    explanationModal.classList.remove('hidden');
+                });
+            });
+            
+            document.querySelectorAll('[data-event="click:closeExplanationModal"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    explanationModal.classList.add('hidden');
+                });
+            });
+        })();
+    </script>
+</body>
+</html>
