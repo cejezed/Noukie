@@ -1,25 +1,28 @@
-// /api/index.ts
+// api/index.ts
 import express from "express";
 import cors from "cors";
-import bodyParser from "body-parser";
-import { registerRoutes } from "../server/routes"; // <— pad checken: waar jouw routes.ts staat
+import { registerRoutes } from "../server/routes";
 
 const app = express();
 
-// Je zit straks same-origin (frontend + api op hetzelfde domein).
-// CORS is dan eigenlijk niet nodig, maar kan geen kwaad:
-app.use(cors({
-  origin: "*",
-  credentials: true,
-  methods: ["GET","POST","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type","Authorization"],
-}));
+// CORS: alleen aanzetten als je het echt nodig hebt (bijv. lokale dev)
+if (process.env.CORS_ENABLED === "1") {
+  // Optioneel: stel toegestane origins in via env, komma-gescheiden
+  const origins = process.env.CORS_ORIGIN?.split(",").map(s => s.trim());
+  app.use(
+    cors({
+      origin: origins?.length ? origins : true, // true = reflect requesting origin
+      methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+      allowedHeaders: ["Content-Type", "Authorization"],
+    })
+  );
+}
 
-app.use(bodyParser.json({ limit: "5mb" }));
-app.use(bodyParser.urlencoded({ extended: true }));
+// Body parsing
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ extended: true }));
 
-// Registreer AL je bestaande endpoints
-await registerRoutes(app);
+// Jouw API-routes
+registerRoutes(app);
 
-// Export de Express app als Vercel serverless handler
 export default app;
