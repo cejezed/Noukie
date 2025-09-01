@@ -29,13 +29,13 @@ import { apiRequest } from "@/lib/queryClient";
 const colorThemes = [
   { 
     id: "purple", 
-    name: "Paars (Standaard)", 
+    name: "Paars", 
     primary: "hsl(262.1, 83.3%, 57.8%)",
     preview: "bg-purple-500"
   },
   { 
     id: "blue", 
-    name: "Blauw", 
+    name: "Blauw (Standaard)", 
     primary: "hsl(217.2, 91.2%, 59.8%)",
     preview: "bg-blue-500"
   },
@@ -56,8 +56,8 @@ const colorThemes = [
 // Jaargang opties per onderwijstype
 const educationLevels = {
   vmbo: ["vmbo 1", "vmbo 2", "vmbo 3", "vmbo 4"],
-  havo: ["havo 3", "havo 4", "havo 5"],
-  vwo: ["vwo 3", "vwo 4", "vwo 5", "vwo 6"],
+  havo: ["havo 3", "havo 2", "havo 3", "havo 4", "havo 5"],
+  vwo: ["vwo 1", "vwo 2", "vwo 3", "vwo 4", "vwo 5", "vwo 6"],
   mbo: ["mbo 1", "mbo 2", "mbo 3", "mbo 4"]
 };
 

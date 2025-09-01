@@ -9,109 +9,109 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   role: text("role", { enum: ["student", "parent"] }).notNull(),
   // Student-specific fields
-  educationLevel: text("education_level", { enum: ["vmbo", "havo", "vwo", "mbo"] }), // null for parents
+  education_level: text("education_level", { enum: ["vmbo", "havo", "vwo", "mbo"] }), // null for parents
   grade: integer("grade"), // 1-6 for all levels, null for parents
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
 export const courses = pgTable("courses", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull(),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
   name: text("name").notNull(),
   level: text("level").default("havo5"),
 });
 
 export const schedule = pgTable("schedule", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  courseId: uuid("course_id").references(() => courses.id),
-  dayOfWeek: integer("day_of_week"), // 1=ma, 7=zo
-  startTime: time("start_time"),
-  endTime: time("end_time"),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  course_id: uuid("course_id").references(() => courses.id),
+  day_of_week: integer("day_of_week"), // 1=ma, 7=zo
+  start_time: time("start_time"),
+  end_time: time("end_time"),
   kind: text("kind", { enum: ["les", "toets", "sport", "werk", "afspraak", "hobby", "anders"] }).default("les"),
   title: text("title"),
   date: date("date"), // for one-off tests
-  isRecurring: boolean("is_recurring").default(false), // true for weekly recurring items, false for one-time events
+  is_recurring: boolean("is_recurring").default(false), // true for weekly recurring items, false for one-time events
 });
 
 export const tasks = pgTable("tasks", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  courseId: uuid("course_id").references(() => courses.id),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  course_id: uuid("course_id").references(() => courses.id),
   title: text("title").notNull(),
-  dueAt: timestamp("due_at", { withTimezone: true }),
-  estMinutes: integer("est_minutes"),
+  due_at: timestamp("due_at", { withTimezone: true }),
+  est_minutes: integer("est_minutes"),
   priority: integer("priority").default(0),
   status: text("status").default("todo"),
   source: text("source"), // 'check-in' | 'manual'
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
 export const sessions = pgTable("sessions", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  happenedAt: timestamp("happened_at", { withTimezone: true }).default(sql`now()`),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  happened_at: timestamp("happened_at", { withTimezone: true }).default(sql`now()`),
   transcript: text("transcript"),
   summary: text("summary"),
-  coachText: text("coach_text"),
+  coach_text: text("coach_text"),
 });
 
 export const materials = pgTable("materials", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  courseId: uuid("course_id").references(() => courses.id),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  course_id: uuid("course_id").references(() => courses.id),
   title: text("title"),
   chapter: text("chapter"),
   paragraph: text("paragraph"),
-  textContent: text("text_content"), // OCR result
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  text_content: text("text_content"), // OCR result
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
-export const quizResults = pgTable("quiz_results", {
+export const quiz_results = pgTable("quiz_results", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  courseId: uuid("course_id").references(() => courses.id),
-  materialId: uuid("material_id").references(() => materials.id),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  course_id: uuid("course_id").references(() => courses.id),
+  material_id: uuid("material_id").references(() => materials.id),
   score: integer("score"),
-  weakPoints: text("weak_points"),
+  weak_points: text("weak_points"),
 });
 
-export const parentChildRelationships = pgTable("parent_child_relationships", {
+export const parent_child_relationships = pgTable("parent_child_relationships", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  parentId: uuid("parent_id").references(() => users.id).notNull(),
-  childId: uuid("child_id").references(() => users.id).notNull(),
-  childEmail: text("child_email").notNull(), // For lookup during setup
-  childName: text("child_name").notNull(), // For display in parent dashboard
-  isConfirmed: boolean("is_confirmed").default(false), // Child can confirm/deny
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  parent_id: uuid("parent_id").references(() => users.id).notNull(),
+  child_id: uuid("child_id").references(() => users.id).notNull(),
+  child_email: text("child_email").notNull(), // For lookup during setup
+  child_name: text("child_name").notNull(), // For display in parent dashboard
+  is_confirmed: boolean("is_confirmed").default(false), // Child can confirm/deny
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
-export const calendarIntegrations = pgTable("calendar_integrations", {
+export const calendar_integrations = pgTable("calendar_integrations", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull().unique(),
+  user_id: uuid("user_id").references(() => users.id).notNull().unique(),
   provider: text("provider", { enum: ["google"] }).notNull(),
-  accessToken: text("access_token"),
-  refreshToken: text("refresh_token"),
-  tokenExpires: timestamp("token_expires", { withTimezone: true }),
-  calendarId: text("calendar_id"), // primary calendar ID to sync
-  lastSyncAt: timestamp("last_sync_at", { withTimezone: true }),
-  syncEnabled: boolean("sync_enabled").default(true),
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  access_token: text("access_token"),
+  refresh_token: text("refresh_token"),
+  token_expires: timestamp("token_expires", { withTimezone: true }),
+  calendar_id: text("calendar_id"), // primary calendar ID to sync
+  last_sync_at: timestamp("last_sync_at", { withTimezone: true }),
+  sync_enabled: boolean("sync_enabled").default(true),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
-export const importedEvents = pgTable("imported_events", {
+export const imported_events = pgTable("imported_events", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  scheduleId: uuid("schedule_id").references(() => schedule.id).notNull(),
-  externalId: text("external_id").notNull(), // Google Calendar event ID
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  schedule_id: uuid("schedule_id").references(() => schedule.id).notNull(),
+  external_id: text("external_id").notNull(), // Google Calendar event ID
   provider: text("provider", { enum: ["google"] }).notNull(),
-  lastModified: timestamp("last_modified", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  last_modified: timestamp("last_modified", { withTimezone: true }),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
-  createdAt: true,
+  created_at: true,
 }); // Allow id to be provided (for Supabase auth sync)
 
 export const insertCourseSchema = createInsertSchema(courses).omit({
@@ -124,36 +124,36 @@ export const insertScheduleSchema = createInsertSchema(schedule).omit({
 
 export const insertTaskSchema = createInsertSchema(tasks).omit({
   id: true,
-  createdAt: true,
+  created_at: true,
 });
 
 export const insertSessionSchema = createInsertSchema(sessions).omit({
   id: true,
-  happenedAt: true,
+  happened_at: true,
 });
 
 export const insertMaterialSchema = createInsertSchema(materials).omit({
   id: true,
-  createdAt: true,
+  created_at: true,
 });
 
-export const insertQuizResultSchema = createInsertSchema(quizResults).omit({
+export const insertQuizResultSchema = createInsertSchema(quiz_results).omit({
   id: true,
 });
 
-export const insertParentChildRelationshipSchema = createInsertSchema(parentChildRelationships).omit({
+export const insertParentChildRelationshipSchema = createInsertSchema(parent_child_relationships).omit({
   id: true,
-  createdAt: true,
+  created_at: true,
 });
 
-export const insertCalendarIntegrationSchema = createInsertSchema(calendarIntegrations).omit({
+export const insertCalendarIntegrationSchema = createInsertSchema(calendar_integrations).omit({
   id: true,
-  createdAt: true,
+  created_at: true,
 });
 
-export const insertImportedEventSchema = createInsertSchema(importedEvents).omit({
+export const insertImportedEventSchema = createInsertSchema(imported_events).omit({
   id: true,
-  createdAt: true,
+  created_at: true,
 });
 
 // Types
@@ -169,11 +169,11 @@ export type Session = typeof sessions.$inferSelect;
 export type InsertSession = z.infer<typeof insertSessionSchema>;
 export type Material = typeof materials.$inferSelect;
 export type InsertMaterial = z.infer<typeof insertMaterialSchema>;
-export type QuizResult = typeof quizResults.$inferSelect;
+export type QuizResult = typeof quiz_results.$inferSelect;
 export type InsertQuizResult = z.infer<typeof insertQuizResultSchema>;
-export type ParentChildRelationship = typeof parentChildRelationships.$inferSelect;
+export type ParentChildRelationship = typeof parent_child_relationships.$inferSelect;
 export type InsertParentChildRelationship = z.infer<typeof insertParentChildRelationshipSchema>;
-export type CalendarIntegration = typeof calendarIntegrations.$inferSelect;
+export type CalendarIntegration = typeof calendar_integrations.$inferSelect;
 export type InsertCalendarIntegration = z.infer<typeof insertCalendarIntegrationSchema>;
-export type ImportedEvent = typeof importedEvents.$inferSelect;
+export type ImportedEvent = typeof imported_events.$inferSelect;
 export type InsertImportedEvent = z.infer<typeof insertImportedEventSchema>;

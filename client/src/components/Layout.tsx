@@ -1,4 +1,4 @@
-import { Home, Calendar, Plus, HelpCircle, Settings } from "lucide-react";
+import * as Icons from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -11,13 +11,15 @@ export default function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const { user, signOut } = useAuth();
 
-  const tabs = [
-    { id: "vandaag", label: "Vandaag", icon: Home, path: "/" },
-    { id: "rooster", label: "Rooster", icon: Calendar, path: "/rooster" },
-    { id: "toevoegen", label: "Toevoegen", icon: Plus, path: "/toevoegen" },
-    { id: "help", label: "Uitleg", icon: HelpCircle, path: "/help" },
-    { id: "instellingen", label: "Instellingen", icon: Settings, path: "/instellingen" },
-  ];
+const tabs = [
+  { id: "vandaag",  label: "Vandaag",  icon: Icons.Home, path: "/" },
+  { id: "rooster",  label: "Rooster",  icon: Icons.Calendar, path: "/rooster" },
+  { id: "mental",   label: "Mentaal",  icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" }, // fallback
+  { id: "toevoegen",label: "Toevoegen",icon: Icons.Plus, path: "/toevoegen" },
+  { id: "help",     label: "Uitleg",   icon: Icons.HelpCircle, path: "/help" },
+  { id: "instellingen", label: "Instellingen", icon: Icons.Settings, path: "/instellingen" },
+];
+
 
   // No tabs for parents - they only have the dashboard
   const isParent = user?.user_metadata?.role === "parent";
@@ -62,7 +64,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Bottom Navigation - Only for students */}
       {!isParent && (
         <nav className="fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-md bg-card border-t border-border" data-testid="bottom-navigation">
-          <div className="grid grid-cols-5 gap-0">
+          <div className="grid grid-cols-6 gap-0">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = location === tab.path;

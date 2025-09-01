@@ -1,5 +1,4 @@
-import * as React from "react";
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,7 +24,7 @@ export default function ParentDashboard() {
   });
 
   // Check if this is the first time visiting the parent dashboard
-  React.useEffect(() => {
+ useEffect(() => {
     const hasSeenIntroKey = `hasSeenParentIntro_${user?.id}`;
     const hasSeenBefore = localStorage.getItem(hasSeenIntroKey);
     

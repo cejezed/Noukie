@@ -1,16 +1,5 @@
-import { db } from "./db";
-import { eq, and, gte, lte, desc, sql } from "drizzle-orm";
+import { supabase } from "./db";
 import {
-  users,
-  courses,
-  schedule,
-  tasks,
-  sessions,
-  materials,
-  quizResults,
-  parentChildRelationships,
-  calendarIntegrations,
-  importedEvents,
   type User,
   type InsertUser,
   type Course,
@@ -32,9 +21,6 @@ import {
   type ImportedEvent,
   type InsertImportedEvent,
 } from "@shared/schema";
-
-// Use the centralized database connection from db.ts
-// No need for separate database initialization - use the imported db
 
 export interface IStorage {
   // Users
@@ -59,6 +45,7 @@ export interface IStorage {
   getTasksByDateRange(userId: string, startDate: Date, endDate: Date): Promise<Task[]>;
   createTask(task: InsertTask): Promise<Task>;
   updateTaskStatus(id: string, status: string): Promise<void>;
+  deleteTask(id: string): Promise<void>;
   
   // Sessions
   getLastSession(userId: string): Promise<Session | undefined>;
@@ -92,58 +79,119 @@ export interface IStorage {
 
 export class PostgresStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.id, id));
-    return result[0];
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows found
+    return data || undefined;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const result = await db.select().from(users).where(eq(users.email, email));
-    return result[0];
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', email)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || undefined;
   }
 
   async createUser(user: InsertUser): Promise<User> {
-    const result = await db.insert(users).values(user).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('users')
+      .insert(user)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async getCoursesByUserId(userId: string): Promise<Course[]> {
-    return await db.select().from(courses).where(eq(courses.userId, userId));
+    const { data, error } = await supabase
+      .from('courses')
+      .select('*')
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    return data || [];
   }
 
   async createCourse(course: InsertCourse): Promise<Course> {
-    const result = await db.insert(courses).values(course).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('courses')
+      .insert(course)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async deleteCourse(id: string): Promise<void> {
-    await db.delete(courses).where(eq(courses.id, id));
+    const { error } = await supabase
+      .from('courses')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 
   async getScheduleByUserId(userId: string): Promise<Schedule[]> {
-    return await db.select().from(schedule).where(eq(schedule.userId, userId));
+    const { data, error } = await supabase
+      .from('schedule')
+      .select('*')
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    return data || [];
   }
 
   async getScheduleByDay(userId: string, dayOfWeek: number): Promise<Schedule[]> {
-    return await db.select().from(schedule)
-      .where(and(
-        eq(schedule.userId, userId),
-        eq(schedule.dayOfWeek, dayOfWeek)
-      ));
+    const { data, error } = await supabase
+      .from('schedule')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('day_of_week', dayOfWeek);
+    
+    if (error) throw error;
+    return data || [];
   }
 
   async createScheduleItem(scheduleItem: InsertSchedule): Promise<Schedule> {
-    const result = await db.insert(schedule).values(scheduleItem).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('schedule')
+      .insert(scheduleItem)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async deleteScheduleItem(id: string): Promise<void> {
-    await db.delete(schedule).where(eq(schedule.id, id));
+    const { error } = await supabase
+      .from('schedule')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 
   async getTasksByUserId(userId: string): Promise<Task[]> {
-    return await db.select().from(tasks)
-      .where(eq(tasks.userId, userId))
-      .orderBy(desc(tasks.priority), tasks.dueAt);
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .order('priority', { ascending: false })
+      .order('due_at', { ascending: true });
+    
+    if (error) throw error;
+    return data || [];
   }
 
   async getTodayTasks(userId: string): Promise<Task[]> {
@@ -152,48 +200,72 @@ export class PostgresStorage implements IStorage {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    return await db.select().from(tasks)
-      .where(and(
-        eq(tasks.userId, userId),
-        gte(tasks.dueAt, today),
-        lte(tasks.dueAt, tomorrow)
-      ))
-      .orderBy(desc(tasks.priority));
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('due_at', today.toISOString())
+      .lt('due_at', tomorrow.toISOString())
+      .order('priority', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
   }
 
   async getTasksByDateRange(userId: string, startDate: Date, endDate: Date): Promise<Task[]> {
-    const taskResults = await db.select().from(tasks)
-      .where(and(
-        eq(tasks.userId, userId),
-        gte(tasks.dueAt, startDate),
-        lte(tasks.dueAt, endDate)
-      ))
-      .orderBy(desc(tasks.priority), tasks.dueAt);
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('due_at', startDate.toISOString())
+      .lte('due_at', endDate.toISOString())
+      .order('priority', { ascending: false })
+      .order('due_at', { ascending: true });
     
-    return taskResults;
+    if (error) throw error;
+    return data || [];
   }
 
   async createTask(task: InsertTask): Promise<Task> {
-    const result = await db.insert(tasks).values(task).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert(task)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async deleteTask(id: string): Promise<void> {
-    await db.delete(tasks).where(eq(tasks.id, id));
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 
   async updateTaskStatus(id: string, status: string): Promise<void> {
-    await db.update(tasks)
-      .set({ status })
-      .where(eq(tasks.id, id));
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status })
+      .eq('id', id);
+    
+    if (error) throw error;
   }
 
   async getLastSession(userId: string): Promise<Session | undefined> {
-    const result = await db.select().from(sessions)
-      .where(eq(sessions.userId, userId))
-      .orderBy(desc(sessions.happenedAt))
-      .limit(1);
-    return result[0];
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('happened_at', { ascending: false })
+      .limit(1)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || undefined;
   }
 
   async getTodaySession(userId: string): Promise<Session | undefined> {
@@ -202,103 +274,178 @@ export class PostgresStorage implements IStorage {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const result = await db.select().from(sessions)
-      .where(and(
-        eq(sessions.userId, userId),
-        gte(sessions.happenedAt, today),
-        lte(sessions.happenedAt, tomorrow)
-      ))
-      .limit(1);
-    return result[0];
+    const { data, error } = await supabase
+      .from('sessions')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('happened_at', today.toISOString())
+      .lt('happened_at', tomorrow.toISOString())
+      .limit(1)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || undefined;
   }
 
   async createSession(session: InsertSession): Promise<Session> {
-    const result = await db.insert(sessions).values(session).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('sessions')
+      .insert(session)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async createMaterial(material: InsertMaterial): Promise<Material> {
-    const result = await db.insert(materials).values(material).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('materials')
+      .insert(material)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async createQuizResult(result: InsertQuizResult): Promise<QuizResult> {
-    const queryResult = await db.insert(quizResults).values(result).returning();
-    return queryResult[0];
+    const { data, error } = await supabase
+      .from('quiz_results')
+      .insert(result)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   // Parent-Child Relationship methods
   async createParentChildRelationship(relationship: InsertParentChildRelationship): Promise<ParentChildRelationship> {
-    const result = await db.insert(parentChildRelationships).values(relationship).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('parent_child_relationships')
+      .insert(relationship)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async getChildrenByParentId(parentId: string): Promise<ParentChildRelationship[]> {
-    return await db.select().from(parentChildRelationships)
-      .where(eq(parentChildRelationships.parentId, parentId));
+    const { data, error } = await supabase
+      .from('parent_child_relationships')
+      .select('*')
+      .eq('parent_id', parentId);
+    
+    if (error) throw error;
+    return data || [];
   }
 
   async findChildByEmail(childEmail: string): Promise<User | undefined> {
-    const result = await db.select().from(users)
-      .where(eq(users.email, childEmail));
-    return result[0];
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('email', childEmail)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || undefined;
   }
 
   async confirmRelationship(relationshipId: string): Promise<void> {
-    await db.update(parentChildRelationships)
-      .set({ isConfirmed: true })
-      .where(eq(parentChildRelationships.id, relationshipId));
+    const { error } = await supabase
+      .from('parent_child_relationships')
+      .update({ is_confirmed: true })
+      .eq('id', relationshipId);
+    
+    if (error) throw error;
   }
 
   async getPendingParentRequests(childId: string): Promise<ParentChildRelationship[]> {
-    return await db.select().from(parentChildRelationships)
-      .where(and(
-        eq(parentChildRelationships.childId, childId),
-        eq(parentChildRelationships.isConfirmed, false)
-      ));
+    const { data, error } = await supabase
+      .from('parent_child_relationships')
+      .select('*')
+      .eq('child_id', childId)
+      .eq('is_confirmed', false);
+    
+    if (error) throw error;
+    return data || [];
   }
 
   // Calendar Integration methods
   async getCalendarIntegration(userId: string): Promise<CalendarIntegration | undefined> {
-    const result = await db.select().from(calendarIntegrations)
-      .where(eq(calendarIntegrations.userId, userId));
-    return result[0];
+    const { data, error } = await supabase
+      .from('calendar_integrations')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || undefined;
   }
 
   async createCalendarIntegration(integration: InsertCalendarIntegration): Promise<CalendarIntegration> {
-    const result = await db.insert(calendarIntegrations).values(integration).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('calendar_integrations')
+      .insert(integration)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async updateCalendarIntegration(userId: string, updates: Partial<CalendarIntegration>): Promise<void> {
-    await db.update(calendarIntegrations)
-      .set(updates)
-      .where(eq(calendarIntegrations.userId, userId));
+    const { error } = await supabase
+      .from('calendar_integrations')
+      .update(updates)
+      .eq('user_id', userId);
+    
+    if (error) throw error;
   }
 
   async deleteCalendarIntegration(userId: string): Promise<void> {
-    await db.delete(calendarIntegrations)
-      .where(eq(calendarIntegrations.userId, userId));
+    const { error } = await supabase
+      .from('calendar_integrations')
+      .delete()
+      .eq('user_id', userId);
+    
+    if (error) throw error;
   }
 
   // Imported Events methods
   async getImportedEvent(userId: string, externalId: string): Promise<ImportedEvent | undefined> {
-    const result = await db.select().from(importedEvents)
-      .where(and(
-        eq(importedEvents.userId, userId),
-        eq(importedEvents.externalId, externalId)
-      ));
-    return result[0];
+    const { data, error } = await supabase
+      .from('imported_events')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('external_id', externalId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error;
+    return data || undefined;
   }
 
   async createImportedEvent(event: InsertImportedEvent): Promise<ImportedEvent> {
-    const result = await db.insert(importedEvents).values(event).returning();
-    return result[0];
+    const { data, error } = await supabase
+      .from('imported_events')
+      .insert(event)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data;
   }
 
   async getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]> {
-    return await db.select().from(importedEvents)
-      .where(eq(importedEvents.userId, userId));
+    const { data, error } = await supabase
+      .from('imported_events')
+      .select('*')
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    return data || [];
   }
 }
 

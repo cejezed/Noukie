@@ -171,7 +171,7 @@ export default function Login() {
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4" data-testid="signup-form">
                 <div>
-                  <Label htmlFor="signup-name">Volledige naam</Label>
+                  <Label htmlFor="signup-name">Naam</Label>
                   <Input
                     id="signup-name"
                     type="text"
