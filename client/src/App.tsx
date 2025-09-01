@@ -14,6 +14,7 @@ import Help from "@/pages/Help";
 import Instellingen from "@/pages/Instellingen";
 import ParentDashboard from "@/pages/ParentDashboard";
 import NotFound from "@/pages/not-found";
+import MentalPage from "@/pages/Mental";
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
@@ -36,6 +37,7 @@ function AuthenticatedApp() {
       <Layout>
         <Switch>
           <Route path="/" component={ParentDashboard} />
+          <Route path="/mental" component={MentalPage} /> 
           <Route component={NotFound} />
         </Switch>
       </Layout>
@@ -48,6 +50,7 @@ function AuthenticatedApp() {
       <Switch>
         <Route path="/" component={Vandaag} />
         <Route path="/rooster" component={Planning} />
+       <Route path="/mental" component={MentalPage} />
         <Route path="/toevoegen" component={Rooster} />
         <Route path="/help" component={Help} />
         <Route path="/instellingen" component={Instellingen} />

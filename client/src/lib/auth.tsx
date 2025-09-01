@@ -1,6 +1,6 @@
 import * as React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
-import { User } from "@supabase/supabase-js";
+import type { User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 
 interface AuthContextType {
@@ -8,11 +8,11 @@ interface AuthContextType {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (
-    email: string, 
-    password: string, 
-    name: string, 
-    role: "student" | "parent", 
-    educationLevel?: string, 
+    email: string,
+    password: string,
+    name: string,
+    role: "student" | "parent",
+    educationLevel?: string,
     grade?: string
   ) => Promise<void>;
   signOut: () => Promise<void>;
@@ -24,61 +24,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // ---- DEV/TEST pad: geen Supabase geconfigureerd ----
   useEffect(() => {
+    if (!supabase) {
+      // Kies: dummy user (voorkomt redirect naar <Login/> en laat je /voice-test gebruiken)
+      const dummy = {
+        id: "dev-user",
+        email: "dev@example.com",
+        user_metadata: { role: "student", name: "Dev Tester" },
+      } as unknown as User;
+
+      setUser(dummy);     // of: setUser(null) als je guest-mode wilt
+      setLoading(false);
+      return;
+    }
+
+    // ---- PROD pad: echte Supabase aanwezig ----
+    let unsub: (() => void) | undefined;
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
 
-    return () => subscription.unsubscribe();
+    unsub = () => subscription.unsubscribe();
+    return () => unsub?.();
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    // For development, use direct Supabase auth
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    if (!supabase) {
+      // no-op in voice-test mode
+      return;
+    }
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
   };
 
   const signUp = async (
-    email: string, 
-    password: string, 
-    name: string, 
-    role: "student" | "parent", 
-    educationLevel?: string, 
+    email: string,
+    password: string,
+    name: string,
+    role: "student" | "parent",
+    educationLevel?: string,
     grade?: string
   ) => {
-    // For development, use direct Supabase auth with extended data
+    if (!supabase) {
+      // no-op in voice-test mode
+      return;
+    }
     const userData: any = { name, role };
-    if (role === 'student' && educationLevel && grade) {
+    if (role === "student" && educationLevel && grade) {
       userData.educationLevel = educationLevel;
       userData.grade = grade;
     }
-
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: userData
-      }
+      options: { data: userData },
     });
     if (error) throw error;
   };
 
   const signOut = async () => {
-    // For development, use direct Supabase auth
+    if (!supabase) {
+      // no-op in voice-test mode
+      return;
+    }
     const { error } = await supabase.auth.signOut();
     if (error) throw error;
   };
 
-  const value = {
+  const value: AuthContextType = {
     user,
     loading,
     signIn,
@@ -86,11 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signOut,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

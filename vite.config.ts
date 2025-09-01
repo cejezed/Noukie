@@ -1,12 +1,12 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 export default defineConfig({
   plugins: [
     react(),
-    runtimeErrorOverlay(),
+    // Commented out the runtime error overlay plugin that was causing the persistent error overlay
+    // runtimeErrorOverlay(),
     // Replit-only plugin in dev; wordt niet gebruikt op Vercel (NODE_ENV=production)
     ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID
       ? [ (await import("@replit/vite-plugin-cartographer")).cartographer() ]
@@ -31,5 +31,8 @@ export default defineConfig({
   base: "/", // correcte asset-paden in productie
   server: {
     fs: { strict: true, deny: ["**/.*"] },
+    hmr: {
+      overlay: false
+    }
   },
 });

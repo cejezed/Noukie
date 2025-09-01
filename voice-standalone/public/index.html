@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>🎙️ Voice Standalone Test</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:32px auto;padding:16px}
+    .card{border:1px solid #eee;border-radius:16px;padding:16px}
+    button{padding:10px 14px;border-radius:10px;border:none;cursor:pointer}
+    .start{background:#111;color:#fff} .stop{background:#e11d48;color:#fff}
+    .mono{white-space:pre-wrap;border:1px solid #eee;border-radius:8px;padding:12px}
+    .muted{opacity:.7}
+  </style>
+</head>
+<body>
+  <h1>🎙️ Voice Standalone Test</h1>
+  <p class="muted">Opnemen → transcriptie → AI-antwoord</p>
+
+  <div class="card">
+    <div>
+      <button id="start" class="start">Start opname</button>
+      <button id="stop"  class="stop"  disabled>Stop</button>
+      <span id="status" class="muted">Status: idle</span>
+    </div>
+
+    <div id="err" style="display:none;margin-top:8px;color:#b91c1c"></div>
+
+    <div id="transcriptWrap" style="display:none;margin-top:12px">
+      <div class="muted" style="font-size:12px;text-transform:uppercase">Transcript</div>
+      <div id="transcript" class="mono"></div>
+    </div>
+
+    <div id="replyWrap" style="display:none;margin-top:12px">
+      <div class="muted" style="font-size:12px;text-transform:uppercase">AI-coach</div>
+      <div id="reply" class="mono"></div>
+    </div>
+  </div>
+
+  <script>
+    const btnStart = document.getElementById("start");
+    const btnStop  = document.getElementById("stop");
+    const statusEl = document.getElementById("status");
+    const errEl    = document.getElementById("err");
+    const tWrap    = document.getElementById("transcriptWrap");
+    const rWrap    = document.getElementById("replyWrap");
+    const tEl      = document.getElementById("transcript");
+    const rEl      = document.getElementById("reply");
+
+    let mr=null, stream=null, chunks=[];
+    let maxTimer=null;
+
+    function setStatus(s){ statusEl.textContent = "Status: " + s; }
+    function showErr(msg){ errEl.style.display="block"; errEl.textContent = msg; }
+
+    function pickMime(){
+      const opts=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/mpeg","audio/wav"];
+      for(const m of opts){ if(window.MediaRecorder?.isTypeSupported?.(m)) return m; }
+      return "";
+    }
+
+    btnStart.onclick = async () => {
+      try{
+        errEl.style.display="none"; tWrap.style.display="none"; rWrap.style.display="none";
+        setStatus("recording");
+        stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+        mr = new MediaRecorder(stream, { mimeType: pickMime() || undefined });
+        chunks = [];
+        mr.ondataavailable = e => { if(e.data?.size) chunks.push(e.data); };
+        mr.onstop = onStop;
+        mr.start();
+        btnStart.disabled = true; btnStop.disabled = false;
+        maxTimer = setTimeout(()=>btnStop.click(), 60_000);
+      }catch(e){ showErr(e?.message||"Microfoon fout"); setStatus("error"); }
+    };
+
+    btnStop.onclick = () => {
+      if(!mr) return;
+      mr.stop(); stream?.getTracks().forEach(t=>t.stop()); stream=null;
+      btnStart.disabled=false; btnStop.disabled=true;
+      setStatus("idle");
+      if(maxTimer) clearTimeout(maxTimer);
+    };
+
+    async function onStop(){
+      try{
+        setStatus("uploading");
+        const blob = new Blob(chunks, { type: mr?.mimeType || "audio/webm" });
+
+        let ext = "webm";
+        if (blob.type.includes("mpeg") || blob.type.includes("mp3")) ext = "mp3";
+        else if (blob.type.includes("mp4")) ext = "m4a";
+        else if (blob.type.includes("wav")) ext = "wav";
+
+        const form = new FormData();
+        form.append("audio", blob, `recording.${ext}`);
+
+        const r = await fetch("/ingest", { method:"POST", body: form });
+        const data = await r.json();
+        if(!r.ok || data.error){ showErr(data.error || ("HTTP "+r.status)); setStatus("error"); return; }
+
+        tEl.textContent = data.text || "";
+        rEl.textContent = data.agentReply || "";
+        tWrap.style.display = data.text ? "block":"none";
+        rWrap.style.display = data.agentReply ? "block":"none";
+        setStatus("done");
+      }catch(e){ showErr(e?.message||"Upload mislukt"); setStatus("error"); }
+    }
+  </script>
+</body>
+</html>

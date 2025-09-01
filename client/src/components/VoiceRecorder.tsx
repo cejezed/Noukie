@@ -3,15 +3,12 @@ import { useState } from "react";
 import { Mic, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/lib/auth";
 
 export default function VoiceRecorder() {
-  const { user } = useAuth();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [status, setStatus] = useState<string>("Tik om op te nemen");
   
   const { isRecording, recordingTime, startRecording, stopRecording } = useVoiceRecorder({
@@ -24,38 +21,26 @@ export default function VoiceRecorder() {
     }
   });
 
-  const planMutation = useMutation({
+  const voiceMutation = useMutation({
     mutationFn: async (audioBlob: Blob) => {
-      // First, transcribe the audio
       const formData = new FormData();
       const fileExtension = audioBlob.type.includes('wav') ? 'wav' : 
                            audioBlob.type.includes('ogg') ? 'ogg' : 
                            audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
       formData.append("audio", audioBlob, `recording.${fileExtension}`);
       
-      const asrResponse = await apiRequest("POST", "/api/asr", formData);
-      const { transcript } = await asrResponse.json();
-      
-      // Then, create a plan
-      const planResponse = await apiRequest("POST", "/api/plan", {
-        transcript,
-        date: new Date().toISOString(),
-        userId: user?.id
-      });
-      
-      return await planResponse.json();
+      const response = await apiRequest("POST", "/api/ingest", formData);
+      return await response.json();
     },
     onSuccess: (data) => {
       toast({
-        title: "Check-in voltooid!",
-        description: `${data.tasks.length} nieuwe taken aangemaakt.`,
+        title: "Voice check-in voltooid!",
+        description: data.agentReply,
+        duration: 8000,
       });
-      
-      // Invalidate tasks cache
-      queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
     },
     onError: (error) => {
-      console.error("Planning error:", error);
+      console.error("Voice error:", error);
       toast({
         title: "Fout bij verwerken",
         description: "Probeer het opnieuw.",
@@ -65,7 +50,7 @@ export default function VoiceRecorder() {
   });
 
   const handleRecording = (audioBlob: Blob) => {
-    planMutation.mutate(audioBlob);
+    voiceMutation.mutate(audioBlob);
   };
 
   const formatTime = (seconds: number) => {
@@ -75,21 +60,23 @@ export default function VoiceRecorder() {
   };
 
   return (
-    <section className="p-6" data-testid="voice-recorder">
+    <section className="p-6 border rounded-lg bg-card" data-testid="voice-recorder">
       <div className="text-center">
-        <h2 className="text-xl font-semibold mb-2">Dagelijkse Check-in</h2>
+        <h2 className="text-xl font-semibold mb-2">Voice Check-in</h2>
         <p className="text-muted-foreground mb-6">Vertel me over je taken en huiswerk</p>
         
         <div className="relative">
           <Button
             className={`voice-button w-20 h-20 rounded-full text-white font-semibold transition-all duration-200 relative overflow-hidden ${
-              isRecording ? 'recording-pulse' : ''
+              isRecording 
+                ? 'bg-destructive hover:bg-destructive/90 animate-pulse' 
+                : 'bg-primary hover:bg-primary/90'
             }`}
             onClick={isRecording ? stopRecording : startRecording}
-            disabled={planMutation.isPending}
+            disabled={voiceMutation.isPending}
             data-testid={isRecording ? "button-stop-recording" : "button-start-recording"}
           >
-            {planMutation.isPending ? (
+            {voiceMutation.isPending ? (
               <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full" />
             ) : isRecording ? (
               <Square className="w-8 h-8" />
@@ -106,16 +93,25 @@ export default function VoiceRecorder() {
         </div>
         
         <div className="mt-4 text-sm" data-testid="recording-status">
-          {planMutation.isPending ? (
+          {voiceMutation.isPending ? (
             <span className="text-primary">Bezig met verwerken...</span>
           ) : isRecording ? (
             <span className="text-destructive">Aan het opnemen...</span>
-          ) : recordingTime > 0 && !planMutation.isPending ? (
+          ) : recordingTime > 0 && !voiceMutation.isPending ? (
             <span className="text-primary">Opname voltooid</span>
           ) : (
             <span className="text-muted-foreground">{status}</span>
           )}
         </div>
+
+        {voiceMutation.isSuccess && voiceMutation.data && (
+          <div className="mt-4 p-4 bg-muted rounded-lg text-left">
+            <div className="text-sm font-medium text-muted-foreground mb-2">Transcript:</div>
+            <div className="text-sm mb-3 italic">{voiceMutation.data.text}</div>
+            <div className="text-sm font-medium text-muted-foreground mb-2">Coach:</div>
+            <div className="text-sm">{voiceMutation.data.agentReply}</div>
+          </div>
+        )}
       </div>
     </section>
   );
