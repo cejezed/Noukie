@@ -1,6 +1,6 @@
 {
   "framework": "vite",
-  "installCommand": "npm --prefix client ci",
+ "installCommand": "npm --prefix client install",
   "buildCommand": "npm --prefix client run build",
   "outputDirectory": "client/dist",
   "functions": {
