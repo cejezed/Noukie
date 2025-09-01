@@ -1,7 +1,7 @@
 {
   "framework": "vite",
-  "installCommand": "cd client && npm ci",
-  "buildCommand": "cd client && npm run build",
+  "installCommand": "npm --prefix client ci",
+  "buildCommand": "npm --prefix client run build",
   "outputDirectory": "client/dist",
   "functions": {
     "api/**/*.ts": {
