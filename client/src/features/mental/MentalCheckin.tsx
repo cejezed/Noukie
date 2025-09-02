@@ -356,7 +356,7 @@ export default function MentalCheckin({
       <div className="flex flex-col gap-3">
         <QuickScale label="Slaap" value={sleep} onChange={setSleep} />
         <QuickScale label="Spanning" value={tension} onChange={setTension} />
-        <QuickScale label="Eten" value={eating} onChange={setEating} />
+        <QuickScale label="Energie" value={eating} onChange={setEating} />
 
         <label className="flex items-center gap-2 text-sm select-none">
           <input

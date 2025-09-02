@@ -43,6 +43,11 @@ const MAPPINGS: Array<{ re: RegExp; map: Record<string, string> }> = [
     re: /\/rest\/v1\/schedule(\b|\/|\?)/,
     map: { userId: "user_id", courseId: "course_id", startsAt: "starts_at", endsAt: "ends_at" },
   },
+  // --- NIEUWE REGEL HIERONDER TOEGEVOEGD ---
+  {
+    re: /\/rest\/v1\/chatsessies(\b|\/|\?)/,
+    map: { userId: "user_id", updatedAt: "updated_at" },
+  },
 ];
 
 export const supabase = createClient(
@@ -56,9 +61,6 @@ export const supabase = createClient(
           for (const { re, map } of MAPPINGS) {
             if (re.test(url)) {
               init.body = maybeRemap(init.body, map);
-              // debug: laat zien dat het werkt
-              // @ts-ignore
-              console.warn("[SUPABASE→REMAPPED]", url, init.body);
               break;
             }
           }

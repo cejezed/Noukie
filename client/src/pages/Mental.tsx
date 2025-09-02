@@ -18,8 +18,8 @@ export default function MentalPage() {
         helpWebhookUrl={import.meta.env.VITE_MENTAL_HELP_WEBHOOK}
         rewardTiers={[
           { points: 25, label: "Samen shoppen" },
-          { points: 50, label: "Dagje Walibi" },
-          { points: 100, label: "Phantasialand" },
+          { points: 100, label: "Dagje Walibi" },
+          { points: 150, label: "Phantasialand" },
         ]}
         allowNegative={false}
       />

@@ -10,7 +10,9 @@ import Login from "@/pages/Login";
 import Vandaag from "@/pages/Vandaag";
 import Planning from "@/pages/Planning";
 import Rooster from "@/pages/Rooster";
-import Help from "@/pages/Help";
+// --- DEZE REGEL IS VERVANGEN ---
+import LeerChat from "@/pages/LeerChat"; // Was: import Help from "@/pages/Help";
+// --- EINDE VERVANGING ---
 import Instellingen from "@/pages/Instellingen";
 import ParentDashboard from "@/pages/ParentDashboard";
 import NotFound from "@/pages/not-found";
@@ -44,20 +46,20 @@ function AuthenticatedApp() {
     );
   }
 
-  // Student interface (default)
-  return (
-    <Layout>
-      <Switch>
-        <Route path="/" component={Vandaag} />
-        <Route path="/rooster" component={Planning} />
-       <Route path="/mental" component={MentalPage} />
-        <Route path="/toevoegen" component={Rooster} />
-        <Route path="/help" component={Help} />
-        <Route path="/instellingen" component={Instellingen} />
-        <Route component={NotFound} />
-      </Switch>
-    </Layout>
-  );
+// Student interface (default)
+return (
+  <Layout>
+    <Switch>
+      <Route path="/" component={Vandaag} />
+      <Route path="/rooster" component={Planning} />
+      <Route path="/mental" component={MentalPage} />
+      <Route path="/toevoegen" component={Rooster} />
+      <Route path="/help" component={LeerChat} /> {/* Deze regel was al correct */}
+      <Route path="/instellingen" component={Instellingen} />
+      <Route component={NotFound} />
+    </Switch>
+  </Layout>
+);
 }
 
 function Router() {
