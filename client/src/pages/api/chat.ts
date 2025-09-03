@@ -1,15 +1,16 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { Request, Response } from 'express';
 import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import OpenAI from 'openai';
+import { supabase } from '../../lib/supabase';
 
-// Initialiseer de AI clients met je API-sleutels uit de environment variabelen
+// Initialiseer de AI clients met de API-sleutels uit de environment variabelen
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
-// Helper functie om een afbeelding van een URL op te halen en om te zetten naar het formaat dat Gemini begrijpt
+// Helper functie om een afbeelding van een URL om te zetten naar het formaat dat Gemini nodig heeft
 async function urlToGoogleGenerativePart(url: string): Promise<Part> {
   const response = await fetch(url);
-  const contentType = response.headers.get("content-type") || 'image/jpeg'; // Standaardwaarde als mime-type niet wordt gevonden
+  const contentType = response.headers.get("content-type") || 'image/jpeg';
   const buffer = await response.arrayBuffer();
   return {
     inlineData: {
@@ -19,70 +20,48 @@ async function urlToGoogleGenerativePart(url: string): Promise<Part> {
   };
 }
 
-// De response die we terugsturen naar de front-end
-type ChatApiResponse = {
-  aiResponseText: string;
-  aiAudioUrl: string; // Dit wordt een base64 data URL
-};
-
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ChatApiResponse | { error: string }>
-) {
-  // Accepteer alleen POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
+export async function handleChatRequest(req: Request, res: Response) {
   try {
-    const { opgave, poging, course, imageUrl } = req.body;
-
-    // --- Stap 1: Genereer de tekst met Gemini (nu met optionele afbeelding) ---
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
-
-    // Bouw de prompt voor de AI
-    const promptText = `
-      Je bent een vriendelijke en behulpzame AI-tutor voor een havo 5-leerling.
-      Het vak is: ${course}.
-      De vraag van de leerling is: "${opgave}"
-      De eigen poging van de leerling is: "${poging || 'De leerling heeft nog niets geprobeerd.'}"
-      
-      Analyseer de vraag en de eventuele afbeelding.
-      Je taak is om de leerling te begeleiden, niet om het antwoord voor te kauwen.
-      - Geef een stapsgewijze, Socratic-stijl hint.
-      - Stel een wedervraag die de leerling aan het denken zet.
-      - Leg het onderliggende concept kort en helder uit als dat nodig is.
-      - Houd je antwoord beknopt en direct gericht op de vraag.
-      - Antwoord in het Nederlands.
-    `;
-
-    let generationResult;
-    if (imageUrl) {
-      // Als er een afbeelding is, maak een multimodale request
-      const imagePart = await urlToGoogleGenerativePart(imageUrl);
-      generationResult = await model.generateContent([promptText, imagePart]);
-    } else {
-      // Anders, een standaard tekst request
-      generationResult = await model.generateContent(promptText);
+    // Stap 1: Valideer de gebruiker op dezelfde manier als in courses.ts
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'Geen autorisatie-token.' });
+    }
+    
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !user) {
+      return res.status(401).json({ error: 'Niet geautoriseerd.' });
     }
 
-    const aiResponseText = generationResult.response.text();
+    const { opgave, poging, course, imageUrl } = req.body;
 
-    // --- Stap 2: Zet de tekst om naar spraak met OpenAI ---
-    const mp3 = await openai.audio.speech.create({
-      model: "tts-1",
-      voice: "nova",
-      input: aiResponseText,
-    });
+    // Stap 2: Genereer de AI-tekst met Gemini
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
+    const promptText = `
+      Je bent een vriendelijke AI-tutor voor een havo 5-leerling. Het vak is: ${course}.
+      De vraag is: "${opgave}". De eigen poging is: "${poging || 'Niet ingevuld.'}"
+      Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socratic-stijl hint en een wedervraag. Antwoord in het Nederlands.
+    `;
     
+    const contentParts: (string | Part)[] = [promptText];
+    if (imageUrl) {
+      const imagePart = await urlToGoogleGenerativePart(imageUrl);
+      contentParts.push(imagePart);
+    }
+    
+    const result = await model.generateContent({ contents: [{ role: "user", parts: contentParts }] });
+    const aiResponseText = result.response.text();
+
+    // Stap 3: Genereer de audio met OpenAI
+    const mp3 = await openai.audio.speech.create({ model: "tts-1", voice: "nova", input: aiResponseText });
     const buffer = Buffer.from(await mp3.arrayBuffer());
     const aiAudioUrl = `data:audio/mpeg;base64,${buffer.toString('base64')}`;
 
-    // --- Stap 3: Stuur het complete antwoord terug naar de front-end ---
+    // Stap 4: Stuur het complete antwoord terug naar de front-end
     res.status(200).json({ aiResponseText, aiAudioUrl });
-
-  } catch (error) {
-    console.error("Fout in de /api/chat route:", error);
-    res.status(500).json({ error: 'Interne serverfout bij het verwerken van de AI-vraag.' });
+  } catch (error: any) {
+    console.error("Fout in /api/chat route:", error);
+    res.status(500).json({ error: 'Interne serverfout.', details: error.message });
   }
 }
+

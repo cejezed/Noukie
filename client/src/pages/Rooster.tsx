@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Plus, X, FileText, HelpCircle } from "lucide-react";
+import { Trash2, Plus, X, FileText, HelpCircle, CalendarX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -131,7 +131,6 @@ export default function Rooster() {
     }
   });
 
-
   // Delete course mutation
   const deleteCourseMutation = useMutation({
     mutationFn: async (courseId: string) => {
@@ -177,6 +176,30 @@ export default function Rooster() {
     }
   });
 
+  // Cancel lesson mutation
+  const cancelLessonMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("PATCH", `/api/schedule/${id}/cancel`, {
+        status: "cancelled"
+      });
+      return await response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
+      toast({
+        title: "Les afgezegd",
+        description: "De les is gemarkeerd als uitgevallen.",
+      });
+    },
+    onError: (error) => {
+      console.error("Cancel lesson error:", error);
+      toast({
+        title: "Fout",
+        description: "Kon les niet afzeggen.",
+        variant: "destructive",
+      });
+    }
+  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,8 +232,14 @@ export default function Rooster() {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Weet je zeker dat je dit roosteritem wilt verwijderen?")) {
+    if (confirm("Weet je zeker dat je dit roosteritem permanent wilt verwijderen?")) {
       deleteMutation.mutate(id);
+    }
+  };
+
+  const handleCancelLesson = (id: string, title: string) => {
+    if (confirm(`Weet je zeker dat je de les "${title}" wilt afzeggen?`)) {
+      cancelLessonMutation.mutate(id);
     }
   };
 
@@ -524,7 +553,6 @@ export default function Rooster() {
         </CardContent>
       </Card>
 
-
       {/* Current Schedule */}
       <div>
         <h3 className="font-medium mb-4">Huidig rooster</h3>
@@ -551,17 +579,25 @@ export default function Rooster() {
                   <div className="space-y-2">
                     {items.map((item) => {
                       const course = getCourseById(item.courseId);
+                      const isCancelled = (item as any).status === "cancelled";
                       
                       return (
                         <div
                           key={item.id}
-                          className="bg-card border border-border rounded-lg p-4 flex items-center justify-between"
+                          className={`bg-card border border-border rounded-lg p-4 flex items-center justify-between ${
+                            isCancelled ? 'opacity-50 bg-muted/50' : ''
+                          }`}
                           data-testid={`schedule-item-${item.id}`}
                         >
                           <div>
                             <div className="flex items-center space-x-2 mb-1">
-                              <h5 className="font-medium">
+                              <h5 className={`font-medium ${isCancelled ? 'line-through' : ''}`}>
                                 {item.title || course?.name || "Activiteit"}
+                                {isCancelled && (
+                                  <span className="ml-2 text-xs text-red-600 font-normal">
+                                    (UITGEVALLEN)
+                                  </span>
+                                )}
                               </h5>
                               <span className={`text-xs px-2 py-0.5 rounded font-medium ${getKindColor(item.kind || 'les')}`}>
                                 {getKindLabel(item.kind || 'les')}
@@ -579,16 +615,35 @@ export default function Rooster() {
                             )}
                           </div>
                           
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(item.id)}
-                            className="text-destructive hover:bg-destructive/10"
-                            disabled={deleteMutation.isPending}
-                            data-testid={`button-delete-${item.id}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                          <div className="flex items-center space-x-1">
+                            {/* Les afzeggen knop - alleen voor lessen die niet al zijn afgezegd */}
+                            {(item.kind === "les" || item.kind === "toets") && !isCancelled && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleCancelLesson(item.id, item.title || course?.name || "les")}
+                                className="text-orange-600 hover:bg-orange-100"
+                                disabled={cancelLessonMutation.isPending}
+                                data-testid={`button-cancel-${item.id}`}
+                                title="Les afzeggen"
+                              >
+                                <CalendarX className="w-4 h-4" />
+                              </Button>
+                            )}
+                            
+                            {/* Volledig verwijderen knop */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(item.id)}
+                              className="text-destructive hover:bg-destructive/10"
+                              disabled={deleteMutation.isPending}
+                              data-testid={`button-delete-${item.id}`}
+                              title="Permanent verwijderen"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       );
                     })}

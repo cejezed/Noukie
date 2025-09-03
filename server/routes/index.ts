@@ -4,8 +4,8 @@ import { Router } from "express";
 import http from "http";
 
 // Subrouters
-import tasksRouter from "./tasks";
-import planRouter from "./plan"; // zorg dat server/routes/plan.ts bestaat
+//import tasksRouter from "./tasks";
+//import planRouter from "./plan"; // zorg dat server/routes/plan.ts bestaat
 
 /**
  * Mount alle API-routes onder /api en geef de Node HTTP server terug.
@@ -15,8 +15,8 @@ export async function registerRoutes(app: Express) {
   const api = Router();
 
   // ---- API subroutes
-  api.use("/tasks", tasksRouter);
-  api.use("/plan", planRouter);
+//  api.use("/tasks", tasksRouter);
+//  api.use("/plan", planRouter);
 
   // 404 voor onbekende /api routes
   api.use((req: Request, res: Response) => {

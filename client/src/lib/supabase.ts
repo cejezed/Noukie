@@ -51,8 +51,12 @@ const MAPPINGS: Array<{ re: RegExp; map: Record<string, string> }> = [
 ];
 
 export const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL!,
-  import.meta.env.VITE_SUPABASE_ANON_KEY!,
+  typeof window !== 'undefined' 
+    ? import.meta.env.VITE_SUPABASE_URL!
+    : process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!,
+  typeof window !== 'undefined'
+    ? import.meta.env.VITE_SUPABASE_ANON_KEY!
+    : process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!,
   {
     global: {
       fetch: async (input: RequestInfo, init?: RequestInit) => {

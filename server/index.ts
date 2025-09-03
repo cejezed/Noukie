@@ -6,10 +6,10 @@ import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
 
-import { registerRoutes } from "./routes";
+import { registerRoutes } from "./routes.ts";
 import { setupVite, serveStatic, log } from "./vite";
 import { startDailyReminderCron } from "./services/cron";
-import { cronManager } from "./cronJobs";
+//import { cronManager } from "./cronJobs";
 import voiceTestRouter from "./routes/voiceTest";
 
 // ----------------------------------------------------------------------------
@@ -197,12 +197,12 @@ app.post("/api/ingest", upload.single("audio"), async (req: Request, res: Respon
   // Cron jobs
   // ----------------------------------------------------------------------------
   if (app.get("env") === "production") {
-    startDailyReminderCron();
-    log("Daily reminder cron job started");
-    cronManager.start();
+//    startDailyReminderCron();
+ //   log("Daily reminder cron job started");
+//    cronManager.start();
   } else {
     // In development alleen cronManager als je dat wilt testen
-    cronManager.start();
+   // cronManager.start();
   }
 
   // ----------------------------------------------------------------------------

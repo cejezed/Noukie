@@ -38,6 +38,7 @@ export interface IStorage {
   getScheduleByDay(userId: string, dayOfWeek: number): Promise<Schedule[]>;
   createScheduleItem(schedule: InsertSchedule): Promise<Schedule>;
   deleteScheduleItem(id: string): Promise<void>;
+  updateScheduleStatus(id: string, status: string): Promise<void>;
   
   // Tasks
   getTasksByUserId(userId: string): Promise<Task[]>;
@@ -180,6 +181,32 @@ export class PostgresStorage implements IStorage {
       .eq('id', id);
     
     if (error) throw error;
+  }
+
+  export class PostgresStorage implements IStorage {
+  // ... andere functies ...
+
+  async deleteScheduleItem(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('schedule')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+  }
+
+  // ← VOEG HIER DE NIEUWE FUNCTIE TOE:
+  async updateScheduleStatus(id: string, status: string): Promise<void> {
+    const { error } = await supabase
+      .from('schedule')
+      .update({ status })
+      .eq('id', id);
+    
+    if (error) throw error;
+  }
+
+  async getTasksByUserId(userId: string): Promise<Task[]> {
+    // ... rest van de functies
   }
 
   async getTasksByUserId(userId: string): Promise<Task[]> {
