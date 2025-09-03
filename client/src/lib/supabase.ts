@@ -50,17 +50,17 @@ const MAPPINGS: Array<{ re: RegExp; map: Record<string, string> }> = [
   },
 ];
 
+//... (uw helper functies en MAPPINGS blijven hetzelfde)
+
+// VERVANG DE OUDE CREATECLIENT DOOR DEZE:
 export const supabase = createClient(
-  typeof window !== 'undefined' 
-    ? import.meta.env.VITE_SUPABASE_URL!
-    : process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL!,
-  typeof window !== 'undefined'
-    ? import.meta.env.VITE_SUPABASE_ANON_KEY!
-    : process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY!,
+  // Gebruik de VITE_ prefix voor zowel client als server
+  (typeof window!== 'undefined'? import.meta.env.VITE_SUPABASE_URL : process.env.VITE_SUPABASE_URL)!,
+  (typeof window!== 'undefined'? import.meta.env.VITE_SUPABASE_ANON_KEY : process.env.VITE_SUPABASE_ANON_KEY)!,
   {
     global: {
       fetch: async (input: RequestInfo, init?: RequestInit) => {
-        const url = typeof input === "string" ? input : input.toString();
+        const url = typeof input === "string"? input : input.toString();
         if (init?.body) {
           for (const { re, map } of MAPPINGS) {
             if (re.test(url)) {

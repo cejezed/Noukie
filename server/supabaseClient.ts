@@ -2,8 +2,9 @@ import { createClient } from "@supabase/supabase-js";
 
 export function supabaseForRequest(accessToken?: string) {
   return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!, // géén service_role hier
-    { global: { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} } }
+    // Gebruik hier OOK de variabelen met de VITE_ prefix
+    process.env.VITE_SUPABASE_URL!,
+    process.env.VITE_SUPABASE_ANON_KEY!,
+    { global: { headers: accessToken? { Authorization: `Bearer ${accessToken}` } : {} } }
   );
 }
