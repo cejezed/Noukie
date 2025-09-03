@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
 import type { Task, Course, Schedule } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient"; // Belangrijk: gebruik de apiRequest
 
 export default function Planning() {
   const { user } = useAuth();
@@ -15,7 +16,8 @@ export default function Planning() {
   const getWeekDates = (offset: number) => {
     const today = new Date();
     const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay() + 1 + (offset * 7)); // Start from Monday
+    // Zet de start van de week op maandag
+    startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1) + (offset * 7));
     
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -28,9 +30,10 @@ export default function Planning() {
   // Get tasks for the week (stable cache key using date strings)
   const weekKey = `${startOfWeek.toISOString().split('T')[0]}-${endOfWeek.toISOString().split('T')[0]}`;
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ['/api/tasks', user?.id, 'week', weekKey],
+    queryKey: ['tasks', user?.id, 'week', weekKey],
     queryFn: async () => {
-      const response = await fetch(`/api/tasks/${user?.id}/week/${startOfWeek.toISOString()}/${endOfWeek.toISOString()}`);
+      // Deze API route moet nog worden aangemaakt in de server
+      const response = await apiRequest("GET", `/api/tasks/${user?.id}/week/${startOfWeek.toISOString()}/${endOfWeek.toISOString()}`);
       return response.json();
     },
     enabled: !!user?.id,
@@ -38,13 +41,13 @@ export default function Planning() {
 
   // Get courses
   const { data: courses = [] } = useQuery<Course[]>({
-    queryKey: ['/api/courses', user?.id],
+    queryKey: ['courses', user?.id],
     enabled: !!user?.id,
   });
 
   // Get schedule
   const { data: schedule = [] } = useQuery<Schedule[]>({
-    queryKey: ['/api/schedule', user?.id],
+    queryKey: ['schedule', user?.id],
     enabled: !!user?.id,
   });
 
@@ -64,20 +67,18 @@ export default function Planning() {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
       
-      // Get tasks for this day
       const dayTasks = tasks.filter(task => {
-        if (!task.dueAt) return false;
-        const taskDate = new Date(task.dueAt);
+        if (!task.due_at) return false;
+        const taskDate = new Date(task.due_at);
         return taskDate.toDateString() === date.toDateString();
       });
 
-      // Get schedule items for this day
       const daySchedule = schedule.filter(item => {
         if (item.date) {
           const itemDate = new Date(item.date);
           return itemDate.toDateString() === date.toDateString();
         }
-        return item.dayOfWeek === (date.getDay() === 0 ? 7 : date.getDay());
+        return item.day_of_week === (date.getDay() === 0 ? 7 : date.getDay());
       });
 
       days.push({
@@ -173,7 +174,7 @@ export default function Planning() {
               <div className="p-4 space-y-3">
                 {/* Schedule Items */}
                 {day.schedule.map((item, scheduleIndex) => {
-                  const course = getCourseById(item.courseId);
+                  const course = getCourseById(item.course_id);
                   
                   const getKindLabel = (kind: string) => {
                     switch (kind) {
@@ -205,7 +206,7 @@ export default function Planning() {
                     <div key={scheduleIndex} className="flex items-center space-x-3 text-sm" data-testid={`schedule-item-${index}-${scheduleIndex}`}>
                       <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(item.kind || 'les')}`} />
                       <span className="text-muted-foreground w-16">
-                        {item.startTime && formatTime(item.startTime)}
+                        {item.start_time && formatTime(item.start_time)}
                       </span>
                       <span>
                         {item.title || course?.name || 'Activiteit'} - {getKindLabel(item.kind || 'les')}
@@ -223,7 +224,7 @@ export default function Planning() {
                 {day.tasks.length > 0 && (
                   <div className="pt-2 border-t border-border space-y-2">
                     {day.tasks.map((task) => {
-                      const course = getCourseById(task.courseId);
+                      const course = getCourseById(task.course_id);
                       
                       return (
                         <div key={task.id} className="flex items-center space-x-3" data-testid={`task-item-${task.id}`}>
@@ -235,9 +236,9 @@ export default function Planning() {
                           <span className={`flex-1 text-sm ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
                             {task.title}
                           </span>
-                          {task.estMinutes && (
+                          {task.est_minutes && (
                             <span className="text-xs text-muted-foreground">
-                              {task.estMinutes}m
+                              {task.est_minutes}m
                             </span>
                           )}
                         </div>
@@ -260,3 +261,4 @@ export default function Planning() {
     </div>
   );
 }
+

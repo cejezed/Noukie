@@ -39,8 +39,8 @@ export default function LeerChat() {
 
   const [audioStatus, setAudioStatus] = useState<"idle" | "playing" | "paused">("idle");
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Vakken laden: 2-staps aanpak + fallback (schedule.title)
@@ -105,7 +105,7 @@ export default function LeerChat() {
   }, [user, selectedCourse]);
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // Chatgeschiedenis laden (let op: tabelnaam is case-sensitive: "Chatsessies")
+  // Chatgeschiedenis laden
   // ─────────────────────────────────────────────────────────────────────────────
   useEffect(() => {
     const loadChatHistory = async () => {
@@ -116,7 +116,7 @@ export default function LeerChat() {
       }
 
       const { data, error } = await supabase
-        .from("Chatsessies")
+        .from("chatsessies") // CORRECTIE: tabelnaam in kleine letters
         .select("id, berichten")
         .eq("user_id", user.id)
         .eq("vak", selectedCourse)
@@ -203,16 +203,16 @@ export default function LeerChat() {
       const finalMessagesList = [...newMessagesList, aiMessage];
       setMessages(finalMessagesList);
 
-      // Opslaan in Supabase (case-sensitive tabelnaam!)
+      // Opslaan in Supabase
       if (currentSessionId) {
         const { error: upErr } = await supabase
-          .from("Chatsessies")
+          .from("chatsessies") // CORRECTIE: tabelnaam in kleine letters
           .update({ berichten: finalMessagesList, updated_at: new Date().toISOString() })
           .eq("id", currentSessionId);
         if (upErr) throw upErr;
       } else {
         const { data: ins, error: insErr } = await supabase
-          .from("Chatsessies")
+          .from("chatsessies") // CORRECTIE: tabelnaam in kleine letters
           .insert({ user_id: user.id, vak: selectedCourse, berichten: finalMessagesList })
           .select("id")
           .single();
@@ -439,3 +439,4 @@ export default function LeerChat() {
     </div>
   );
 }
+

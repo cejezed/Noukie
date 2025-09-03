@@ -1,4 +1,3 @@
-// server/index.ts
 import "dotenv/config";
 import express, { type Request, type Response, type NextFunction } from "express";
 import cors from "cors";
@@ -11,6 +10,13 @@ import { setupVite, serveStatic, log } from "./vite";
 import { startDailyReminderCron } from "./services/cron";
 //import { cronManager } from "./cronJobs";
 import voiceTestRouter from "./routes/voiceTest";
+
+// --- CORRECTIE: .ts extensie toegevoegd aan de imports ---
+import { handleCreateCourse, handleGetCourses } from "./handlers/courses.ts";
+import { handleGetTasksForToday } from "./handlers/tasks.ts";
+import { handleGetSchedule } from "./handlers/schedule.ts";
+import { handleChatRequest } from "./handlers/chat.ts";
+// ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
 // App bootstrap
@@ -35,6 +41,14 @@ app.get("/api/health", (_req, res) => {
     time: new Date().toISOString(),
   });
 });
+
+// --- NIEUW: Registreer de API routes voor de app ---
+app.post('/api/courses', handleCreateCourse);
+app.get('/api/courses/:userId', handleGetCourses);
+app.get('/api/tasks/:userId/today', handleGetTasksForToday);
+app.get('/api/schedule/:userId', handleGetSchedule);
+app.post('/api/chat', handleChatRequest);
+// ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
 // Voice ingest (multer + OpenAI Whisper) – ongewijzigde logica, opgeschoond
@@ -198,7 +212,7 @@ app.post("/api/ingest", upload.single("audio"), async (req: Request, res: Respon
   // ----------------------------------------------------------------------------
   if (app.get("env") === "production") {
 //    startDailyReminderCron();
- //   log("Daily reminder cron job started");
+//   log("Daily reminder cron job started");
 //    cronManager.start();
   } else {
     // In development alleen cronManager als je dat wilt testen
@@ -232,3 +246,4 @@ app.post("/api/ingest", upload.single("audio"), async (req: Request, res: Respon
   console.error("Fatal bootstrap error:", e);
   process.exit(1);
 });
+

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Plus, X, FileText, HelpCircle, CalendarX } from "lucide-react";
+import { Trash2, Plus, X, HelpCircle, CalendarX, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,282 +10,156 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAuth } from "@/lib/auth";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase"; // Importeer Supabase
+import { useToast } from "@/components/ui/use-toast";
 import type { Schedule, Course } from "@shared/schema";
 
 interface ScheduleFormData {
-  courseId: string;
-  dayOfWeek: number;
-  startTime: string;
-  endTime: string;
+  course_id: string;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
   kind: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders";
   title: string;
   date?: string;
-  isRecurring: boolean;
+  is_recurring: boolean;
 }
 
 export default function Rooster() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const userId = user?.id ?? "";
   
   const [formData, setFormData] = useState<ScheduleFormData>({
-    courseId: "none",
-    dayOfWeek: 1,
-    startTime: "",
-    endTime: "",
+    course_id: "none",
+    day_of_week: 1,
+    start_time: "",
+    end_time: "",
     kind: "les",
     title: "",
-    isRecurring: false,
+    is_recurring: false,
   });
 
-  const [courseFormData, setCourseFormData] = useState({
-    name: "",
-    level: "havo5",
-  });
-
+  const [courseFormData, setCourseFormData] = useState({ name: "", color: "#4287f5" });
   const [showCourseForm, setShowCourseForm] = useState(false);
-  const [showDefaultSubjects, setShowDefaultSubjects] = useState(false);
 
-  // Get user's schedule
+  // === QUERIES (direct naar Supabase) ===
   const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
-    queryKey: ['/api/schedule', user?.id],
-    enabled: !!user?.id,
+    queryKey: ['schedule', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('schedule').select('*').eq('user_id', userId);
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: !!userId,
   });
 
-  // Get user's courses
   const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
-    queryKey: ['/api/courses', user?.id],
-    enabled: !!user?.id,
+    queryKey: ['courses', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('courses').select('*').eq('user_id', userId);
+      if (error) throw new Error(error.message);
+      return data;
+    },
+    enabled: !!userId,
   });
 
-  // Create schedule item mutation
+  // === MUTATIONS (direct naar Supabase) ===
   const createMutation = useMutation({
-    mutationFn: async (data: ScheduleFormData) => {
-      const response = await apiRequest("POST", "/api/schedule", {
-        userId: user?.id,
-        courseId: data.courseId === "none" ? null : data.courseId || null,
-        dayOfWeek: data.dayOfWeek,
-        startTime: data.startTime,
-        endTime: data.endTime,
-        kind: data.kind,
-        title: data.title || null,
-        date: data.date || null,
-        isRecurring: data.isRecurring,
-      });
-      return await response.json();
+    mutationFn: async (data: Omit<Schedule, 'id' | 'created_at' | 'user_id' | 'status'> & { user_id: string }) => {
+      const { error } = await supabase.from('schedule').insert(data);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
-      setFormData({
-        courseId: "none",
-        dayOfWeek: 1,
-        startTime: "",
-        endTime: "",
-        kind: "les",
-        title: "",
-        isRecurring: false,
-      });
-      toast({
-        title: "Toegevoegd!",
-        description: "Het roosteritem is succesvol toegevoegd.",
-      });
+      queryClient.invalidateQueries({ queryKey: ['schedule', userId] });
+      setFormData({ course_id: "none", day_of_week: 1, start_time: "", end_time: "", kind: "les", title: "", is_recurring: false });
+      toast({ title: "Toegevoegd!", description: "Het roosteritem is succesvol toegevoegd." });
     },
     onError: (error) => {
-      console.error("Create schedule error:", error);
-      toast({
-        title: "Fout",
-        description: "Kon roosteritem niet toevoegen.",
-        variant: "destructive",
-      });
+      toast({ title: "Fout", description: `Kon roosteritem niet toevoegen: ${error.message}`, variant: "destructive" });
     }
   });
 
-  // Create course mutation
   const createCourseMutation = useMutation({
-    mutationFn: async (data: { name: string; level: string }) => {
-      const response = await apiRequest("POST", "/api/courses", {
-        userId: user?.id,
-        name: data.name,
-        level: data.level,
-      });
-      return await response.json();
+    mutationFn: async (data: { name: string; color: string; user_id: string }) => {
+      const { error } = await supabase.from('courses').insert(data);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
-      setCourseFormData({ name: "", level: "havo5" });
+      queryClient.invalidateQueries({ queryKey: ['courses', userId] });
+      setCourseFormData({ name: "", color: "#4287f5" });
       setShowCourseForm(false);
-      toast({
-        title: "Vak toegevoegd!",
-        description: "Het vak is succesvol toegevoegd.",
-      });
+      toast({ title: "Vak toegevoegd!", description: "Het vak is succesvol toegevoegd." });
     },
     onError: (error) => {
-      console.error("Create course error:", error);
-      toast({
-        title: "Fout",
-        description: "Kon vak niet toevoegen.",
-        variant: "destructive",
-      });
+      toast({ title: "Fout", description: `Kon vak niet toevoegen: ${error.message}`, variant: "destructive" });
     }
   });
 
-  // Delete course mutation
-  const deleteCourseMutation = useMutation({
-    mutationFn: async (courseId: string) => {
-      const response = await apiRequest("DELETE", `/api/courses/${courseId}`);
-      return await response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
-      toast({
-        title: "Vak verwijderd!",
-        description: "Het vak is succesvol verwijderd.",
-      });
-    },
-    onError: (error) => {
-      console.error("Delete course error:", error);
-      toast({
-        title: "Fout",
-        description: "Kon vak niet verwijderen.",
-        variant: "destructive",
-      });
-    }
-  });
-
-  // Delete schedule item mutation
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/schedule/${id}`);
+      const { error } = await supabase.from('schedule').delete().eq('id', id);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
-      toast({
-        title: "Verwijderd",
-        description: "Het roosteritem is verwijderd.",
-      });
+      queryClient.invalidateQueries({ queryKey: ['schedule', userId] });
+      toast({ title: "Verwijderd", description: "Het roosteritem is verwijderd." });
     },
     onError: (error) => {
-      console.error("Delete schedule error:", error);
-      toast({
-        title: "Fout",
-        description: "Kon roosteritem niet verwijderen.",
-        variant: "destructive",
-      });
+      toast({ title: "Fout", description: `Kon roosteritem niet verwijderen: ${error.message}`, variant: "destructive" });
     }
   });
 
-  // Cancel lesson mutation
   const cancelLessonMutation = useMutation({
     mutationFn: async (id: string) => {
-      const response = await apiRequest("PATCH", `/api/schedule/${id}/cancel`, {
-        status: "cancelled"
-      });
-      return await response.json();
+      const { error } = await supabase.from('schedule').update({ status: 'cancelled' }).eq('id', id);
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
-      toast({
-        title: "Les afgezegd",
-        description: "De les is gemarkeerd als uitgevallen.",
-      });
+      queryClient.invalidateQueries({ queryKey: ['schedule', userId] });
+      toast({ title: "Les afgezegd", description: "De les is gemarkeerd als uitgevallen." });
     },
     onError: (error) => {
-      console.error("Cancel lesson error:", error);
-      toast({
-        title: "Fout",
-        description: "Kon les niet afzeggen.",
-        variant: "destructive",
-      });
+      toast({ title: "Fout", description: `Kon les niet afzeggen: ${error.message}`, variant: "destructive" });
     }
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.startTime || !formData.endTime) {
-      toast({
-        title: "Incomplete gegevens",
-        description: "Vul alle verplichte velden in (start- en eindtijd).",
-        variant: "destructive",
-      });
+    if (!formData.start_time || !formData.end_time) {
+      toast({ title: "Incomplete gegevens", description: "Vul een start- en eindtijd in.", variant: "destructive" });
       return;
     }
-    
-    createMutation.mutate(formData);
+    createMutation.mutate({ ...formData, user_id: userId, course_id: formData.course_id === "none" ? null : formData.course_id });
   };
 
   const handleCourseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (!courseFormData.name.trim()) {
-      toast({
-        title: "Vak naam vereist",
-        description: "Vul een vaknaam in.",
-        variant: "destructive",
-      });
+      toast({ title: "Vak naam vereist", description: "Vul een vaknaam in.", variant: "destructive" });
       return;
     }
-    
-    createCourseMutation.mutate(courseFormData);
+    createCourseMutation.mutate({ ...courseFormData, user_id: userId });
   };
 
   const handleDelete = (id: string) => {
-    if (confirm("Weet je zeker dat je dit roosteritem permanent wilt verwijderen?")) {
-      deleteMutation.mutate(id);
-    }
+    deleteMutation.mutate(id);
   };
 
-  const handleCancelLesson = (id: string, title: string) => {
-    if (confirm(`Weet je zeker dat je de les "${title}" wilt afzeggen?`)) {
-      cancelLessonMutation.mutate(id);
-    }
+  const handleCancelLesson = (id: string) => {
+    cancelLessonMutation.mutate(id);
   };
+  
+  // ... (rest van de UI helper functies zoals getCourseById, getDayName, etc. blijven hetzelfde)
+  const getCourseById = (courseId: string | null) => courses.find(c => c.id === courseId);
+  const getDayName = (dayOfWeek: number) => ["", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"][dayOfWeek] || "";
+  const formatTime = (timeString: string) => timeString.slice(0, 5);
+  const getKindLabel = (kind: string) => ({ les: "Les", toets: "Toets", sport: "Sport", werk: "Werk", afspraak: "Afspraak", hobby: "Hobby", anders: "Anders" }[kind] || kind);
+  const getKindColor = (kind: string) => ({ les: "bg-blue-100 text-blue-800", toets: "bg-red-100 text-red-800", sport: "bg-green-100 text-green-800", werk: "bg-purple-100 text-purple-800", afspraak: "bg-orange-100 text-orange-800", hobby: "bg-pink-100 text-pink-800", anders: "bg-gray-100 text-gray-800" }[kind] || "bg-muted");
 
-  const getCourseById = (courseId: string | null) => {
-    if (!courseId) return undefined;
-    return courses.find(c => c.id === courseId);
-  };
-
-  const getDayName = (dayOfWeek: number) => {
-    const days = ["", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"];
-    return days[dayOfWeek] || "";
-  };
-
-  const formatTime = (timeString: string) => {
-    return timeString.slice(0, 5); // "HH:MM"
-  };
-
-  const getKindLabel = (kind: string) => {
-    switch (kind) {
-      case "les": return "Les";
-      case "toets": return "Toets";
-      case "sport": return "Sport/Training";
-      case "werk": return "Bijbaan/Werk";
-      case "afspraak": return "Afspraak";
-      case "hobby": return "Hobby/Activiteit";
-      case "anders": return "Anders";
-      default: return kind;
-    }
-  };
-
-  const getKindColor = (kind: string) => {
-    switch (kind) {
-      case "les": return "bg-blue-100 text-blue-800";
-      case "toets": return "bg-red-100 text-red-800";
-      case "sport": return "bg-green-100 text-green-800";
-      case "werk": return "bg-purple-100 text-purple-800";
-      case "afspraak": return "bg-orange-100 text-orange-800";
-      case "hobby": return "bg-pink-100 text-pink-800";
-      case "anders": return "bg-gray-100 text-gray-800";
-      default: return "bg-muted text-muted-foreground";
-    }
-  };
-
-  // Group schedule by day for better display
   const groupedSchedule = schedule.reduce((acc, item) => {
-    const key = item.dayOfWeek || 0;
+    const key = item.day_of_week || 0;
     if (!acc[key]) acc[key] = [];
     acc[key].push(item);
     return acc;
@@ -293,29 +167,19 @@ export default function Rooster() {
 
   return (
     <div className="p-6" data-testid="page-rooster">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">Activiteit toevoegen</h2>
-      </div>
+      <h2 className="text-xl font-semibold mb-6">Activiteit toevoegen</h2>
 
       {/* Schedule Form */}
       <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Nieuwe activiteit</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Nieuwe activiteit</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4" data-testid="schedule-form">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Formulier velden blijven grotendeels hetzelfde... */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="kind">Type activiteit</Label>
-                <Select 
-                  value={formData.kind} 
-                  onValueChange={(value: "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders") => 
-                    setFormData(prev => ({ ...prev, kind: value }))
-                  }
-                >
-                  <SelectTrigger data-testid="select-kind">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={formData.kind} onValueChange={(value: any) => setFormData(prev => ({ ...prev, kind: value }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="les">Les</SelectItem>
                     <SelectItem value="toets">Toets</SelectItem>
@@ -327,37 +191,20 @@ export default function Rooster() {
                   </SelectContent>
                 </Select>
               </div>
-              
               <div>
                 <Label htmlFor="title">Titel</Label>
-                <Input
-                  id="title"
-                  value={formData.title}
-                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder={formData.kind === 'sport' ? 'bijv. Hockeytraining AHC' : formData.kind === 'werk' ? 'bijv. Albert Heijn' : 'Titel van activiteit'}
-                  data-testid="input-title"
-                />
+                <Input id="title" value={formData.title} onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))} placeholder="Titel van activiteit" />
               </div>
             </div>
 
-            {/* Only show course selection for lessons and tests */}
             {(formData.kind === 'les' || formData.kind === 'toets') && (
               <div>
                 <Label htmlFor="course">Vak</Label>
-                <Select 
-                  value={formData.courseId} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, courseId: value }))}
-                >
-                  <SelectTrigger data-testid="select-course">
-                    <SelectValue placeholder="Kies een vak" />
-                  </SelectTrigger>
+                <Select value={formData.course_id} onValueChange={(value) => setFormData(prev => ({ ...prev, course_id: value }))}>
+                  <SelectTrigger><SelectValue placeholder="Kies een vak" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Geen vak</SelectItem>
-                    {courses.map((course) => (
-                      <SelectItem key={course.id} value={course.id}>
-                        {course.name}
-                      </SelectItem>
-                    ))}
+                    {courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -366,13 +213,8 @@ export default function Rooster() {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="day">Dag</Label>
-                <Select 
-                  value={formData.dayOfWeek.toString()} 
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, dayOfWeek: parseInt(value) }))}
-                >
-                  <SelectTrigger data-testid="select-day">
-                    <SelectValue />
-                  </SelectTrigger>
+                <Select value={formData.day_of_week.toString()} onValueChange={(value) => setFormData(prev => ({ ...prev, day_of_week: parseInt(value) }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="1">Maandag</SelectItem>
                     <SelectItem value="2">Dinsdag</SelectItem>
@@ -384,280 +226,121 @@ export default function Rooster() {
                   </SelectContent>
                 </Select>
               </div>
-              
               <div>
                 <Label htmlFor="startTime">Begintijd</Label>
-                <Input
-                  id="startTime"
-                  type="time"
-                  value={formData.startTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, startTime: e.target.value }))}
-                  data-testid="input-start-time"
-                />
+                <Input id="startTime" type="time" value={formData.start_time} onChange={(e) => setFormData(prev => ({ ...prev, start_time: e.target.value }))} />
               </div>
-              
               <div>
                 <Label htmlFor="endTime">Eindtijd</Label>
-                <Input
-                  id="endTime"
-                  type="time"
-                  value={formData.endTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, endTime: e.target.value }))}
-                  data-testid="input-end-time"
-                />
+                <Input id="endTime" type="time" value={formData.end_time} onChange={(e) => setFormData(prev => ({ ...prev, end_time: e.target.value }))} />
               </div>
             </div>
 
-            {/* Recurring checkbox (only for non-lesson activities) */}
-            {formData.kind !== 'les' && formData.kind !== 'toets' && (
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="recurring"
-                  checked={formData.isRecurring}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, isRecurring: checked === true }))
-                  }
-                  data-testid="checkbox-recurring"
-                />
-                <Label htmlFor="recurring">Elke week herhalen</Label>
-              </div>
-            )}
-
-            <Button 
-              type="submit" 
-              disabled={createMutation.isPending}
-              className="w-full"
-              data-testid="button-create-schedule"
-            >
+            <div className="flex items-center space-x-2">
+              <Checkbox id="recurring" checked={formData.is_recurring} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_recurring: checked === true }))}/>
+              <Label htmlFor="recurring">Elke week herhalen</Label>
+            </div>
+            
+            <Button type="submit" disabled={createMutation.isPending} className="w-full">
+              {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               {createMutation.isPending ? "Toevoegen..." : "Activiteit toevoegen"}
             </Button>
           </form>
         </CardContent>
       </Card>
-
-      {/* Add Courses Section */}
+      
+      {/* Cursus Beheer */}
       <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Vakken beheren</CardTitle>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowCourseForm(!showCourseForm)}
-                data-testid="button-toggle-course-form"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Vak toevoegen
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Current Courses */}
-          {coursesLoading ? (
-            <div className="text-sm text-muted-foreground">Laden...</div>
-          ) : courses.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
-              {courses.map((course) => (
-                <div
-                  key={course.id}
-                  className="bg-muted rounded-lg p-3 text-sm relative group"
-                  data-testid={`course-${course.id}`}
-                >
-                  <div className="font-medium">{course.name}</div>
-                  <div className="text-xs text-muted-foreground">{course.level}</div>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Weet je zeker dat je het vak "${course.name}" wilt verwijderen?`)) {
-                        deleteCourseMutation.mutate(course.id);
-                      }
-                    }}
-                    disabled={deleteCourseMutation.isPending}
-                    className="absolute top-1 right-1 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
-                    data-testid={`button-delete-course-${course.id}`}
-                    title="Vak verwijderen"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-3 mb-4">
-              <div className="text-sm text-muted-foreground">
-                Geen vakken toegevoegd. Voeg eerst vakken toe voordat je lessen kunt inplannen.
+          <CardHeader>
+              <div className="flex justify-between items-center">
+                <CardTitle>Vakken beheren</CardTitle>
+                <Button variant="outline" size="sm" onClick={() => setShowCourseForm(!showCourseForm)}><Plus className="w-4 h-4 mr-2" />Vak toevoegen</Button>
               </div>
-              <Alert>
-                <HelpCircle className="h-4 w-4" />
-                <AlertDescription>
-                  💡 <strong>Tip:</strong> Voeg je vakken toe met de "Vak toevoegen" knop zodat je lessen kunt inplannen.
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
+          </CardHeader>
+          <CardContent>
+              {coursesLoading ? <div className="text-muted-foreground">Laden...</div> : courses.length > 0 ? (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+                      {courses.map(course => (
+                          <div key={course.id} className="bg-muted rounded-lg p-3 text-sm relative group flex items-center gap-2" style={{ borderLeft: `4px solid ${course.color}`}}>
+                              <div className="flex-grow">
+                                <div className="font-medium">{course.name}</div>
+                              </div>
+                              <button onClick={() => deleteMutation.mutate(course.id)} className="text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                          </div>
+                      ))}
+                  </div>
+              ) : (
+                <Alert><HelpCircle className="h-4 w-4" /><AlertDescription>Geen vakken toegevoegd. Voeg vakken toe om lessen in te plannen.</AlertDescription></Alert>
+              )}
 
-          {/* Add Course Form */}
-          {showCourseForm && (
-            <form onSubmit={handleCourseSubmit} className="space-y-3 p-4 bg-muted/50 rounded-lg" data-testid="course-form">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="courseName">Vaknaam</Label>
-                  <Input
-                    id="courseName"
-                    value={courseFormData.name}
-                    onChange={(e) => setCourseFormData(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Bijv. Wiskunde, Nederlands"
-                    data-testid="input-course-name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="courseLevel">Niveau</Label>
-                  <Select
-                    value={courseFormData.level}
-                    onValueChange={(value) => setCourseFormData(prev => ({ ...prev, level: value }))}
-                  >
-                    <SelectTrigger data-testid="select-course-level">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="havo4">Havo 4</SelectItem>
-                      <SelectItem value="havo5">Havo 5</SelectItem>
-                      <SelectItem value="vwo5">VWO 5</SelectItem>
-                      <SelectItem value="vwo6">VWO 6</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="flex space-x-2">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={createCourseMutation.isPending}
-                  data-testid="button-add-course"
-                >
-                  {createCourseMutation.isPending ? "Bezig..." : "Vak toevoegen"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCourseForm(false)}
-                  data-testid="button-cancel-course"
-                >
-                  Annuleren
-                </Button>
-              </div>
-            </form>
-          )}
-        </CardContent>
+              {showCourseForm && (
+                  <form onSubmit={handleCourseSubmit} className="space-y-3 p-4 bg-muted/50 rounded-lg mt-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="md:col-span-2">
+                          <Label htmlFor="courseName">Vaknaam</Label>
+                          <Input id="courseName" value={courseFormData.name} onChange={e => setCourseFormData({...courseFormData, name: e.target.value})} placeholder="bv. Wiskunde"/>
+                        </div>
+                        <div>
+                          <Label htmlFor="courseColor">Kleur</Label>
+                          <Input id="courseColor" type="color" value={courseFormData.color} onChange={e => setCourseFormData({...courseFormData, color: e.target.value})} className="p-1 h-10"/>
+                        </div>
+                    </div>
+                    <div className="flex space-x-2">
+                        <Button type="submit" size="sm" disabled={createCourseMutation.isPending}>
+                            {createCourseMutation.isPending ? "Bezig..." : "Vak Opslaan"}
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setShowCourseForm(false)}>Annuleren</Button>
+                    </div>
+                  </form>
+              )}
+          </CardContent>
       </Card>
 
-      {/* Current Schedule */}
+      {/* Huidig Rooster */}
       <div>
         <h3 className="font-medium mb-4">Huidig rooster</h3>
-        
-        {scheduleLoading ? (
-          <div className="space-y-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="bg-card border border-border rounded-lg p-4 animate-pulse" data-testid={`schedule-skeleton-${i}`}>
-                <div className="h-4 bg-muted rounded w-1/3 mb-2" />
-                <div className="h-3 bg-muted rounded w-1/2 mb-1" />
-                <div className="h-3 bg-muted rounded w-1/4" />
+        {scheduleLoading ? <div className="text-center"><Loader2 className="w-6 h-6 animate-spin"/></div> : Object.keys(groupedSchedule).length > 0 ? (
+          <div className="space-y-4">
+            {Object.entries(groupedSchedule).sort(([a], [b]) => parseInt(a) - parseInt(b)).map(([dayOfWeek, items]) => (
+              <div key={dayOfWeek}>
+                <h4 className="font-medium text-sm text-muted-foreground mb-2">{getDayName(parseInt(dayOfWeek))}</h4>
+                <div className="space-y-2">
+                  {items.map(item => {
+                    const course = getCourseById(item.course_id);
+                    const isCancelled = item.status === "cancelled";
+                    return (
+                      <div key={item.id} className={`bg-card border rounded-lg p-4 flex items-center justify-between ${isCancelled ? 'opacity-50' : ''}`}>
+                        <div>
+                          <div className="flex items-center space-x-2 mb-1">
+                            <h5 className={`font-medium ${isCancelled ? 'line-through' : ''}`}>{item.title || course?.name || "Activiteit"}</h5>
+                            <span className={`text-xs px-2 py-0.5 rounded font-medium ${getKindColor(item.kind || 'les')}`}>{getKindLabel(item.kind || 'les')}</span>
+                          </div>
+                          <p className="text-sm text-muted-foreground">{item.start_time && item.end_time && `${formatTime(item.start_time)} - ${formatTime(item.end_time)}`}</p>
+                        </div>
+                        <div className="flex items-center">
+                          {!isCancelled && (item.kind === "les" || item.kind === "toets") && (
+                            <Button variant="ghost" size="icon" onClick={() => handleCancelLesson(item.id)} disabled={cancelLessonMutation.isPending} className="text-orange-600 hover:bg-orange-100" title="Les afzeggen">
+                              <CalendarX className="w-4 h-4"/>
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)} disabled={deleteMutation.isPending} className="text-destructive hover:bg-destructive/10" title="Verwijderen">
+                            <Trash2 className="w-4 h-4"/>
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
-        ) : Object.keys(groupedSchedule).length > 0 ? (
-          <div className="space-y-4">
-            {Object.entries(groupedSchedule)
-              .sort(([a], [b]) => parseInt(a) - parseInt(b))
-              .map(([dayOfWeek, items]) => (
-                <div key={dayOfWeek}>
-                  <h4 className="font-medium text-sm text-muted-foreground mb-2" data-testid={`day-header-${dayOfWeek}`}>
-                    {getDayName(parseInt(dayOfWeek))}
-                  </h4>
-                  <div className="space-y-2">
-                    {items.map((item) => {
-                      const course = getCourseById(item.courseId);
-                      const isCancelled = (item as any).status === "cancelled";
-                      
-                      return (
-                        <div
-                          key={item.id}
-                          className={`bg-card border border-border rounded-lg p-4 flex items-center justify-between ${
-                            isCancelled ? 'opacity-50 bg-muted/50' : ''
-                          }`}
-                          data-testid={`schedule-item-${item.id}`}
-                        >
-                          <div>
-                            <div className="flex items-center space-x-2 mb-1">
-                              <h5 className={`font-medium ${isCancelled ? 'line-through' : ''}`}>
-                                {item.title || course?.name || "Activiteit"}
-                                {isCancelled && (
-                                  <span className="ml-2 text-xs text-red-600 font-normal">
-                                    (UITGEVALLEN)
-                                  </span>
-                                )}
-                              </h5>
-                              <span className={`text-xs px-2 py-0.5 rounded font-medium ${getKindColor(item.kind || 'les')}`}>
-                                {getKindLabel(item.kind || 'les')}
-                              </span>
-                            </div>
-                            <p className="text-sm text-muted-foreground">
-                              {item.startTime && item.endTime && 
-                                `${formatTime(item.startTime)} - ${formatTime(item.endTime)}`
-                              }
-                            </p>
-                            {course && (
-                              <p className="text-sm text-muted-foreground">
-                                Vak: {course.name}
-                              </p>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center space-x-1">
-                            {/* Les afzeggen knop - alleen voor lessen die niet al zijn afgezegd */}
-                            {(item.kind === "les" || item.kind === "toets") && !isCancelled && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleCancelLesson(item.id, item.title || course?.name || "les")}
-                                className="text-orange-600 hover:bg-orange-100"
-                                disabled={cancelLessonMutation.isPending}
-                                data-testid={`button-cancel-${item.id}`}
-                                title="Les afzeggen"
-                              >
-                                <CalendarX className="w-4 h-4" />
-                              </Button>
-                            )}
-                            
-                            {/* Volledig verwijderen knop */}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(item.id)}
-                              className="text-destructive hover:bg-destructive/10"
-                              disabled={deleteMutation.isPending}
-                              data-testid={`button-delete-${item.id}`}
-                              title="Permanent verwijderen"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-          </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground" data-testid="empty-schedule">
-            <p>Nog geen roosteritems toegevoegd</p>
-            <p className="text-sm mt-1">Voeg je eerste les of toets toe met het formulier hierboven.</p>
-          </div>
+          <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">Geen roosteritems toegevoegd.</div>
         )}
       </div>
     </div>
   );
 }
+

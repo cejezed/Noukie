@@ -2,6 +2,7 @@ import * as React from "react";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase"; // Belangrijk: directe import van Supabase client
 import TextCheckin from "@/components/TextCheckin";
 import TaskCard from "@/components/TaskCard";
 import VoiceRecorder from "@/components/VoiceRecorder";
@@ -12,8 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Info, Plus, X } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@/components/ui/use-toast";
 import type { Task, Course } from "@shared/schema";
 
 export default function Vandaag() {
@@ -30,7 +30,6 @@ export default function Vandaag() {
     course_id: "",
     est_minutes: 30,
     priority: 1,
-    // server normaliseert string → Date; dit is prima
     due_at: new Date().toISOString().split("T")[0], // YYYY-MM-DD
   });
 
@@ -49,7 +48,7 @@ export default function Vandaag() {
   // === Queries ===
   const userId = user?.id ?? "";
 
-  // Tasks for today (server heeft /api/tasks/:userId/today)
+  // Query om taken voor vandaag direct uit Supabase te halen
   const {
     data: todayTasks = [],
     isLoading: tasksLoading,
@@ -58,34 +57,53 @@ export default function Vandaag() {
     enabled: !!userId,
     queryKey: ["tasks", "today", userId],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/tasks/${userId}/today`);
-      if (!res.ok) throw new Error("Failed to fetch today's tasks");
-      return res.json() as Promise<Task[]>;
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', userId)
+        .gte('due_at', start.toISOString())
+        .lt('due_at', end.toISOString())
+        .order('priority', { ascending: false });
+
+      if (error) throw new Error(error.message);
+      return data as Task[];
     },
-    // je haalt al per dag op, dus snelle refresh is ok
     staleTime: 0,
   });
 
-  // Courses for select (server heeft /api/courses/:userId)
+  // Query om vakken direct uit Supabase te halen
   const { data: courses = [] } = useQuery({
     enabled: !!userId,
     queryKey: ["courses", userId],
     queryFn: async () => {
-      const res = await apiRequest("GET", `/api/courses/${userId}`);
-      if (!res.ok) throw new Error("Failed to fetch courses");
-      return res.json() as Promise<Course[]>;
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('user_id', userId);
+        
+      if (error) throw new Error(error.message);
+      return data as Course[];
     },
   });
 
   // === Mutations ===
   const createTaskMutation = useMutation({
-    mutationFn: async (taskData: typeof taskForm & { user_id: string }) => {
-      const res = await apiRequest("POST", "/api/tasks", taskData);
-      if (!res.ok) throw new Error("Failed to create task");
-      return res.json();
+    mutationFn: async (taskData: Omit<typeof taskForm, 'course_id'> & { user_id: string, course_id: string | null }) => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert(taskData)
+        .select()
+        .single();
+        
+      if (error) throw new Error(error.message);
+      return data;
     },
     onSuccess: () => {
-      // Invalideer zowel 'today' als een eventuele all-tasks lijst
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       toast({
         title: "Taak aangemaakt!",
@@ -100,16 +118,15 @@ export default function Vandaag() {
         due_at: new Date().toISOString().split("T")[0],
       });
     },
-    onError: () => {
+    onError: (error) => {
       toast({
         title: "Fout bij aanmaken taak",
-        description: "Probeer het opnieuw.",
+        description: error.message,
         variant: "destructive",
       });
     },
   });
 
-  // NB: jouw server heeft (nog) geen sessions endpoints; UI uitgezet
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!taskForm.title.trim() || !userId) return;
@@ -194,7 +211,6 @@ export default function Vandaag() {
                 <TaskCard
                   key={task.id}
                   task={task}
-                  // Sessions ontbreken nog → knop kan disabled of later koppelen
                   onStart={() => {}}
                   isStarting={false}
                 />
@@ -286,3 +302,4 @@ export default function Vandaag() {
     </div>
   );
 }
+
