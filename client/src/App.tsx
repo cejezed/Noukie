@@ -10,16 +10,43 @@ import Login from "@/pages/Login";
 import Vandaag from "@/pages/Vandaag";
 import Planning from "@/pages/Planning";
 import Rooster from "@/pages/Rooster";
-// --- DEZE REGEL IS VERVANGEN ---
-import LeerChat from "@/pages/LeerChat"; // Was: import Help from "@/pages/Help";
-// --- EINDE VERVANGING ---
+import LeerChat from "@/pages/LeerChat";
 import Instellingen from "@/pages/Instellingen";
 import ParentDashboard from "@/pages/ParentDashboard";
 import NotFound from "@/pages/not-found";
 import MentalPage from "@/pages/Mental";
+import { supabase } from "@/lib/supabase";
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
+
+  // ✔ Eerst getSession; alleen getUser() als er een sessie is
+  React.useEffect(() => {
+    if (loading) return;
+    (async () => {
+      const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
+      console.log("🪪 getSession ->", sessionData?.session?.user?.id ?? null, sessErr ?? null);
+
+      if (!sessionData.session) {
+        console.log("⏳ Nog geen sessie beschikbaar; getUser() overslaan.");
+        return;
+      }
+
+      const { data: { user: u }, error } = await supabase.auth.getUser();
+      console.log("🔎 Supabase auth.getUser ->", u, error);
+    })();
+  }, [loading]);
+
+  // ✔ Auth events (handig bij login/logout/refresh)
+  React.useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("🔔 auth event:", event, "user:", session?.user?.id ?? null);
+    });
+    return () => {
+      // @ts-ignore: types wisselen per sdk-versie
+      sub?.subscription?.unsubscribe?.();
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -33,33 +60,33 @@ function AuthenticatedApp() {
     return <Login />;
   }
 
-  // Different interface for parents
-  if (user.user_metadata?.role === 'parent') {
+  // Parent interface
+  if (user.user_metadata?.role === "parent") {
     return (
       <Layout>
         <Switch>
           <Route path="/" component={ParentDashboard} />
-          <Route path="/mental" component={MentalPage} /> 
+          <Route path="/mental" component={MentalPage} />
           <Route component={NotFound} />
         </Switch>
       </Layout>
     );
   }
 
-// Student interface (default)
-return (
-  <Layout>
-    <Switch>
-      <Route path="/" component={Vandaag} />
-      <Route path="/rooster" component={Planning} />
-      <Route path="/mental" component={MentalPage} />
-      <Route path="/toevoegen" component={Rooster} />
-      <Route path="/help" component={LeerChat} /> {/* Deze regel was al correct */}
-      <Route path="/instellingen" component={Instellingen} />
-      <Route component={NotFound} />
-    </Switch>
-  </Layout>
-);
+  // Student interface
+  return (
+    <Layout>
+      <Switch>
+        <Route path="/" component={Vandaag} />
+        <Route path="/rooster" component={Planning} />
+        <Route path="/mental" component={MentalPage} />
+        <Route path="/toevoegen" component={Rooster} />
+        <Route path="/help" component={LeerChat} />
+        <Route path="/instellingen" component={Instellingen} />
+        <Route component={NotFound} />
+      </Switch>
+    </Layout>
+  );
 }
 
 function Router() {

@@ -1,15 +1,15 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import express from 'express';
-import cors from 'cors';
+//import express from 'express';
+//import cors from 'cors';
 // CORRECTIE: Pad aangepast om de 'client' map mee te nemen
-import { handleCreateCourse } from './client/src/pages/api/courses'; 
-import { handleChatRequest } from './client/src/pages/api/chat';
+//import { handleCreateCourse } from './client/src/pages/api/courses'; 
+//import { handleChatRequest } from './client/src/pages/api/chat';
 
 // Een Vite plugin die een Express server als middleware toevoegt
 function expressApiPlugin() {
-  const app = express();
+//  const app = express();
   
   // Middleware om JSON-data en CORS te verwerken
   app.use(cors());
@@ -22,7 +22,7 @@ function expressApiPlugin() {
   return {
     name: 'express-server',
     configureServer(server: any) {
-      server.middlewares.use(app);
+  //    server.middlewares.use(app);
     }
   }
 }
@@ -30,7 +30,7 @@ function expressApiPlugin() {
 export default defineConfig({
   plugins: [
     react(),
-    expressApiPlugin(), // Voeg onze custom API server plugin toe
+//   expressApiPlugin(), // Voeg onze custom API server plugin toe
     ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID
       ? [ (await import("@replit/vite-plugin-cartographer")).cartographer() ]
       : []),
