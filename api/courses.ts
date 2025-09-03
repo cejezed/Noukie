@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../client/src/lib/supabase';
 
 export async function handleCreateCourse(req: Request, res: Response) {
   try {

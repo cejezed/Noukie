@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import OpenAI from 'openai';
-import { supabase } from '../../lib/supabase';
+import { supabase } from '../client/src/lib/supabase';
 
 // Initialiseer de AI clients met de API-sleutels uit de environment variabelen
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
