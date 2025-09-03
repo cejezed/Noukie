@@ -13,12 +13,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/dist/$1"
+      "dest": "dist/$1"
     }
-  ],
-  "functions": {
-    "dist/index.js": {
-      "includeFiles": "dist/**"
-    }
-  }
+  ]
 }
