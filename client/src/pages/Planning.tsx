@@ -7,7 +7,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase"; // Importeer Supabase
 import type { Task, Course, Schedule } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient"; // Belangrijk: gebruik de apiRequest
 
 export default function Planning() {
   const { user, isLoading } = useAuth();
@@ -247,7 +246,7 @@ export default function Planning() {
                           ({course.name})
                         </span>
                       )}
-                  </div>
+                    </div>
                   );
                 })}
                 
@@ -278,4 +277,17 @@ export default function Planning() {
                   </div>
                 )}
                 
-           
+                {/* Empty State */}
+                {day.schedule.length === 0 && day.tasks.length === 0 && (
+                  <p className="text-sm text-muted-foreground italic" data-testid={`empty-day-${index}`}>
+                    Geen activiteiten gepland
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
