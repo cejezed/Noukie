@@ -5,67 +5,75 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/lib/supabase"; // Importeer Supabase
+import { supabase } from "@/lib/supabase";
 import type { Task, Course, Schedule } from "@shared/schema";
 
 export default function Planning() {
   const { user, isLoading } = useAuth();
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
 
-  // Calculate week dates
+  // Calculate week dates (Mon–Sun)
   const getWeekDates = (offset: number) => {
     const today = new Date();
     const startOfWeek = new Date(today);
-    // Zet de start van de week op maandag
-    startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1) + (offset * 7));
-    
+    // Monday as start of week
+    startOfWeek.setDate(
+      today.getDate() -
+        (today.getDay() === 0 ? 6 : today.getDay() - 1) +
+        offset * 7,
+    );
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
-    
     return { startOfWeek, endOfWeek };
   };
 
   const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
 
-  // Get tasks for the week (stable cache key using date strings)
-  const weekKey = `${startOfWeek.toISOString().split('T')[0]}-${endOfWeek.toISOString().split('T')[0]}`;
+  // Stable cache key for week
+  const weekKey = `${startOfWeek.toISOString().split("T")[0]}-${
+    endOfWeek.toISOString().split("T")[0]
+  }`;
+
+  // Tasks for the week
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ['tasks', user?.id, 'week', weekKey],
+    queryKey: ["tasks", user?.id, "week", weekKey],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('due_at', startOfWeek.toISOString())
-        .lt('due_at', endOfWeek.toISOString());
+        .from("tasks")
+        .select("*")
+        .eq("user_id", user!.id)
+        .gte("due_at", startOfWeek.toISOString())
+        .lt("due_at", endOfWeek.toISOString());
       if (error) throw new Error(error.message);
       return data || [];
     },
     enabled: !!user?.id,
   });
 
-  // Get courses
+  // Courses
   const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
-    queryKey: ['courses', user?.id],
+    queryKey: ["courses", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('user_id', user.id);
+        .from("courses")
+        .select("*")
+        .eq("user_id", user!.id);
       if (error) throw new Error(error.message);
       return data || [];
     },
     enabled: !!user?.id,
   });
 
-  // Get schedule
-  const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
-    queryKey: ['schedule', user?.id],
+  // Schedule
+  const { data: schedule = [], isLoading: scheduleLoading } = useQuery<
+    Schedule[]
+  >({
+    queryKey: ["schedule", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('schedule')
-        .select('*')
-        .eq('user_id', user.id);
+        .from("schedule")
+        .select("*")
+        .eq("user_id", user!.id);
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -73,12 +81,26 @@ export default function Planning() {
   });
 
   const formatWeekRange = (start: Date, end: Date) => {
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
-    return `${start.toLocaleDateString('nl-NL', options)} - ${end.toLocaleDateString('nl-NL', options)} ${end.getFullYear()}`;
+    const options: Intl.DateTimeFormatOptions = {
+      day: "numeric",
+      month: "long",
+    };
+    return `${start.toLocaleDateString("nl-NL", options)} - ${end.toLocaleDateString(
+      "nl-NL",
+      options,
+    )} ${end.getFullYear()}`;
   };
 
   const getDayName = (date: Date) => {
-    const days = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+    const days = [
+      "zondag",
+      "maandag",
+      "dinsdag",
+      "woensdag",
+      "donderdag",
+      "vrijdag",
+      "zaterdag",
+    ];
     return days[date.getDay()];
   };
 
@@ -87,25 +109,31 @@ export default function Planning() {
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
-      
-      const dayTasks = tasks.filter(task => {
+
+      const dayTasks = tasks.filter((task) => {
         if (!task.due_at) return false;
         const taskDate = new Date(task.due_at);
         return taskDate.toDateString() === date.toDateString();
       });
 
-      const daySchedule = schedule.filter(item => {
-        if (item.date) {
-          const itemDate = new Date(item.date);
+      const daySchedule = schedule.filter((item) => {
+        if ((item as any).date) {
+          const itemDate = new Date((item as any).date);
           return itemDate.toDateString() === date.toDateString();
         }
-        return item.day_of_week === (date.getDay() === 0 ? 7 : date.getDay());
+        return (
+          (item as any).day_of_week ===
+          (date.getDay() === 0 ? 7 : date.getDay())
+        );
       });
 
       days.push({
         date,
         name: getDayName(date),
-        formattedDate: date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }),
+        formattedDate: date.toLocaleDateString("nl-NL", {
+          day: "numeric",
+          month: "short",
+        }),
         tasks: dayTasks,
         schedule: daySchedule,
       });
@@ -115,22 +143,22 @@ export default function Planning() {
 
   const getCourseById = (courseId: string | null) => {
     if (!courseId) return undefined;
-    return courses.find(c => c.id === courseId);
+    return courses.find((c) => c.id === courseId);
   };
 
-  const formatTime = (timeString: string) => {
-    return timeString.slice(0, 5); // "HH:MM"
-  };
+  const formatTime = (timeString: string) => timeString.slice(0, 5); // "HH:MM"
 
   const getCompletionPercentage = () => {
     const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(task => task.status === 'done').length;
+    const completedTasks = tasks.filter(
+      (task) => task.status === "done",
+    ).length;
     return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   };
 
   const weekDays = getWeekDays();
 
-  // Voeg een laadscherm toe terwijl de data wordt opgehaald
+  // Loading gate
   if (isLoading || tasksLoading || coursesLoading || scheduleLoading) {
     return (
       <div className="flex justify-center items-center h-full p-4">
@@ -143,13 +171,25 @@ export default function Planning() {
     <div className="p-6" data-testid="page-planning">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Planning</h2>
-        <div className="text-sm text-muted-foreground" data-testid="week-progress">
-          Week {Math.ceil((startOfWeek.getTime() - new Date(startOfWeek.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))} • {getCompletionPercentage()}% voltooid
+        <div
+          className="text-sm text-muted-foreground"
+          data-testid="week-progress"
+        >
+          Week{" "}
+          {Math.ceil(
+            (startOfWeek.getTime() -
+              new Date(startOfWeek.getFullYear(), 0, 1).getTime()) /
+              (7 * 24 * 60 * 60 * 1000),
+          )}{" "}
+          • {getCompletionPercentage()}% voltooid
         </div>
       </div>
 
       {/* Week Navigation */}
-      <div className="flex items-center justify-between mb-6" data-testid="week-navigation">
+      <div
+        className="flex items-center justify-between mb-6"
+        data-testid="week-navigation"
+      >
         <Button
           variant="ghost"
           size="icon"
@@ -158,11 +198,11 @@ export default function Planning() {
         >
           <ChevronLeft className="w-5 h-5" />
         </Button>
-        
+
         <h3 className="text-lg font-medium" data-testid="text-current-week">
           {formatWeekRange(startOfWeek, endOfWeek)}
         </h3>
-        
+
         <Button
           variant="ghost"
           size="icon"
@@ -177,7 +217,11 @@ export default function Planning() {
       {tasksLoading ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="border border-border rounded-lg overflow-hidden animate-pulse" data-testid={`day-skeleton-${i}`}>
+            <div
+              key={i}
+              className="border border-border rounded-lg overflow-hidden animate-pulse"
+              data-testid={`day-skeleton-${i}`}
+            >
               <div className="bg-muted/50 h-12" />
               <div className="p-4 space-y-2">
                 <div className="h-4 bg-muted rounded w-1/2" />
@@ -189,57 +233,92 @@ export default function Planning() {
       ) : (
         <div className="space-y-4">
           {weekDays.map((day, index) => (
-            <div key={index} className="border border-border rounded-lg overflow-hidden" data-testid={`day-card-${index}`}>
+            <div
+              key={index}
+              className="border border-border rounded-lg overflow-hidden"
+              data-testid={`day-card-${index}`}
+            >
               <div className="bg-muted/50 px-4 py-2 border-b border-border">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium capitalize" data-testid={`day-name-${index}`}>
+                  <h4
+                    className="font-medium capitalize"
+                    data-testid={`day-name-${index}`}
+                  >
                     {day.name} {day.formattedDate}
                   </h4>
-                  <span className="text-sm text-muted-foreground" data-testid={`task-count-${index}`}>
+                  <span
+                    className="text-sm text-muted-foreground"
+                    data-testid={`task-count-${index}`}
+                  >
                     {day.tasks.length} taken
                   </span>
                 </div>
               </div>
-              
+
               <div className="p-4 space-y-3">
                 {/* Schedule Items */}
-                {day.schedule.map((item, scheduleIndex) => {
+                {day.schedule.map((item: any, scheduleIndex: number) => {
                   const course = getCourseById(item.course_id);
-                  
+
                   const getKindLabel = (kind: string) => {
                     switch (kind) {
-                      case "les": return "Les";
-                      case "toets": return "TOETS";
-                      case "sport": return "Sport/Training";
-                      case "werk": return "Bijbaan/Werk";
-                      case "afspraak": return "Afspraak";
-                      case "hobby": return "Hobby/Activiteit";
-                      case "anders": return "Anders";
-                      default: return kind;
+                      case "les":
+                        return "Les";
+                      case "toets":
+                        return "TOETS";
+                      case "sport":
+                        return "Sport/Training";
+                      case "werk":
+                        return "Bijbaan/Werk";
+                      case "afspraak":
+                        return "Afspraak";
+                      case "hobby":
+                        return "Hobby/Activiteit";
+                      case "anders":
+                        return "Anders";
+                      default:
+                        return kind;
                     }
                   };
 
                   const getKindColor = (kind: string) => {
                     switch (kind) {
-                      case "les": return "bg-blue-500";
-                      case "toets": return "bg-red-500";
-                      case "sport": return "bg-green-500";
-                      case "werk": return "bg-purple-500";
-                      case "afspraak": return "bg-orange-500";
-                      case "hobby": return "bg-pink-500";
-                      case "anders": return "bg-gray-500";
-                      default: return "bg-muted-foreground";
+                      case "les":
+                        return "bg-blue-500";
+                      case "toets":
+                        return "bg-red-500";
+                      case "sport":
+                        return "bg-green-500";
+                      case "werk":
+                        return "bg-purple-500";
+                      case "afspraak":
+                        return "bg-orange-500";
+                      case "hobby":
+                        return "bg-pink-500";
+                      case "anders":
+                        return "bg-gray-500";
+                      default:
+                        return "bg-muted-foreground";
                     }
                   };
-                  
+
                   return (
-                    <div key={scheduleIndex} className="flex items-center space-x-3 text-sm" data-testid={`schedule-item-${index}-${scheduleIndex}`}>
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(item.kind || 'les')}`} />
+                    <div
+                      key={scheduleIndex}
+                      className="flex items-center space-x-3 text-sm"
+                      data-testid={`schedule-item-${index}-${scheduleIndex}`}
+                    >
+                      <div
+                        className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(
+                          item.kind || "les",
+                        )}`}
+                      />
                       <span className="text-muted-foreground w-16">
                         {item.start_time && formatTime(item.start_time)}
                       </span>
                       <span>
-                        {item.title || course?.name || 'Activiteit'} - {getKindLabel(item.kind || 'les')}
+                        {item.title || course?.name || "Activiteit"} -{" "}
+                        {getKindLabel(item.kind || "les")}
                       </span>
                       {course && item.title && (
                         <span className="text-xs text-muted-foreground">
@@ -249,21 +328,30 @@ export default function Planning() {
                     </div>
                   );
                 })}
-                
+
                 {/* Tasks */}
                 {day.tasks.length > 0 && (
                   <div className="pt-2 border-t border-border space-y-2">
-                    {day.tasks.map((task) => {
+                    {day.tasks.map((task: Task) => {
                       const course = getCourseById(task.course_id);
-                      
                       return (
-                        <div key={task.id} className="flex items-center space-x-3" data-testid={`task-item-${task.id}`}>
+                        <div
+                          key={task.id}
+                          className="flex items-center space-x-3"
+                          data-testid={`task-item-${task.id}`}
+                        >
                           <Checkbox
-                            checked={task.status === 'done'}
+                            checked={task.status === "done"}
                             className="w-4 h-4"
                             data-testid={`checkbox-task-${task.id}`}
                           />
-                          <span className={`flex-1 text-sm ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
+                          <span
+                            className={`flex-1 text-sm ${
+                              task.status === "done"
+                                ? "line-through opacity-60"
+                                : ""
+                            }`}
+                          >
                             {task.title}
                           </span>
                           {task.est_minutes && (
@@ -276,10 +364,13 @@ export default function Planning() {
                     })}
                   </div>
                 )}
-                
+
                 {/* Empty State */}
                 {day.schedule.length === 0 && day.tasks.length === 0 && (
-                  <p className="text-sm text-muted-foreground italic" data-testid={`empty-day-${index}`}>
+                  <p
+                    className="text-sm text-muted-foreground italic"
+                    data-testid={`empty-day-${index}`}
+                  >
                     Geen activiteiten gepland
                   </p>
                 )}
