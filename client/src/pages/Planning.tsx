@@ -18,7 +18,9 @@ export default function Planning() {
     const startOfWeek = new Date(today);
     // Monday as start of week
     startOfWeek.setDate(
-      today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1) + offset * 7
+      today.getDate() -
+        (today.getDay() === 0 ? 6 : today.getDay() - 1) +
+        offset * 7,
     );
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -28,9 +30,9 @@ export default function Planning() {
   const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
 
   // Stable cache key for week
-  const weekKey = `${startOfWeek.toISOString().split("T")[0]}-${endOfWeek
-    .toISOString()
-    .split("T")[0]}`;
+  const weekKey = `${startOfWeek.toISOString().split("T")[0]}-${
+    endOfWeek.toISOString().split("T")[0]
+  }`;
 
   // Tasks for the week
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
@@ -52,7 +54,10 @@ export default function Planning() {
   const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
     queryKey: ["courses", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("courses").select("*").eq("user_id", user!.id);
+      const { data, error } = await supabase
+        .from("courses")
+        .select("*")
+        .eq("user_id", user!.id);
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -60,10 +65,15 @@ export default function Planning() {
   });
 
   // Schedule
-  const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
+  const { data: schedule = [], isLoading: scheduleLoading } = useQuery<
+    Schedule[]
+  >({
     queryKey: ["schedule", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("schedule").select("*").eq("user_id", user!.id);
+      const { data, error } = await supabase
+        .from("schedule")
+        .select("*")
+        .eq("user_id", user!.id);
       if (error) throw new Error(error.message);
       return data || [];
     },
@@ -71,15 +81,26 @@ export default function Planning() {
   });
 
   const formatWeekRange = (start: Date, end: Date) => {
-    const options: Intl.DateTimeFormatOptions = { day: "numeric", month: "long" };
+    const options: Intl.DateTimeFormatOptions = {
+      day: "numeric",
+      month: "long",
+    };
     return `${start.toLocaleDateString("nl-NL", options)} - ${end.toLocaleDateString(
       "nl-NL",
-      options
+      options,
     )} ${end.getFullYear()}`;
   };
 
   const getDayName = (date: Date) => {
-    const days = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
+    const days = [
+      "zondag",
+      "maandag",
+      "dinsdag",
+      "woensdag",
+      "donderdag",
+      "vrijdag",
+      "zaterdag",
+    ];
     return days[date.getDay()];
   };
 
@@ -100,13 +121,19 @@ export default function Planning() {
           const itemDate = new Date((item as any).date);
           return itemDate.toDateString() === date.toDateString();
         }
-        return (item as any).day_of_week === (date.getDay() === 0 ? 7 : date.getDay());
+        return (
+          (item as any).day_of_week ===
+          (date.getDay() === 0 ? 7 : date.getDay())
+        );
       });
 
       days.push({
         date,
         name: getDayName(date),
-        formattedDate: date.toLocaleDateString("nl-NL", { day: "numeric", month: "short" }),
+        formattedDate: date.toLocaleDateString("nl-NL", {
+          day: "numeric",
+          month: "short",
+        }),
         tasks: dayTasks,
         schedule: daySchedule,
       });
@@ -123,7 +150,9 @@ export default function Planning() {
 
   const getCompletionPercentage = () => {
     const totalTasks = tasks.length;
-    const completedTasks = tasks.filter((task) => task.status === "done").length;
+    const completedTasks = tasks.filter(
+      (task) => task.status === "done",
+    ).length;
     return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
   };
 
@@ -142,18 +171,25 @@ export default function Planning() {
     <div className="p-6" data-testid="page-planning">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Planning</h2>
-        <div className="text-sm text-muted-foreground" data-testid="week-progress">
+        <div
+          className="text-sm text-muted-foreground"
+          data-testid="week-progress"
+        >
           Week{" "}
           {Math.ceil(
-            (startOfWeek.getTime() - new Date(startOfWeek.getFullYear(), 0, 1).getTime()) /
-              (7 * 24 * 60 * 60 * 1000)
+            (startOfWeek.getTime() -
+              new Date(startOfWeek.getFullYear(), 0, 1).getTime()) /
+              (7 * 24 * 60 * 60 * 1000),
           )}{" "}
           • {getCompletionPercentage()}% voltooid
         </div>
       </div>
 
       {/* Week Navigation */}
-      <div className="flex items-center justify-between mb-6" data-testid="week-navigation">
+      <div
+        className="flex items-center justify-between mb-6"
+        data-testid="week-navigation"
+      >
         <Button
           variant="ghost"
           size="icon"
@@ -204,10 +240,16 @@ export default function Planning() {
             >
               <div className="bg-muted/50 px-4 py-2 border-b border-border">
                 <div className="flex items-center justify-between">
-                  <h4 className="font-medium capitalize" data-testid={`day-name-${index}`}>
+                  <h4
+                    className="font-medium capitalize"
+                    data-testid={`day-name-${index}`}
+                  >
                     {day.name} {day.formattedDate}
                   </h4>
-                  <span className="text-sm text-muted-foreground" data-testid={`task-count-${index}`}>
+                  <span
+                    className="text-sm text-muted-foreground"
+                    data-testid={`task-count-${index}`}
+                  >
                     {day.tasks.length} taken
                   </span>
                 </div>
@@ -268,7 +310,7 @@ export default function Planning() {
                     >
                       <div
                         className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(
-                          item.kind || "les"
+                          item.kind || "les",
                         )}`}
                       />
                       <span className="text-muted-foreground w-16">
@@ -279,7 +321,9 @@ export default function Planning() {
                         {getKindLabel(item.kind || "les")}
                       </span>
                       {course && item.title && (
-                        <span className="text-xs text-muted-foreground">({course.name})</span>
+                        <span className="text-xs text-muted-foreground">
+                          ({course.name})
+                        </span>
                       )}
                     </div>
                   );
@@ -303,13 +347,17 @@ export default function Planning() {
                           />
                           <span
                             className={`flex-1 text-sm ${
-                              task.status === "done" ? "line-through opacity-60" : ""
+                              task.status === "done"
+                                ? "line-through opacity-60"
+                                : ""
                             }`}
                           >
                             {task.title}
                           </span>
                           {task.est_minutes && (
-                            <span className="text-xs text-muted-foreground">{task.est_minutes}m</span>
+                            <span className="text-xs text-muted-foreground">
+                              {task.est_minutes}m
+                            </span>
                           )}
                         </div>
                       );
