@@ -54,7 +54,7 @@ function parseYyyyMmDd(s?: string | null): Date | null {
 }
 
 // ---- Supabase helper --------------------------------------------------------
-async function saveToSupabase(payload: any, user_id: string) {
+async function saveToSupabase(payload: any, userId: string) {
   // 1) Upsert checkin (uniek op user_id + date)
   const { error } = await supabase
     .from("checkins")
@@ -97,12 +97,15 @@ export default function MentalCheckin({
   rewardTiers = DEFAULT_TIERS,
   allowNegative = false,
 }: {
-  user_id: string;
+  userId: string;
   webhookUrl?: string;
   helpWebhookUrl?: string;
   rewardTiers?: RewardTier[];
   allowNegative?: boolean;
 }) {
+  // DEBUG: Check if userId is received correctly
+  console.log('MentalCheckin received userId:', userId);
+
   // Daily key for "already submitted today"
   const todayStr = yyyyMmDd(new Date());
   const dayKey = useMemo(() => `mentalCheckin:${userId}:${todayStr}`, [userId, todayStr]);
@@ -366,7 +369,7 @@ export default function MentalCheckin({
             checked={medication}
             onChange={(e) => setMedication(e.target.checked)}
           />
-          <span>Extra Medicatie</span>
+          <span>Extra Medicatie nodig gehad?</span>
         </label>
       </div>
 
