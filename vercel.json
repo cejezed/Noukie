@@ -6,20 +6,16 @@
       "config": {
         "includeFiles": "dist/**"
       }
-    },
-    {
-      "src": "client/index.html",
-      "use": "@vercel/static-build"
     }
   ],
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/server/:path*"
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
     },
     {
       "source": "/(.*)",
-      "destination": "/dist/index.html"
+      "destination": "/index.html"
     }
   ]
 }
