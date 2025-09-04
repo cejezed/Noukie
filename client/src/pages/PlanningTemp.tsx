@@ -1,312 +1,386 @@
 import * as React from "react";
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Send, Mic, Camera, Play, Pause, Repeat, Info, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useAuth } from "@/lib/auth";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
-import type { Task, Course, Schedule } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 
-export default function Planning() {
-  const { user, isLoading } = useAuth();
-  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
+interface Message {
+  id: number;
+  sender: "user" | "ai";
+  text: string;
+  poging?: string;
+  imageUrl?: string;
+  audioUrl?: string;
+}
 
-  // Calculate week dates
-  const getWeekDates = (offset: number) => {
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    // Zet de start van de week op maandag
-    startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1) + (offset * 7));
-    
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    
-    return { startOfWeek, endOfWeek };
-  };
+interface ChatSession {
+    id: string;
+    created_at: string;
+    updated_at: string;
+    vak: string;
+    berichten: Message[];
+}
 
-  const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
+export default function LeerChat() {
+  const { user, isLoading } = useAuth();
+  const { toast } = useToast();
 
-  // Get tasks for the week (stable cache key using date strings)
-  const weekKey = `${startOfWeek.toISOString().split('T')[0]}-${endOfWeek.toISOString().split('T')[0]}`;
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ['tasks', user?.id, 'week', weekKey],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('due_at', startOfWeek.toISOString())
-        .lt('due_at', endOfWeek.toISOString());
-      if (error) throw new Error(error.message);
-      return data || [];
-    },
-    enabled: !!user?.id,
-  });
+  const [opgave, setOgave] = useState("");
+  const [poging, setPoging] = useState("");
+  const [selectedCourse, setSelectedCourse] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
-  // Get courses
-  const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
-    queryKey: ['courses', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from('courses')
-        .select('*')
-        .eq('user_id', user.id);
-      if (error) throw new Error(error.message);
-      return data || [];
-    },
-    enabled: !!user?.id,
-  });
+  // Staat voor het beheren van sessies
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>('new');
 
-  // Get schedule
-  const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
-    queryKey: ['schedule', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return [];
-      const { data, error } = await supabase
-        .from('schedule')
-        .select('*')
-        .eq('user_id', user.id);
-      if (error) throw new Error(error.message);
-      return data || [];
-    },
-    enabled: !!user?.id,
-  });
+  const [courseOptions, setCourseOptions] = useState<string[]>([]);
+  const [loadingCourses, setLoadingCourses] = useState(false);
 
-  const formatWeekRange = (start: Date, end: Date) => {
-    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
-    return `${start.toLocaleDateString('nl-NL', options)} - ${end.toLocaleDateString('nl-NL', options)} ${end.getFullYear()}`;
-  };
+  const [audioStatus, setAudioStatus] = useState<"idle" | "playing" | "paused">("idle");
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  
+  // Haal vakken op zodra gebruiker en selectedCourse beschikbaar zijn
+  useEffect(() => {
+    const loadCourseOptions = async () => {
+      if (!user || isLoading) {
+        setCourseOptions([]);
+        return;
+      }
+      setLoadingCourses(true);
+      try {
+        // Haal alle vakken direct op uit de 'courses' tabel voor de ingelogde gebruiker
+        const { data: courses, error } = await supabase
+          .from("courses")
+          .select("name")
+          .eq("user_id", user.id)
+          .order("name", { ascending: true });
 
-  const getDayName = (date: Date) => {
-    const days = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
-    return days[date.getDay()];
-  };
+        if (error) throw error;
 
-  const getWeekDays = () => {
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      
-      const dayTasks = tasks.filter(task => {
-        if (!task.due_at) return false;
-        const taskDate = new Date(task.due_at);
-        return taskDate.toDateString() === date.toDateString();
-      });
+        const courseNames = (courses ?? []).map(c => c.name).filter(Boolean);
+        setCourseOptions(courseNames);
 
-      const daySchedule = schedule.filter(item => {
-        if (item.date) {
-          const itemDate = new Date(item.date);
-          return itemDate.toDateString() === date.toDateString();
-        }
-        return item.day_of_week === (date.getDay() === 0 ? 7 : date.getDay());
-      });
+        // Reset de selectie als het geselecteerde vak niet meer in de lijst voorkomt
+        if (selectedCourse && !courseNames.includes(selectedCourse)) {
+          setSelectedCourse("");
+        }
+      } catch (e: any) {
+        console.error("Kon vakken niet laden:", e);
+        setCourseOptions([]);
+        toast({
+          title: "Fout",
+          description: "Kon de lijst met vakken niet laden.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingCourses(false);
+      }
+    };
 
-      days.push({
-        date,
-        name: getDayName(date),
-        formattedDate: date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }),
-        tasks: dayTasks,
-        schedule: daySchedule,
-      });
-    }
-    return days;
-  };
+    loadCourseOptions();
+  }, [user, isLoading]); // Zorg ervoor dat het wacht tot de gebruiker is geladen
 
-  const getCourseById = (courseId: string | null) => {
-    if (!courseId) return undefined;
-    return courses.find(c => c.id === courseId);
-  };
+// Chatsessies laden en bijwerken
+useEffect(() => {
+    const loadChatSessions = async () => {
+        if (!user || isLoading || !selectedCourse) {
+            setChatSessions([]);
+            setSelectedSessionId('new');
+            setMessages([]);
+            return;
+        }
 
-  const formatTime = (timeString: string) => {
-    return timeString.slice(0, 5); // "HH:MM"
-  };
+        const { data, error } = await supabase
+            .from("chatsessies")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("vak", selectedCourse)
+            .order("updated_at", { ascending: false });
 
-  const getCompletionPercentage = () => {
-    const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(task => task.status === 'done').length;
-    return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-  };
+        if (error) {
+            console.error("Kon chatgeschiedenis niet laden:", error);
+            return;
+        }
 
-  const weekDays = getWeekDays();
+        const sessions = data as ChatSession[];
+        setChatSessions(sessions);
+        
+        // Laad de meest recente sessie of start een nieuwe
+        if (sessions.length > 0) {
+            const mostRecentSession = sessions[0];
+            setSelectedSessionId(mostRecentSession.id);
+            setCurrentSessionId(mostRecentSession.id);
+            setMessages(mostRecentSession.berichten);
+        } else {
+            setSelectedSessionId('new');
+            setMessages([]);
+            setCurrentSessionId(null);
+        }
+    };
+    loadChatSessions();
+}, [selectedCourse, user, isLoading]); // Zorg ervoor dat het wacht tot de gebruiker is geladen
 
-  // Task completion handler
-  const handleTaskToggle = async (taskId: string, currentStatus: string) => {
-    if (!user?.id) return;
-    
-    try {
-      const newStatus = currentStatus === 'done' ? 'todo' : 'done';
-      const { error } = await supabase
-        .from('tasks')
-        .update({ status: newStatus })
-        .eq('id', taskId)
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
-      
-      // Invalidate queries to refresh data
-      // Note: You might need to import queryClient if using React Query's invalidateQueries
-    } catch (error) {
-      console.error('Error updating task:', error);
-    }
-  };
+// Luister naar geselecteerde sessie en update berichten
+useEffect(() => {
+    if (selectedSessionId === 'new') {
+        setMessages([]);
+        setCurrentSessionId(null);
+    } else {
+        const session = chatSessions.find(s => s.id === selectedSessionId);
+        if (session) {
+            setMessages(session.berichten);
+            setCurrentSessionId(session.id);
+        }
+    }
+}, [selectedSessionId, chatSessions]);
 
-  // Loading state
-  if (isLoading || tasksLoading || coursesLoading || scheduleLoading) {
-    return (
-      <div className="flex justify-center items-center h-full p-4">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-          <p>Laden...</p>
-        </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="p-6" data-testid="page-planning">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">Planning</h2>
-        <div className="text-sm text-muted-foreground" data-testid="week-progress">
-          Week {Math.ceil((startOfWeek.getTime() - new Date(startOfWeek.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))} • {getCompletionPercentage()}% voltooid
-        </div>
-      </div>
+  // Altijd naar onderen scrollen bij nieuwe berichten
+  useEffect(() => {
+    const viewport = scrollAreaRef.current?.querySelector('div[data-radix-scroll-area-viewport]');
+    if (viewport) viewport.scrollTop = viewport.scrollHeight;
+  }, [messages]);
 
-      {/* Week Navigation */}
-      <div className="flex items-center justify-between mb-6" data-testid="week-navigation">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setCurrentWeekOffset(currentWeekOffset - 1)}
-          data-testid="button-previous-week"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </Button>
-        
-        <h3 className="text-lg font-medium" data-testid="text-current-week">
-          {formatWeekRange(startOfWeek, endOfWeek)}
-        </h3>
-        
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setCurrentWeekOffset(currentWeekOffset + 1)}
-          data-testid="button-next-week"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </Button>
-      </div>
+  // Vraag versturen naar de AI
+  const handleSendMessage = async (imageUrl?: string) => {
+    if ((!opgave.trim() && !imageUrl) || isGenerating || !user || !selectedCourse) return;
 
-      {/* Weekly Schedule */}
-      <div className="space-y-4">
-        {weekDays.map((day, index) => (
-          <div key={index} className="border border-border rounded-lg overflow-hidden" data-testid={`day-card-${index}`}>
-            <div className="bg-muted/50 px-4 py-2 border-b border-border">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium capitalize" data-testid={`day-name-${index}`}>
-                  {day.name} {day.formattedDate}
-                </h4>
-                <span className="text-sm text-muted-foreground" data-testid={`task-count-${index}`}>
-                  {day.tasks.length} taken
-                </span>
-              </div>
-            </div>
-            
-            <div className="p-4 space-y-3">
-              {/* Schedule Items */}
-              {day.schedule.map((item, scheduleIndex) => {
-                const course = getCourseById(item.course_id);
-                
-                const getKindLabel = (kind: string) => {
-                  switch (kind) {
-                    case "les": return "Les";
-                    case "toets": return "TOETS";
-                    case "sport": return "Sport/Training";
-                    case "werk": return "Bijbaan/Werk";
-                    case "afspraak": return "Afspraak";
-                    case "hobby": return "Hobby/Activiteit";
-                    case "anders": return "Anders";
-                    default: return kind;
-                  }
-                };
+    const userMessage: Message = { id: Date.now(), sender: "user", text: opgave || "Kun je helpen met deze afbeelding?", poging, imageUrl };
+    const newMessagesList = [...messages, userMessage];
+    setMessages(newMessagesList);
+    setOgave("");
+    setPoging("");
+    setIsGenerating(true);
 
-                const getKindColor = (kind: string) => {
-                  switch (kind) {
-                    case "les": return "bg-blue-500";
-                    case "toets": return "bg-red-500";
-                    case "sport": return "bg-green-500";
-                    case "werk": return "bg-purple-500";
-                    case "afspraak": return "bg-orange-500";
-                    case "hobby": return "bg-pink-500";
-                    case "anders": return "bg-gray-500";
-                    default: return "bg-muted-foreground";
-                  }
-                };
-                
-                return (
-                  <div key={scheduleIndex} className="flex items-center space-x-3 text-sm" data-testid={`schedule-item-${index}-${scheduleIndex}`}>
-                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(item.kind || 'les')}`} />
-                    <span className="text-muted-foreground w-16">
-                      {item.start_time && formatTime(item.start_time)}
-                    </span>
-                    <span>
-                      {item.title || course?.name || 'Activiteit'} - {getKindLabel(item.kind || 'les')}
-                    </span>
-                    {course && item.title && (
-                      <span className="text-xs text-muted-foreground">
-                        ({course.name})
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-              
-              {/* Tasks */}
-              {day.tasks.length > 0 && (
-                <div className="pt-2 border-t border-border space-y-2">
-                  {day.tasks.map((task) => {
-                    const course = getCourseById(task.course_id);
-                    
-                    return (
-                      <div key={task.id} className="flex items-center space-x-3" data-testid={`task-item-${task.id}`}>
-                        <Checkbox
-                          checked={task.status === 'done'}
-                          onCheckedChange={() => handleTaskToggle(task.id, task.status)}
-                          className="w-4 h-4"
-                          data-testid={`checkbox-task-${task.id}`}
-                        />
-                        <span className={`flex-1 text-sm ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
-                          {task.title}
-                        </span>
-                        {course && (
-                          <span className="text-xs text-muted-foreground">
-                            {course.name}
-                          </span>
-                        )}
-                        {task.est_minutes && (
-                          <span className="text-xs text-muted-foreground">
-                            {task.est_minutes}m
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              
-              {/* Empty State */}
-              {day.schedule.length === 0 && day.tasks.length === 0 && (
-                <p className="text-sm text-muted-foreground italic" data-testid={`empty-day-${index}`}>
-                  Geen activiteiten gepland
-                </p>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+    try {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      
+      // Haal de chatgeschiedenis op, maar filter onnodige data
+      const historyToSend = messages.map(msg => ({
+          role: msg.sender === 'user' ? 'user' : 'model',
+          text: msg.text
+      }));
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ 
+          opgave: userMessage.text, 
+          poging: userMessage.poging, 
+          course: selectedCourse, 
+          imageUrl,
+          history: historyToSend,
+        }),
+      });
+      if (!response.ok) throw new Error((await response.json()).error || 'Er is een fout opgetreden');
+
+      const { aiResponseText, aiAudioUrl } = await response.json();
+      const aiMessage: Message = { id: Date.now() + 1, sender: "ai", text: aiResponseText, audioUrl: aiAudioUrl };
+      const finalMessagesList = [...newMessagesList, aiMessage];
+      setMessages(finalMessagesList);
+
+      // Opslaan in Supabase
+      if (currentSessionId) {
+        await supabase.from("chatsessies").update({ berichten: finalMessagesList, updated_at: new Date().toISOString() }).eq("id", currentSessionId);
+      } else {
+        const { data: ins } = await supabase.from("chatsessies").insert({ user_id: user.id, vak: selectedCourse, berichten: finalMessagesList }).select("id").single();
+        if (ins) setCurrentSessionId(ins.id);
+      }
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Oeps! Er ging iets mis.", description: error.message });
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Afbeelding uploaden
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+    setIsUploading(true);
+    const fileName = `${user.id}/${Date.now()}-${file.name}`;
+    try {
+      await supabase.storage.from("uploads").upload(fileName, file);
+      const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
+      await handleSendMessage(data.publicUrl);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  // Audio-playback
+  useEffect(() => {
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage?.sender === "ai" && lastMessage.audioUrl) {
+      if (audioRef.current) audioRef.current.pause();
+      const audio = new Audio(lastMessage.audioUrl);
+      audioRef.current = audio;
+      audio.play().catch(e => console.warn("Audio kon niet automatisch afspelen:", e));
+      setAudioStatus("playing");
+      audio.onended = () => setAudioStatus("idle");
+      audio.onpause = () => { if (!audio.ended) setAudioStatus("paused"); };
+    }
+  }, [messages]);
+
+  const handleAudioControl = () => {
+    if (audioRef.current) {
+      if (audioStatus === "playing") audioRef.current.pause();
+      else { audioRef.current.play(); setAudioStatus("playing"); }
+    }
+  };
+  
+  const handleNewChat = () => {
+      setMessages([]);
+      setCurrentSessionId(null);
+      setSelectedSessionId('new');
+      setOgave("");
+      setPoging("");
+      toast({
+          title: "Nieuwe chatsessie",
+          description: "Je kunt nu een nieuwe vraag stellen.",
+      });
+  };
+
+  // Loading state
+  if (isLoading || loadingCourses) {
+    return (
+      <div className="flex justify-center items-center h-full p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-80px)] p-4 bg-slate-50">
+      <ScrollArea className="flex-grow mb-4 p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
+        <div className="space-y-4">
+          {/* Welkomstbericht */}
+          {messages.length === 0 && !isGenerating && (
+            <div className="text-center text-muted-foreground pt-12">
+              <p className="font-medium text-lg">Welkom bij de AI Tutor!</p>
+              <p className="text-sm">Kies een vak en stel je vraag.</p>
+            </div>
+          )}
+          {/* Berichten */}
+          {messages.map(msg => (
+            <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
+              <div className={cn("max-w-xl p-3 rounded-lg shadow-sm", msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-background border")}>
+                <p className="font-bold text-sm mb-1">{msg.sender === "user" ? "Jij" : "AI Tutor"}</p>
+                {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-xs" />}
+                <p className="whitespace-pre-wrap">{msg.text}</p>
+                {msg.poging && <p className="text-xs italic mt-2 border-t pt-2">Mijn poging: "{msg.poging}"</p>}
+                {msg.sender === "ai" && msg.audioUrl && (
+                  <div className="mt-3">
+                    <Button onClick={handleAudioControl} size="icon" variant="outline" className="h-8 w-8">
+                      {audioStatus === 'playing' && <Pause className="w-4 h-4" />}
+                      {audioStatus === 'paused' && <Play className="w-4 h-4" />}
+                      {audioStatus === 'idle' && <Repeat className="w-4 h-4" />}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {/* Laad-indicator */}
+          {isGenerating && (
+            <div className="flex justify-start">
+              <div className="p-3 rounded-lg bg-background border shadow-sm">
+                <p className="font-bold text-sm mb-1">AI Tutor</p>
+                <div className="flex items-center space-x-2">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-bounce" />
+                  <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-150" />
+                  <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-300" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+      <Card>
+        <CardHeader className="flex-row items-center justify-between pb-2">
+          <CardTitle className="text-lg">Stel je vraag</CardTitle>
+          <div className="flex items-center gap-2">
+            
+            <Select value={selectedSessionId} onValueChange={setSelectedSessionId} disabled={!selectedCourse}>
+              <SelectTrigger className="w-48 text-left">
+                <SelectValue placeholder="Kies een sessie..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="new">Nieuwe chat</SelectItem>
+                {chatSessions.map(session => (
+                  <SelectItem key={session.id} value={session.id}>
+                    {new Date(session.updated_at).toLocaleString('nl-NL', { dateStyle: 'short', timeStyle: 'short' })}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Dialog>
+              <DialogTrigger asChild><Button variant="ghost" size="icon"><Info className="w-5 h-5 text-muted-foreground" /></Button></DialogTrigger>
+              <DialogContent>
+                <DialogHeader><DialogTitle>💡 Tips voor Goede Hulp</DialogTitle></DialogHeader>
+                <ul className="space-y-3 pt-2 text-sm">
+                  <li><strong>1. Wees Specifiek:</strong> Vraag "Hoe bereken je de omtrek?" i.p.v. "Ik snap het niet".</li>
+                  <li><strong>2. Laat je Werk Zien:</strong> Vul in wat je zelf al hebt geprobeerd.</li>
+                  <li><strong>3. Gebruik een Foto:</strong> Maak een duidelijke foto van je opgave.</li>
+                  <li className="text-xs text-amber-800 p-2 bg-amber-50 rounded-md"><strong>Let op:</strong> Controleer belangrijke antwoorden altijd.</li>
+                </ul>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent className="p-4 pt-0 space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="opgave-text">Opgave of Begrip</Label>
+              <Textarea id="opgave-text" value={opgave} onChange={e => setOgave(e.target.value)} placeholder="Typ of plak hier de opgave..." rows={3} />
+            </div>
+            <div>
+              <Label htmlFor="poging-text">Mijn eigen poging (optioneel)</Label>
+              <Textarea id="poging-text" value={poging} onChange={e => setPoging(e.target.value)} placeholder="Wat heb je zelf al geprobeerd?" rows={3} />
+            </div>
+          </div>
+          <div className="flex items-end justify-between">
+            <div className="flex items-center gap-2">
+              <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+              <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isUploading || isGenerating}>
+                {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+              </Button>
+              <Button variant="outline" size="icon" disabled><Mic className="w-4 h-4" /></Button>
+              <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder={loadingCourses ? "Vakken laden..." : "Kies een vak"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {courseOptions.length > 0 ? courseOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>) : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken gevonden</div>}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={() => handleSendMessage()} disabled={!opgave.trim() || isGenerating || !selectedCourse} size="lg">
+              <Send className="w-5 h-5 mr-2" />
+              Verstuur
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
