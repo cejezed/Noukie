@@ -8,7 +8,7 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
 import Vandaag from "@/pages/Vandaag";
-import Planning from "@/pages/Planning";
+import PlanningTemp from "@/pages/PlanningTemp";
 import Rooster from "@/pages/Rooster";
 import LeerChat from "@/pages/LeerChat";
 import Instellingen from "@/pages/Instellingen";
@@ -78,7 +78,7 @@ function AuthenticatedApp() {
     <Layout>
       <Switch>
         <Route path="/" component={Vandaag} />
-        <Route path="/rooster" component={Planning} />
+        <Route path="/rooster" component={PlanningTemp} />
         <Route path="/mental" component={MentalPage} />
         <Route path="/toevoegen" component={Rooster} />
         <Route path="/help" component={LeerChat} />
