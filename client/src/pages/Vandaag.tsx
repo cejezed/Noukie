@@ -1,175 +1,320 @@
 import * as React from "react";
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import TextCheckin from "@/components/TextCheckin";
-import TaskCard from "@/components/TaskCard";
-import VoiceRecorder from "@/components/VoiceRecorder";
-import AppIntroModal from "@/components/AppIntroModal";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Info, Plus, X, Loader2 } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import type { Task, Course } from "@shared/schema";
+import type { Task, Course, Schedule } from "@shared/schema";
 
-export default function Vandaag() {
-  const { user, isLoading: authLoading } = useAuth();
-  const { toast } = useToast();
+export default function Planning() {
+  const { user, isLoading } = useAuth();
   const queryClient = useQueryClient();
-  const userId = user?.id ?? "";
+  const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
 
-  const [showTaskForm, setShowTaskForm] = useState(false);
-  const [showIntroModal, setShowIntroModal] = useState(false);
-  const [taskForm, setTaskForm] = useState({
-    title: "",
-    course_id: "",
-    est_minutes: 30,
-    priority: 1,
-    due_at: new Date().toISOString().split("T")[0],
-  });
+  // Calculate week dates
+  const getWeekDates = (offset: number) => {
+    const today = new Date();
+    const startOfWeek = new Date(today);
+    // Zet de start van de week op maandag
+    startOfWeek.setDate(today.getDate() - (today.getDay() === 0 ? 6 : today.getDay() - 1) + (offset * 7));
+    
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 6);
+    
+    return { startOfWeek, endOfWeek };
+  };
 
-  React.useEffect(() => {
-    if (authLoading) return;
-    const key = `hasSeenIntro_${userId}`;
-    if (userId && !localStorage.getItem(key)) {
-      setShowIntroModal(true);
-      localStorage.setItem(key, 'true');
-    }
-  }, [userId, authLoading]);
+  const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
 
-  // === QUERIES (direct naar Supabase) ===
-  const { data: todayTasks = [], isLoading: tasksLoading, isError: tasksError } = useQuery<Task[]>({
-    enabled: !!userId,
-    queryKey: ["tasks", "today", userId],
+  // Get tasks for the week (stable cache key using date strings)
+  const weekKey = `${startOfWeek.toISOString().split('T')[0]}-${endOfWeek.toISOString().split('T')[0]}`;
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
+    queryKey: ['tasks', user?.id, 'week', weekKey],
     queryFn: async () => {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 1);
-
+      if (!user?.id) return [];
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
-        .eq('user_id', userId)
-        .gte('due_at', start.toISOString())
-        .lt('due_at', end.toISOString());
+        .eq('user_id', user.id)
+        .gte('due_at', startOfWeek.toISOString())
+        .lt('due_at', endOfWeek.toISOString());
       if (error) throw new Error(error.message);
       return data || [];
     },
-    staleTime: 0,
+    enabled: !!user?.id,
   });
 
+  // Get courses
   const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
-    enabled: !!userId,
-    queryKey: ["courses", userId],
+    queryKey: ['courses', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('courses').select('*').eq('user_id', userId);
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('user_id', user.id);
       if (error) throw new Error(error.message);
       return data || [];
     },
+    enabled: !!user?.id,
   });
 
-  // === MUTATION (direct naar Supabase) ===
-  const createTaskMutation = useMutation({
-    mutationFn: async (newTask: Omit<Task, 'id' | 'created_at' | 'status'>) => {
-      const { error } = await supabase.from('tasks').insert(newTask);
+  // Get schedule
+  const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
+    queryKey: ['schedule', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return [];
+      const { data, error } = await supabase
+        .from('schedule')
+        .select('*')
+        .eq('user_id', user.id);
       if (error) throw new Error(error.message);
+      return data || [];
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast({ title: "Taak aangemaakt!", description: "Je nieuwe taak is toegevoegd." });
-      setShowTaskForm(false);
-      setTaskForm({ title: "", course_id: "", est_minutes: 30, priority: 1, due_at: new Date().toISOString().split("T")[0] });
-    },
-    onError: (error) => {
-      toast({ title: "Fout bij aanmaken taak", description: error.message, variant: "destructive" });
-    },
+    enabled: !!user?.id,
   });
 
-  const handleCreateTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!taskForm.title.trim() || !userId) return;
-    createTaskMutation.mutate({
-      ...taskForm,
-      course_id: taskForm.course_id || null,
-      user_id: userId,
-    });
+  const formatWeekRange = (start: Date, end: Date) => {
+    const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' };
+    return `${start.toLocaleDateString('nl-NL', options)} - ${end.toLocaleDateString('nl-NL', options)} ${end.getFullYear()}`;
   };
 
-  const completedTasks = todayTasks.filter((t) => t.status === "done");
-  const pendingTasks = todayTasks.filter((t) => t.status !== "done");
+  const getDayName = (date: Date) => {
+    const days = ['zondag', 'maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag'];
+    return days[date.getDay()];
+  };
 
-  // Laadscherm
-  if (authLoading || tasksLoading || coursesLoading) {
+  const getWeekDays = () => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      
+      const dayTasks = tasks.filter(task => {
+        if (!task.due_at) return false;
+        const taskDate = new Date(task.due_at);
+        return taskDate.toDateString() === date.toDateString();
+      });
+
+      const daySchedule = schedule.filter(item => {
+        if (item.date) {
+          const itemDate = new Date(item.date);
+          return itemDate.toDateString() === date.toDateString();
+        }
+        return item.day_of_week === (date.getDay() === 0 ? 7 : date.getDay());
+      });
+
+      days.push({
+        date,
+        name: getDayName(date),
+        formattedDate: date.toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }),
+        tasks: dayTasks,
+        schedule: daySchedule,
+      });
+    }
+    return days;
+  };
+
+  const getCourseById = (courseId: string | null) => {
+    if (!courseId) return undefined;
+    return courses.find(c => c.id === courseId);
+  };
+
+  const formatTime = (timeString: string) => {
+    return timeString.slice(0, 5); // "HH:MM"
+  };
+
+  const getCompletionPercentage = () => {
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(task => task.status === 'done').length;
+    return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  };
+
+  const weekDays = getWeekDays();
+
+  // Task completion handler with proper query invalidation
+  const handleTaskToggle = async (taskId: string, currentStatus: string) => {
+    if (!user?.id) return;
+    
+    try {
+      const newStatus = currentStatus === 'done' ? 'todo' : 'done';
+      console.log(`Updating task ${taskId} from ${currentStatus} to ${newStatus}`);
+      
+      const { error } = await supabase
+        .from('tasks')
+        .update({ status: newStatus })
+        .eq('id', taskId)
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Supabase error updating task:', error);
+        throw error;
+      }
+      
+      console.log('Task updated successfully');
+      
+      // Invalidate and refetch all task queries to update UI
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      
+    } catch (error) {
+      console.error('Error updating task:', error);
+    }
+  };
+
+  // Loading state
+  if (isLoading || tasksLoading || coursesLoading || scheduleLoading) {
     return (
       <div className="flex justify-center items-center h-full p-4">
-        <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+          <p>Laden...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      {showIntroModal && <AppIntroModal isOpen={showIntroModal} onClose={() => setShowIntroModal(false)} />}
-      <div className="space-y-6">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold mb-2">Vandaag</h1>
-          <p className="text-muted-foreground">{new Date().toLocaleDateString("nl-NL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</p>
+    <div className="p-6" data-testid="page-planning">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-semibold">Planning</h2>
+        <div className="text-sm text-muted-foreground" data-testid="week-progress">
+          Week {Math.ceil((startOfWeek.getTime() - new Date(startOfWeek.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))} • {getCompletionPercentage()}% voltooid
         </div>
-        <VoiceRecorder />
-        <div className="grid grid-cols-2 gap-4">
-          <Card><CardContent className="p-4 text-center"><div className="text-2xl font-bold">{completedTasks.length}</div><div className="text-sm text-muted-foreground">Voltooid</div></CardContent></Card>
-          <Card><CardContent className="p-4 text-center"><div className="text-2xl font-bold">{pendingTasks.length}</div><div className="text-sm text-muted-foreground">Te doen</div></CardContent></Card>
-        </div>
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Taken voor Vandaag</CardTitle>
-              <Button onClick={() => setShowTaskForm(true)} size="sm" className="flex items-center gap-1"><Plus className="w-4 h-4" />Taak Toevoegen</Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {tasksLoading ? (
-              <div className="text-center py-8"><Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" /></div>
-            ) : tasksError ? (
-              <div className="text-center py-8 text-red-500">Kon taken niet laden.</div>
-            ) : todayTasks.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Info className="w-8 h-8 mx-auto mb-2" /><p>Geen taken voor vandaag</p>
+      </div>
+
+      {/* Week Navigation */}
+      <div className="flex items-center justify-between mb-6" data-testid="week-navigation">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setCurrentWeekOffset(currentWeekOffset - 1)}
+          data-testid="button-previous-week"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </Button>
+        
+        <h3 className="text-lg font-medium" data-testid="text-current-week">
+          {formatWeekRange(startOfWeek, endOfWeek)}
+        </h3>
+        
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setCurrentWeekOffset(currentWeekOffset + 1)}
+          data-testid="button-next-week"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </Button>
+      </div>
+
+      {/* Weekly Schedule */}
+      <div className="space-y-4">
+        {weekDays.map((day, index) => (
+          <div key={index} className="border border-border rounded-lg overflow-hidden" data-testid={`day-card-${index}`}>
+            <div className="bg-muted/50 px-4 py-2 border-b border-border">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium capitalize" data-testid={`day-name-${index}`}>
+                  {day.name} {day.formattedDate}
+                </h4>
+                <span className="text-sm text-muted-foreground" data-testid={`task-count-${index}`}>
+                  {day.tasks.length} taken
+                </span>
               </div>
-            ) : (
-              todayTasks.map((task) => <TaskCard key={task.id} task={task} course={courses.find(c => c.id === task.course_id)} />)
-            )}
-          </CardContent>
-        </Card>
-        {showTaskForm && (
-          <Card>
-            <CardHeader><div className="flex items-center justify-between"><CardTitle>Nieuwe Taak</CardTitle><Button variant="ghost" size="sm" onClick={() => setShowTaskForm(false)}><X className="w-4 h-4" /></Button></div></CardHeader>
-            <CardContent>
-              <form onSubmit={handleCreateTask} className="space-y-4">
-                <div><Label htmlFor="title">Titel</Label><Input id="title" value={taskForm.title} onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })} required /></div>
-                <div>
-                  <Label htmlFor="course">Vak</Label>
-                  <Select value={taskForm.course_id} onValueChange={(value) => setTaskForm({ ...taskForm, course_id: value })}>
-                    <SelectTrigger><SelectValue placeholder="Selecteer een vak" /></SelectTrigger>
-                    <SelectContent>{courses.map((course) => <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>)}</SelectContent>
-                  </Select>
+            </div>
+            
+            <div className="p-4 space-y-3">
+              {/* Schedule Items */}
+              {day.schedule.map((item, scheduleIndex) => {
+                const course = getCourseById(item.course_id);
+                
+                const getKindLabel = (kind: string) => {
+                  switch (kind) {
+                    case "les": return "Les";
+                    case "toets": return "TOETS";
+                    case "sport": return "Sport/Training";
+                    case "werk": return "Bijbaan/Werk";
+                    case "afspraak": return "Afspraak";
+                    case "hobby": return "Hobby/Activiteit";
+                    case "anders": return "Anders";
+                    default: return kind;
+                  }
+                };
+
+                const getKindColor = (kind: string) => {
+                  switch (kind) {
+                    case "les": return "bg-blue-500";
+                    case "toets": return "bg-red-500";
+                    case "sport": return "bg-green-500";
+                    case "werk": return "bg-purple-500";
+                    case "afspraak": return "bg-orange-500";
+                    case "hobby": return "bg-pink-500";
+                    case "anders": return "bg-gray-500";
+                    default: return "bg-muted-foreground";
+                  }
+                };
+                
+                return (
+                  <div key={scheduleIndex} className="flex items-center space-x-3 text-sm" data-testid={`schedule-item-${index}-${scheduleIndex}`}>
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(item.kind || 'les')}`} />
+                    <span className="text-muted-foreground w-16">
+                      {item.start_time && formatTime(item.start_time)}
+                    </span>
+                    <span>
+                      {item.title || course?.name || 'Activiteit'} - {getKindLabel(item.kind || 'les')}
+                    </span>
+                    {course && item.title && (
+                      <span className="text-xs text-muted-foreground">
+                        ({course.name})
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              
+              {/* Tasks */}
+              {day.tasks.length > 0 && (
+                <div className="pt-2 border-t border-border space-y-2">
+                  {day.tasks.map((task) => {
+                    const course = getCourseById(task.course_id);
+                    
+                    return (
+                      <div key={task.id} className="flex items-center space-x-3" data-testid={`task-item-${task.id}`}>
+                        <Checkbox
+                          checked={task.status === 'done'}
+                          onCheckedChange={() => handleTaskToggle(task.id, task.status)}
+                          className="w-4 h-4"
+                          data-testid={`checkbox-task-${task.id}`}
+                        />
+                        <span className={`flex-1 text-sm ${task.status === 'done' ? 'line-through opacity-60' : ''}`}>
+                          {task.title}
+                        </span>
+                        {course && (
+                          <span className="text-xs text-muted-foreground">
+                            {course.name}
+                          </span>
+                        )}
+                        {task.est_minutes && (
+                          <span className="text-xs text-muted-foreground">
+                            {task.est_minutes}m
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <div><Label htmlFor="minutes">Geschatte tijd (minuten)</Label><Input id="minutes" type="number" value={taskForm.est_minutes} onChange={(e) => setTaskForm({ ...taskForm, est_minutes: parseInt(e.target.value) || 0 })} min="1" /></div>
-                <div><Label htmlFor="dueAt">Deadline</Label><Input id="dueAt" type="date" value={taskForm.due_at} onChange={(e) => setTaskForm({ ...taskForm, due_at: e.target.value })} /></div>
-                <div className="flex gap-2">
-                  <Button type="submit" disabled={createTaskMutation.isPending}>{createTaskMutation.isPending ? "Bezig..." : "Taak Aanmaken"}</Button>
-                  <Button type="button" variant="outline" onClick={() => setShowTaskForm(false)}>Annuleren</Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        )}
-        <TextCheckin />
+              )}
+              
+              {/* Empty State */}
+              {day.schedule.length === 0 && day.tasks.length === 0 && (
+                <p className="text-sm text-muted-foreground italic" data-testid={`empty-day-${index}`}>
+                  Geen activiteiten gepland
+                </p>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
