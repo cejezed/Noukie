@@ -1,10 +1,10 @@
-import React, { 
-  useState, 
-  useEffect, 
-  useContext, 
-  useCallback, 
-  createContext, 
-  forwardRef 
+import React, {
+  useState,
+  useEffect,
+  useContext,
+  useCallback,
+  createContext,
+  forwardRef
 } from "react";
 import useEmblaCarousel, {
   type UseEmblaCarouselType,

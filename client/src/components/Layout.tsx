@@ -30,9 +30,9 @@ const tabs = [
       <header className="bg-primary text-primary-foreground p-4 sticky top-0 z-50" data-testid="header">
         <div className="flex items-center justify-between">
           <div className="w-28 h-14 bg-white rounded-sm flex items-center justify-center p-1">
-            <img 
-              src="/noukie-logo.png" 
-              alt="Noukie Logo" 
+            <img
+              src="/noukie-logo.png"
+              alt="Noukie Logo"
               className="w-full h-full object-contain"
             />
           </div>
@@ -68,7 +68,7 @@ const tabs = [
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = location === tab.path;
-              
+
               return (
                 <Link key={tab.id} href={tab.path}>
                   <div className="w-full flex justify-center">

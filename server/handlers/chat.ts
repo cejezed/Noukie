@@ -29,13 +29,13 @@ export async function handleChatRequest(req: Request, res: Response) {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'Geen autorisatie-token.' });
-    
+
     // Verifieer de gebruiker via Supabase
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) return res.status(401).json({ error: 'Niet geautoriseerd.' });
 
     const { opgave, poging, course, imageUrl, history } = req.body;
-    
+
     // Gebruik 'gemini-1.5-flash' of een ander beschikbaar model
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
@@ -45,11 +45,11 @@ export async function handleChatRequest(req: Request, res: Response) {
       Het vak is: ${course}.
       De vraag van de leerling is: "${opgave}"
       De eigen poging van de leerling is: "${poging || 'Niet ingevuld.'}"
-      
+
       Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socratic-stijl hint en een wedervraag.
       Geef geen directe antwoorden. Houd je antwoord beknopt en in het Nederlands.
     `;
-    
+
     // Bouw de chatgeschiedenis op met de nieuwe input
     let contents = [];
     if (history && Array.isArray(history)) {
@@ -74,7 +74,7 @@ export async function handleChatRequest(req: Request, res: Response) {
     const result = await model.generateContent({
       contents: contents
     });
-    
+
     const aiResponseText = result.response.text();
 
     // Zet de tekst om naar spraak

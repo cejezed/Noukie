@@ -5,11 +5,11 @@ import { Loader2 } from "lucide-react";
 export default function MentalPage() {
   const enabled = true;
   const { user, isLoading } = useAuth();
-  
+
   // DEBUG: Log de user data
   console.log('MentalPage - User data:', { user, isLoading });
   console.log('User ID:', user?.id);
-  
+
   if (!enabled) return <div className="p-4">Deze functie staat (nog) uit.</div>;
 
   if (isLoading || !user) {
@@ -21,7 +21,7 @@ export default function MentalPage() {
   }
 
   const userId = user.id;
-  
+
   // Extra check voordat we MentalCheckin renderen
   if (!userId) {
     console.error('User ID is undefined!', user);

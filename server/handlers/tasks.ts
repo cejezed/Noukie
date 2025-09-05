@@ -40,7 +40,7 @@ export async function handleGetTasksForToday(req: Request, res: Response) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const startOfDay = today.toISOString();
-    
+
     today.setHours(23, 59, 59, 999);
     const endOfDay = today.toISOString();
 

@@ -23,39 +23,39 @@ function maybeRemap(body: any, map: Record<string, string>): string {
 }
 
 const MAPPINGS: Array<{ re: RegExp; map: Record<string, string> }> = [
-  { 
-    re: /\/rest\/v1\/tasks(\b|\/|\?)/, 
-    map: { 
-      userId: "user_id", 
-      courseId: "course_id", 
-      estMinutes: "est_minutes", 
-      createdAt: "created_at", 
-      startsAt: "starts_at", 
-      endsAt: "ends_at" 
-    } 
+  {
+    re: /\/rest\/v1\/tasks(\b|\/|\?)/,
+    map: {
+      userId: "user_id",
+      courseId: "course_id",
+      estMinutes: "est_minutes",
+      createdAt: "created_at",
+      startsAt: "starts_at",
+      endsAt: "ends_at"
+    }
   },
-  { 
-    re: /\/rest\/v1\/courses(\b|\/|\?)/, 
-    map: { 
-      userId: "user_id", 
-      createdAt: "created_at" 
-    } 
+  {
+    re: /\/rest\/v1\/courses(\b|\/|\?)/,
+    map: {
+      userId: "user_id",
+      createdAt: "created_at"
+    }
   },
-  { 
-    re: /\/rest\/v1\/schedule(\b|\/|\?)/, 
-    map: { 
-      userId: "user_id", 
-      courseId: "course_id", 
-      startsAt: "starts_at", 
-      endsAt: "ends_at" 
-    } 
+  {
+    re: /\/rest\/v1\/schedule(\b|\/|\?)/,
+    map: {
+      userId: "user_id",
+      courseId: "course_id",
+      startsAt: "starts_at",
+      endsAt: "ends_at"
+    }
   },
-  { 
-    re: /\/rest\/v1\/chatsessies(\b|\/|\?)/, 
-    map: { 
-      userId: "user_id", 
-      updatedAt: "updated_at" 
-    } 
+  {
+    re: /\/rest\/v1\/chatsessies(\b|\/|\?)/,
+    map: {
+      userId: "user_id",
+      updatedAt: "updated_at"
+    }
   },
 ];
 
@@ -65,12 +65,12 @@ function getEnvVar(key: string): string | undefined {
   if (typeof import.meta !== 'undefined' && import.meta.env) {
     return import.meta.env[key];
   }
-  
+
   // Fallback to Node.js environment
   if (typeof process !== 'undefined' && process.env) {
     return process.env[key];
   }
-  
+
   return undefined;
 }
 
@@ -81,7 +81,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
   const missingVars = [];
   if (!supabaseUrl) missingVars.push('VITE_SUPABASE_URL');
   if (!supabaseAnonKey) missingVars.push('VITE_SUPABASE_ANON_KEY');
-  
+
   throw new Error(`Ontbrekende environment variabelen: ${missingVars.join(', ')}. Controleer uw .env bestand.`);
 }
 
@@ -92,7 +92,7 @@ export const supabase = createClient(
     global: {
       fetch: async (input: RequestInfo, init?: RequestInit) => {
         const url = typeof input === "string" ? input : input.toString();
-        
+
         if (init?.body) {
           for (const { re, map } of MAPPINGS) {
             if (re.test(url)) {
@@ -101,7 +101,7 @@ export const supabase = createClient(
             }
           }
         }
-        
+
         return fetch(input, init);
       },
     },

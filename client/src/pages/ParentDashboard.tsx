@@ -27,7 +27,7 @@ export default function ParentDashboard() {
  useEffect(() => {
     const hasSeenIntroKey = `hasSeenParentIntro_${user?.id}`;
     const hasSeenBefore = localStorage.getItem(hasSeenIntroKey);
-    
+
     if (!hasSeenBefore && user?.id) {
       // First time visit - show intro automatically
       setShowIntroModal(true);
@@ -151,7 +151,7 @@ export default function ParentDashboard() {
             )}
           </div>
         </CardHeader>
-        
+
         {showAddChild && (
           <CardContent>
             <form onSubmit={handleAddChild} className="space-y-4">
@@ -167,7 +167,7 @@ export default function ParentDashboard() {
                   data-testid="input-child-name"
                 />
               </div>
-              
+
               <div>
                 <Label htmlFor="child-email">Emailadres van je kind</Label>
                 <Input
@@ -183,7 +183,7 @@ export default function ParentDashboard() {
                   Dit moet het emailadres zijn waarmee je kind zich heeft geregistreerd
                 </p>
               </div>
-              
+
               <div className="flex gap-2">
                 <Button
                   type="submit"
@@ -242,11 +242,11 @@ export default function ParentDashboard() {
                     {getStatusBadge(childData.relationship.isConfirmed)}
                   </div>
                 </div>
-                
+
                 {childData.relationship.isConfirmed && childData.child && (
                   <div className="mt-4 pt-4 border-t flex gap-2">
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => {
                         // TODO: Navigate to child's tasks view

@@ -71,12 +71,12 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
     },
     onSuccess: (data: ExplanationResult) => {
       setExplanation(data);
-      
+
       // If no currentTopic is set (edge case), use the first step as topic
       if (!currentTopic && data.steps.length > 0) {
         setCurrentTopic(data.steps[0].substring(0, 50)); // First 50 chars of first step
       }
-      
+
       // Play coach audio
       if (data.coach_text) {
         playTTSAudio(data.coach_text);
@@ -116,36 +116,36 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
       if (!explanation || !currentTopic || !selectedCourse) {
         throw new Error("Missing data for expansion");
       }
-      
-      console.log("Sending expand request:", { 
-        topic: currentTopic, 
+
+      console.log("Sending expand request:", {
+        topic: currentTopic,
         course: selectedCourse,
-        hasExplanation: !!explanation 
+        hasExplanation: !!explanation
       });
-      
+
       const response = await apiRequest("POST", "/api/explain/expand", {
         originalExplanation: explanation,
         topic: currentTopic,
         course: selectedCourse
       });
-      
+
       if (!response.ok) {
         const errorData = await response.text();
         console.error("Expand API error:", errorData);
         throw new Error(`Server error: ${response.status}`);
       }
-      
+
       return await response.json();
     },
     onSuccess: (data: ExplanationResult) => {
       setExplanation(data);
       setSelectedAnswer(""); // Reset quiz answer
-      
+
       // Play new coach audio
       if (data.coach_text) {
         playTTSAudio(data.coach_text);
       }
-      
+
       toast({
         title: "Uitgebreide uitleg",
         description: "Je hebt nu meer gedetailleerde stappen en een moeilijkere vraag!"
@@ -184,10 +184,10 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
     if (explanation && currentTopic && selectedCourse) {
       expandMutation.mutate();
     } else {
-      console.log("Missing data for expansion:", { 
-        hasExplanation: !!explanation, 
-        currentTopic, 
-        selectedCourse 
+      console.log("Missing data for expansion:", {
+        hasExplanation: !!explanation,
+        currentTopic,
+        selectedCourse
       });
       toast({
         title: "Fout",
@@ -201,7 +201,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
     const input = document.createElement("input");
     input.type = "file";
     input.accept = type === "photo" ? "image/*" : ".pdf";
-    
+
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
@@ -236,11 +236,11 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
     if (!explanation || !selectedAnswer) return;
 
     const isCorrect = selectedAnswer === explanation.quiz.answer;
-    
+
     toast({
       title: isCorrect ? "Goed gedaan!" : "Niet helemaal juist",
-      description: isCorrect 
-        ? "Je hebt het goede antwoord gekozen." 
+      description: isCorrect
+        ? "Je hebt het goede antwoord gekozen."
         : `Het juiste antwoord is ${explanation.quiz.answer}.`,
       variant: isCorrect ? "default" : "destructive",
     });
@@ -383,7 +383,7 @@ export default function HelpModal({ open, onOpenChange, task, course, helpData }
             <div className="border border-border rounded-lg p-3" data-testid="quiz-section">
               <h4 className="text-sm font-medium mb-3">Controle vraag:</h4>
               <p className="text-sm mb-3">{explanation?.quiz?.question || 'Geen vraag beschikbaar'}</p>
-              
+
               <div className="space-y-2 mb-4">
                 {explanation?.quiz?.choices?.map((choice, index) => (
                   <label key={index} className="flex items-center space-x-2 text-sm cursor-pointer">

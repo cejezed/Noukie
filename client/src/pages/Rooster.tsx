@@ -30,7 +30,7 @@ export default function Rooster() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const userId = user?.id ?? "";
-  
+
   const [formData, setFormData] = useState<ScheduleFormData>({
     course_id: "none",
     day_of_week: 1,
@@ -150,7 +150,7 @@ export default function Rooster() {
   const handleCancelLesson = (id: string) => {
     cancelLessonMutation.mutate(id);
   };
-  
+
   // ... (rest van de UI helper functies zoals getCourseById, getDayName, etc. blijven hetzelfde)
   const getCourseById = (courseId: string | null) => courses.find(c => c.id === courseId);
   const getDayName = (dayOfWeek: number) => ["", "Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"][dayOfWeek] || "";
@@ -240,7 +240,7 @@ export default function Rooster() {
               <Checkbox id="recurring" checked={formData.is_recurring} onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_recurring: checked === true }))}/>
               <Label htmlFor="recurring">Elke week herhalen</Label>
             </div>
-            
+
             <Button type="submit" disabled={createMutation.isPending} className="w-full">
               {createMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               {createMutation.isPending ? "Toevoegen..." : "Activiteit toevoegen"}
@@ -248,7 +248,7 @@ export default function Rooster() {
           </form>
         </CardContent>
       </Card>
-      
+
       {/* Cursus Beheer */}
       <Card className="mb-6">
           <CardHeader>

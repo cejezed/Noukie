@@ -12,13 +12,13 @@ import { useToast } from "@/hooks/use-toast";
 export default function Login() {
   const { signIn, signUp } = useAuth();
   const { toast } = useToast();
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [loginData, setLoginData] = useState({
     email: "",
     password: "",
   });
-  
+
   const [signUpData, setSignUpData] = useState({
     email: "",
     password: "",
@@ -32,7 +32,7 @@ export default function Login() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
+
     try {
       await signIn(loginData.email, loginData.password);
       toast({
@@ -52,7 +52,7 @@ export default function Login() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (signUpData.password !== signUpData.confirmPassword) {
       toast({
         title: "Wachtwoorden komen niet overeen",
@@ -61,7 +61,7 @@ export default function Login() {
       });
       return;
     }
-    
+
     if (signUpData.password.length < 6) {
       toast({
         title: "Wachtwoord te kort",
@@ -70,7 +70,7 @@ export default function Login() {
       });
       return;
     }
-    
+
     if (signUpData.role === 'student' && (!signUpData.educationLevel || !signUpData.grade)) {
       toast({
         title: "Ontbrekende gegevens",
@@ -79,14 +79,14 @@ export default function Login() {
       });
       return;
     }
-    
+
     setIsLoading(true);
-    
+
     try {
       await signUp(
-        signUpData.email, 
-        signUpData.password, 
-        signUpData.name, 
+        signUpData.email,
+        signUpData.password,
+        signUpData.name,
         signUpData.role,
         signUpData.role === 'student' ? signUpData.educationLevel : undefined,
         signUpData.role === 'student' ? signUpData.grade : undefined
@@ -111,23 +111,23 @@ export default function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-4 p-2">
-            <img 
-              src="/noukie-logo.png" 
-              alt="Noukie Logo" 
+            <img
+              src="/noukie-logo.png"
+              alt="Noukie Logo"
               className="w-full h-full object-contain"
             />
           </div>
           <CardTitle className="text-2xl">Huiswerkcoach Noukie</CardTitle>
           <p className="text-muted-foreground">Jouw persoonlijke AI huiswerkcoach - dagelijkse check-ins, taakplanning en hulp bij huiswerk</p>
         </CardHeader>
-        
+
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2" data-testid="auth-tabs">
               <TabsTrigger value="login" data-testid="tab-login">Inloggen</TabsTrigger>
               <TabsTrigger value="signup" data-testid="tab-signup">Registreren</TabsTrigger>
             </TabsList>
-            
+
             {/* Login Tab */}
             <TabsContent value="login">
               <form onSubmit={handleLogin} className="space-y-4" data-testid="login-form">
@@ -143,7 +143,7 @@ export default function Login() {
                     data-testid="input-login-email"
                   />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="login-password">Wachtwoord</Label>
                   <Input
@@ -155,7 +155,7 @@ export default function Login() {
                     data-testid="input-login-password"
                   />
                 </div>
-                
+
                 <Button
                   type="submit"
                   className="w-full"
@@ -166,7 +166,7 @@ export default function Login() {
                 </Button>
               </form>
             </TabsContent>
-            
+
             {/* Sign Up Tab */}
             <TabsContent value="signup">
               <form onSubmit={handleSignUp} className="space-y-4" data-testid="signup-form">
@@ -182,7 +182,7 @@ export default function Login() {
                     data-testid="input-signup-name"
                   />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="signup-email">E-mailadres</Label>
                   <Input
@@ -195,14 +195,14 @@ export default function Login() {
                     data-testid="input-signup-email"
                   />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="signup-role">Rol</Label>
                   <Select
                     value={signUpData.role}
-                    onValueChange={(value: "student" | "parent") => setSignUpData(prev => ({ 
-                      ...prev, 
-                      role: value, 
+                    onValueChange={(value: "student" | "parent") => setSignUpData(prev => ({
+                      ...prev,
+                      role: value,
                       // Reset student fields when switching to parent
                       educationLevel: value === 'parent' ? "" : prev.educationLevel,
                       grade: value === 'parent' ? "" : prev.grade
@@ -217,7 +217,7 @@ export default function Login() {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 {/* Student-specific fields */}
                 {signUpData.role === 'student' && (
                   <>
@@ -238,7 +238,7 @@ export default function Login() {
                         </SelectContent>
                       </Select>
                     </div>
-                    
+
                     <div>
                       <Label htmlFor="grade">Klas/Jaargang</Label>
                       <Select
@@ -260,7 +260,7 @@ export default function Login() {
                     </div>
                   </>
                 )}
-                
+
                 <div>
                   <Label htmlFor="signup-password">Wachtwoord</Label>
                   <Input
@@ -273,7 +273,7 @@ export default function Login() {
                     data-testid="input-signup-password"
                   />
                 </div>
-                
+
                 <div>
                   <Label htmlFor="confirm-password">Bevestig wachtwoord</Label>
                   <Input
@@ -285,7 +285,7 @@ export default function Login() {
                     data-testid="input-confirm-password"
                   />
                 </div>
-                
+
                 <Button
                   type="submit"
                   className="w-full"

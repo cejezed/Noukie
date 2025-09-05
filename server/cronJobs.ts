@@ -51,7 +51,7 @@ export class CronJobManager {
       // Note: We'd need a method to get all users with calendar integrations
       // For now, we'll implement a basic version
       // TODO: Add getAllCalendarIntegrations method to storage
-      
+
       // Placeholder - in a real implementation we'd query the database
       return [];
     } catch (error) {
@@ -64,14 +64,14 @@ export class CronJobManager {
   private async runCalendarSync(): Promise<void> {
     try {
       const userIds = await this.getUsersWithCalendarSync();
-      
+
       if (userIds.length === 0) {
         console.log('📭 No users with calendar sync enabled');
         return;
       }
 
       console.log(`📥 Syncing calendars for ${userIds.length} users`);
-      
+
       let totalImported = 0;
       let totalErrors = 0;
 
@@ -81,18 +81,18 @@ export class CronJobManager {
           const result = await calendarImporter.importEventsForUser(userId);
           totalImported += result.imported;
           totalErrors += result.errors.length;
-          
+
           if (result.imported > 0) {
             console.log(`✅ User ${userId}: ${result.imported} events imported`);
           }
-          
+
           if (result.errors.length > 0) {
             console.log(`⚠️ User ${userId}: ${result.errors.length} errors`);
           }
 
           // Small delay to be nice to Google's API
           await new Promise(resolve => setTimeout(resolve, 1000));
-          
+
         } catch (userError) {
           console.error(`❌ Failed to sync calendar for user ${userId}:`, userError);
           totalErrors++;
@@ -100,7 +100,7 @@ export class CronJobManager {
       }
 
       console.log(`📊 Calendar sync complete: ${totalImported} total imported, ${totalErrors} errors`);
-      
+
     } catch (error) {
       console.error('❌ Calendar sync job failed:', error);
     }

@@ -74,7 +74,7 @@ const introSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           <h4 className="font-semibold">Hoe werkt het?</h4>
           <div className="space-y-2 text-sm">
@@ -108,7 +108,7 @@ const introSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           <h4 className="font-semibold">Handige functies:</h4>
           <ul className="space-y-2 text-sm">
@@ -142,7 +142,7 @@ const introSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           <h4 className="font-semibold">Wat kun je toevoegen?</h4>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -180,7 +180,7 @@ const introSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           <h4 className="font-semibold">Hoe gebruik je dit?</h4>
           <div className="space-y-2 text-sm">
@@ -218,7 +218,7 @@ const introSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="space-y-2">
             <h5 className="font-medium">🎨 App Kleuren</h5>
@@ -251,28 +251,28 @@ const introSteps = [
               Doe elke ochtend een voice check-in. Vertel wat je gisteren hebt gedaan en wat je vandaag wilt bereiken.
             </p>
           </div>
-          
+
           <div className="p-3 bg-blue-50 rounded-lg">
             <h4 className="font-semibold text-blue-800 mb-2">📱 Gebruik foto's</h4>
             <p className="text-sm text-blue-700">
               Als je ergens niet uitkomt, maak een foto van de opdracht. Ik geef je dan stap-voor-stap uitleg.
             </p>
           </div>
-          
+
           <div className="p-3 bg-indigo-50 rounded-lg">
             <h4 className="font-semibold text-indigo-800 mb-2">📅 SomToday rooster</h4>
             <p className="text-sm text-indigo-700">
               Gebruik je SomToday? Exporteer je rooster als iCal URL en importeer het in één keer via het Rooster tabblad!
             </p>
           </div>
-          
+
           <div className="p-3 bg-green-50 rounded-lg">
-            <h4 className="font-semibold text-green-800 mb-2">👨‍👩‍👧‍👦 Betrek je ouders</h4>
+            <h4 className="font-semibold text-green-800 mb-2">👨 👩 👧 👦 Betrek je ouders</h4>
             <p className="text-sm text-green-700">
               Je ouders kunnen een eigen account maken om je voortgang te volgen. Vraag het ze!
             </p>
           </div>
-          
+
           <div className="p-3 bg-purple-50 rounded-lg">
             <h4 className="font-semibold text-purple-800 mb-2">🔄 Wees consistent</h4>
             <p className="text-sm text-purple-700">

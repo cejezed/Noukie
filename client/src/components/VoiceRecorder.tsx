@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 export default function VoiceRecorder() {
   const { toast } = useToast();
   const [status, setStatus] = useState<string>("Tik om op te nemen");
-  
+
   const { isRecording, recordingTime, startRecording, stopRecording } = useVoiceRecorder({
     maxDuration: 60,
     onRecordingComplete: (audioBlob) => {
@@ -24,11 +24,11 @@ export default function VoiceRecorder() {
   const voiceMutation = useMutation({
     mutationFn: async (audioBlob: Blob) => {
       const formData = new FormData();
-      const fileExtension = audioBlob.type.includes('wav') ? 'wav' : 
-                           audioBlob.type.includes('ogg') ? 'ogg' : 
+      const fileExtension = audioBlob.type.includes('wav') ? 'wav' :
+                           audioBlob.type.includes('ogg') ? 'ogg' :
                            audioBlob.type.includes('mp4') ? 'mp4' : 'webm';
       formData.append("audio", audioBlob, `recording.${fileExtension}`);
-      
+
       const response = await apiRequest("POST", "/api/ingest", formData);
       return await response.json();
     },
@@ -64,12 +64,12 @@ export default function VoiceRecorder() {
       <div className="text-center">
         <h2 className="text-xl font-semibold mb-2">Voice Check-in</h2>
         <p className="text-muted-foreground mb-6">Vertel me over je taken en huiswerk</p>
-        
+
         <div className="relative">
           <Button
             className={`voice-button w-20 h-20 rounded-full text-white font-semibold transition-all duration-200 relative overflow-hidden ${
-              isRecording 
-                ? 'bg-destructive hover:bg-destructive/90 animate-pulse' 
+              isRecording
+                ? 'bg-destructive hover:bg-destructive/90 animate-pulse'
                 : 'bg-primary hover:bg-primary/90'
             }`}
             onClick={isRecording ? stopRecording : startRecording}
@@ -84,14 +84,14 @@ export default function VoiceRecorder() {
               <Mic className="w-8 h-8" />
             )}
           </Button>
-          
+
           <div className="mt-3">
             <div className="text-sm text-muted-foreground" data-testid="recording-time">
               {formatTime(recordingTime)}
             </div>
           </div>
         </div>
-        
+
         <div className="mt-4 text-sm" data-testid="recording-status">
           {voiceMutation.isPending ? (
             <span className="text-primary">Bezig met verwerken...</span>

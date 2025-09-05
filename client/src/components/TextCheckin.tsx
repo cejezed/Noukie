@@ -20,7 +20,7 @@ export default function TextCheckin() {
         date: new Date().toISOString(),
         userId: user?.id
       });
-      
+
       return await planResponse.json();
     },
     onSuccess: (data) => {
@@ -28,7 +28,7 @@ export default function TextCheckin() {
         title: "Check-in voltooid!",
         description: `${data.tasks.length} nieuwe taken aangemaakt.`,
       });
-      
+
       setInputText("");
       queryClient.invalidateQueries({ queryKey: ['/api/tasks'] });
     },
@@ -56,7 +56,7 @@ export default function TextCheckin() {
         className="min-h-[100px] resize-none"
         data-testid="input-checkin-text"
       />
-      
+
       <Button
         onClick={handleSubmit}
         disabled={planMutation.isPending || !inputText.trim()}

@@ -30,7 +30,7 @@ interface ParentIntroModalProps {
 
 const parentIntroSteps = [
   {
-    title: "Welkom Ouder! 👨‍👩‍👧‍👦",
+    title: "Welkom Ouder! 👨 👩 👧 👦",
     content: (
       <div className="space-y-4">
         <p className="text-muted-foreground">
@@ -73,7 +73,7 @@ const parentIntroSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           <h4 className="font-semibold">Hoe werkt het koppelen?</h4>
           <div className="space-y-2 text-sm">
@@ -113,7 +113,7 @@ const parentIntroSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           <h4 className="font-semibold">Wat zie je allemaal?</h4>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -151,7 +151,7 @@ const parentIntroSteps = [
             </p>
           </div>
         </div>
-        
+
         <div className="space-y-3">
           <h4 className="font-semibold">Wanneer krijg je meldingen?</h4>
           <ul className="space-y-2 text-sm">
@@ -193,21 +193,21 @@ const parentIntroSteps = [
               Laat je kind zelf de app gebruiken. Jij kijkt mee, zij doen het werk. Dit helpt hen zelfstandiger te worden.
             </p>
           </div>
-          
+
           <div className="p-3 bg-blue-50 rounded-lg">
             <h4 className="font-semibold text-blue-800 mb-2">💬 Bespreek de voortgang</h4>
             <p className="text-sm text-blue-700">
               Gebruik wat je hier ziet als gespreksstarter. "Ik zag dat je veel wiskunde hebt gedaan deze week!"
             </p>
           </div>
-          
+
           <div className="p-3 bg-purple-50 rounded-lg">
             <h4 className="font-semibold text-purple-800 mb-2">🏆 Vier successen</h4>
             <p className="text-sm text-purple-700">
               Complimenteer je kind wanneer je ziet dat ze consistent bezig zijn, ook met kleine stapjes.
             </p>
           </div>
-          
+
           <div className="p-3 bg-orange-50 rounded-lg">
             <h4 className="font-semibold text-orange-800 mb-2">🤝 Ondersteun bij problemen</h4>
             <p className="text-sm text-orange-700">

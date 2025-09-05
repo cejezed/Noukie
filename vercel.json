@@ -1,21 +1,21 @@
 {
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": "dist/**"
-      }
+  "functions": {
+    "dist/index.js": {
+      "runtime": "@vercel/node"
     }
-  ],
+  },
   "rewrites": [
     {
+      "source": "/manifest.webmanifest",
+      "destination": "/public/manifest.webmanifest"
+    },
+    {
       "source": "/api/(.*)",
-      "destination": "/api/$1"
+      "destination": "/dist/index.js"
     },
     {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/dist/index.html"
     }
   ]
 }

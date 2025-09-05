@@ -10,11 +10,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { 
-  Upload, 
-  Palette, 
-  GraduationCap, 
-  Bell, 
+import {
+  Upload,
+  Palette,
+  GraduationCap,
+  Bell,
   Clock,
   Calendar,
   Download,
@@ -27,27 +27,27 @@ import { apiRequest } from "@/lib/queryClient";
 
 // App kleur thema's
 const colorThemes = [
-  { 
-    id: "purple", 
-    name: "Paars", 
+  {
+    id: "purple",
+    name: "Paars",
     primary: "hsl(262.1, 83.3%, 57.8%)",
     preview: "bg-purple-500"
   },
-  { 
-    id: "blue", 
-    name: "Blauw (Standaard)", 
+  {
+    id: "blue",
+    name: "Blauw (Standaard)",
     primary: "hsl(217.2, 91.2%, 59.8%)",
     preview: "bg-blue-500"
   },
-  { 
-    id: "green", 
-    name: "Groen", 
+  {
+    id: "green",
+    name: "Groen",
     primary: "hsl(142.1, 76.2%, 36.3%)",
     preview: "bg-green-500"
   },
-  { 
-    id: "pink", 
-    name: "Roze", 
+  {
+    id: "pink",
+    name: "Roze",
     primary: "hsl(330.1, 81.2%, 60.4%)",
     preview: "bg-pink-500"
   }
@@ -118,7 +118,7 @@ export default function Instellingen() {
   const handleRosterImport = (file: File) => {
     // Handle roster file import (CSV/iCal)
     const fileType = file.name.split('.').pop()?.toLowerCase();
-    
+
     if (!['csv', 'ics', 'ical'].includes(fileType || '')) {
       toast({
         title: "Ongeldig bestand",
@@ -132,7 +132,7 @@ export default function Instellingen() {
       title: "Rooster import gestart",
       description: `${file.name} wordt geïmporteerd...`,
     });
-    
+
     // TODO: Implement actual import logic
   };
 
@@ -168,8 +168,8 @@ export default function Instellingen() {
                 key={theme.id}
                 onClick={() => handleThemeChange(theme.id)}
                 className={`p-3 rounded-lg border-2 transition-all ${
-                  selectedTheme === theme.id 
-                    ? 'border-primary bg-primary/10' 
+                  selectedTheme === theme.id
+                    ? 'border-primary bg-primary/10'
                     : 'border-border hover:border-primary/50'
                 }`}
                 data-testid={`theme-${theme.id}`}
@@ -207,7 +207,7 @@ export default function Instellingen() {
               </SelectContent>
             </Select>
           </div>
-          
+
           <div className="space-y-2">
             <Label htmlFor="grade-level">Jaargang</Label>
             <Select value={selectedGrade} onValueChange={setSelectedGrade}>
@@ -354,17 +354,17 @@ export default function Instellingen() {
             </Button>
           </div>
         </CardHeader>
-        
+
         {showIcalForm && (
           <CardContent>
             <Alert className="mb-4">
               <HelpCircle className="h-4 w-4" />
               <AlertDescription>
-                <strong>📚 SomToday gebruikers:</strong> Log in op SomToday → Rooster → Exporteren → Kopieer de iCal URL. 
+                <strong>📚 SomToday gebruikers:</strong> Log in op SomToday → Rooster → Exporteren → Kopieer de iCal URL.
                 Plak deze hieronder om je hele rooster in één keer te importeren!
               </AlertDescription>
             </Alert>
-            
+
             <form onSubmit={(e) => {
               e.preventDefault();
               if (icalUrl.trim()) {
@@ -384,7 +384,7 @@ export default function Instellingen() {
                   Plak hier de iCal link van je school rooster (SomToday, Zermelo, etc.)
                 </p>
               </div>
-              
+
               <div className="flex space-x-2">
                 <Button
                   type="submit"
@@ -432,7 +432,7 @@ export default function Instellingen() {
 
       {/* Save Button */}
       <div className="flex justify-center pt-4">
-        <Button 
+        <Button
           className="w-full max-w-xs"
           onClick={() => {
             toast({

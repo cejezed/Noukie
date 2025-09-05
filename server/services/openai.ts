@@ -127,7 +127,7 @@ export async function generateExplanation(
 
   const rawResponse = JSON.parse(response.choices[0].message.content || "{}");
   console.log("Raw OpenAI response:", JSON.stringify(rawResponse, null, 2));
-  
+
   // Normalize the response to expected format
   let steps = ["Geen stappen beschikbaar"];
   if (rawResponse.steps) {
@@ -194,7 +194,7 @@ export async function generateExplanation(
     coach_text: rawResponse.coach_text || rawResponse.advies || rawResponse.feedback || "Goed gedaan! Probeer de stappen te volgen.",
     resources
   };
-  
+
   console.log("Normalized result:", JSON.stringify(result, null, 2));
   return result;
 }
@@ -243,7 +243,7 @@ export async function expandExplanation(
         content: "Je bent een Nederlandse huiswerkcoach voor 5 havo. BELANGRIJK: Geef alleen correcte, geverifieerde informatie. Als je iets niet zeker weet, vermeld dit expliciet. Verzin nooit feiten of formules. Een student vraagt om MEER UITLEG over een onderwerp. Geef een uitgebreidere versie met: meer gedetailleerde stappen (5-8 stappen), uitgebreider voorbeeld met extra toelichting, nieuwe quiz vraag (iets moeilijker), en aanmoedigende coach tekst. Gebruik dezelfde JSON structuur maar met meer diepgang en detail."
       },
       {
-        role: "user", 
+        role: "user",
         content: `De student wil meer uitleg over: ${topic} (vak: ${course})
 
 Huidige uitleg die ze al hebben:
@@ -265,7 +265,7 @@ JSON structuur: {"steps": ["gedetailleerde stap1", "stap2"], "example": {"prompt
 
   const rawResponse = JSON.parse(response.choices[0].message.content || "{}");
   console.log("Expanded explanation response:", JSON.stringify(rawResponse, null, 2));
-  
+
   // Use same normalization logic
   let steps = ["Geen uitgebreide stappen beschikbaar"];
   if (rawResponse.steps) {

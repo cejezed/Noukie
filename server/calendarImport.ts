@@ -66,7 +66,7 @@ export class CalendarImportService {
             // Check if event was updated
             const eventUpdated = new Date(googleEvent.updated || googleEvent.created);
             const lastImported = existingImport.lastModified || new Date(0);
-            
+
             if (eventUpdated <= lastImported) {
               results.skipped++;
               continue; // Event hasn't changed, skip
@@ -75,14 +75,14 @@ export class CalendarImportService {
 
           // Convert Google event to Anouk schedule format
           const scheduleData = this.googleCalendar.convertEventToSchedule(googleEvent, userId);
-          
+
           // Create or update schedule item
           const scheduleItem = await storage.createScheduleItem(scheduleData);
 
           // Create or update imported event record
           const importedEventData = this.googleCalendar.createImportedEventRecord(
-            googleEvent, 
-            scheduleItem.id, 
+            googleEvent,
+            scheduleItem.id,
             userId
           );
 
@@ -124,10 +124,10 @@ export class CalendarImportService {
       // Note: We'd need to add a method to get all users with calendar integrations
       // For now, this is a placeholder for the cron job
       console.log('Running calendar import for all users...');
-      
+
       // This would iterate through all users with calendar integrations enabled
       // and call importEventsForUser for each
-      
+
     } catch (error) {
       console.error('Batch calendar import failed:', error);
     }

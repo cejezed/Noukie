@@ -26,12 +26,12 @@ export default function Help() {
     });
     setShowHelpModal(true);
   };
-  
+
   // Voice recording
-  const { 
-    isRecording, 
-    startRecording, 
-    stopRecording, 
+  const {
+    isRecording,
+    startRecording,
+    stopRecording,
     recordingTime
   } = useVoiceRecorder({
     maxDuration: 60,
@@ -45,7 +45,7 @@ export default function Help() {
     const input = document.createElement("input");
     input.type = "file";
     input.accept = type === "photo" ? "image/*" : ".pdf";
-    
+
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -84,7 +84,7 @@ export default function Help() {
   return (
     <div className="p-6" data-testid="page-help">
       <h2 className="text-xl font-semibold mb-6">Ik snap dit niet</h2>
-      
+
       {/* Upload Options */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <Button
@@ -201,7 +201,7 @@ export default function Help() {
               <span>Probeer eerst zelf te begrijpen voordat je de uitleg vraagt</span>
             </li>
           </ul>
-          
+
           <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
             <p className="text-sm text-amber-800">
               <strong>⚠️ Belangrijk:</strong> Controleer belangrijke informatie altijd met je schoolboek, docent of andere betrouwbare bronnen. AI kan soms fouten maken.

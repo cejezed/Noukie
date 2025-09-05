@@ -67,6 +67,16 @@ app.get("/api/health", (_req, res) => {
 
   // ----------------------------------------------------------------------------
   // De rest van de server logica blijft ongewijzigd...
+  // Voeg dit toe na je API routes, voor registerRoutes
+app.use(express.static('dist'));
+
+// SPA fallback - serveer index.html voor alle niet-API routes
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API route not found' });
+  }
+  res.sendFile(path.join(process.cwd(), 'dist', 'index.html'));
+});
   // ----------------------------------------------------------------------------
   (async () => {
     const server = await registerRoutes(app);
@@ -85,4 +95,3 @@ app.get("/api/health", (_req, res) => {
                                   process.exit(1);
                                   });
 
-                                  

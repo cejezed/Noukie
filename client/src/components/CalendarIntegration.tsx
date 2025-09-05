@@ -77,7 +77,7 @@ export default function CalendarIntegration() {
     onSuccess: (result: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/calendar/status', user?.id] });
       queryClient.invalidateQueries({ queryKey: ['/api/schedule', user?.id] });
-      
+
       toast({
         title: "Sync voltooid",
         description: `${result.imported} activiteiten geïmporteerd, ${result.skipped} overgeslagen`,
@@ -127,7 +127,7 @@ export default function CalendarIntegration() {
           Importeer automatisch afspraken uit je Google Calendar
         </CardDescription>
       </CardHeader>
-      
+
       <CardContent className="space-y-4">
         {/* Connection Status */}
         <div className="flex items-center justify-between">
@@ -145,10 +145,10 @@ export default function CalendarIntegration() {
               </>
             )}
           </div>
-          
+
           {calendarStatus?.connected ? (
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => disconnectMutation.mutate()}
               disabled={disconnectMutation.isPending}
@@ -158,7 +158,7 @@ export default function CalendarIntegration() {
               Ontkoppelen
             </Button>
           ) : (
-            <Button 
+            <Button
               onClick={() => connectMutation.mutate()}
               disabled={connectMutation.isPending || isConnecting}
               data-testid="button-connect-calendar"
@@ -176,9 +176,9 @@ export default function CalendarIntegration() {
               <Clock className="w-4 h-4" />
               <span>Laatste sync: {formatLastSync(calendarStatus.lastSync)}</span>
             </div>
-            
-            <Button 
-              variant="outline" 
+
+            <Button
+              variant="outline"
               size="sm"
               onClick={() => syncMutation.mutate()}
               disabled={syncMutation.isPending}
@@ -187,7 +187,7 @@ export default function CalendarIntegration() {
               <RefreshCw className={`w-4 h-4 mr-2 ${syncMutation.isPending ? 'animate-spin' : ''}`} />
               {syncMutation.isPending ? "Synchroniseren..." : "Nu synchroniseren"}
             </Button>
-            
+
             <div className="text-xs text-muted-foreground bg-muted p-2 rounded">
               💡 Je kalender wordt automatisch elke dag om 6:00 gesynchroniseerd
             </div>

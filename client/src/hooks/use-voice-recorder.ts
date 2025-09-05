@@ -13,7 +13,7 @@ export function useVoiceRecorder({
 }: UseVoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -42,7 +42,7 @@ export function useVoiceRecorder({
       } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
         mimeType = 'audio/mp4';
       }
-      
+
       const mediaRecorder = new MediaRecorder(stream, { mimeType });
 
       mediaRecorderRef.current = mediaRecorder;
@@ -60,7 +60,7 @@ export function useVoiceRecorder({
           type: mediaRecorder.mimeType || 'audio/webm',
         });
         onRecordingComplete?.(audioBlob);
-        
+
         // Clean up
         stream.getTracks().forEach(track => track.stop());
       });
@@ -75,12 +75,12 @@ export function useVoiceRecorder({
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => {
           const newTime = prev + 1;
-          
+
           // Auto-stop at max duration
           if (newTime >= maxDuration) {
             stopRecording();
           }
-          
+
           return newTime;
         });
       }, 1000);
@@ -88,7 +88,7 @@ export function useVoiceRecorder({
     } catch (error) {
       console.error('Failed to start recording:', error);
       updateStatus("Microfoon toegang geweigerd");
-      
+
       // Show helpful error message
       if (error instanceof DOMException) {
         if (error.name === 'NotAllowedError') {
@@ -107,7 +107,7 @@ export function useVoiceRecorder({
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       updateStatus("Opname gestopt, bezig met verwerken...");
-      
+
       // Clear timer
       if (timerRef.current) {
         clearInterval(timerRef.current);

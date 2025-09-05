@@ -33,7 +33,7 @@ export async function handleCreateScheduleItem(req: Request, res: Response) {
   try {
     const user = await getUserFromRequest(req);
     if (!user) return res.status(401).json({ error: 'Niet geautoriseerd.' });
-    
+
     // Voeg user_id toe aan de data uit de body
     const itemData = { ...req.body, user_id: user.id };
 

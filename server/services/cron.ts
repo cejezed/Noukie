@@ -9,7 +9,7 @@ export function startDailyReminderCron() {
     console.log("Running daily reminder check...");
     await checkAndSendReminders();
   });
-  
+
   console.log(`Daily reminder cron started for ${REMINDER_HOUR}:00`);
 }
 
@@ -21,21 +21,21 @@ export async function checkAndSendReminders(): Promise<{ sent: number; skipped: 
     // Get all users with role 'student'
     // Note: This would need to be implemented in storage interface
     // const students = await storage.getStudentUsers();
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     // For now, return dummy response until user management is fully implemented
     console.log("Daily reminder check completed");
-    
+
     // In a real implementation:
     // 1. Get all student users
     // 2. For each student, check if they have a session today
     // 3. If not, send reminder email
     // 4. Track sent/skipped counts
-    
+
     return { sent, skipped };
-    
+
   } catch (error) {
     console.error("Error in daily reminder check:", error);
     return { sent: 0, skipped: 0 };
@@ -47,7 +47,7 @@ export async function sendReminderEmail(userEmail: string, userName: string): Pr
     console.log(`Would send reminder email to ${userEmail} (${userName})`);
     return;
   }
-  
+
   // Implement email sending with your preferred provider
   // Example with SendGrid, Postmark, etc.
   try {
@@ -66,10 +66,10 @@ export async function sendReminderEmail(userEmail: string, userName: string): Pr
 
     // Example implementation - replace with your email service
     console.log(`Sending reminder email to ${userEmail}`, emailData);
-    
+
     // Actual email sending would go here
     // await emailService.send(emailData);
-    
+
   } catch (error) {
     console.error(`Failed to send reminder email to ${userEmail}:`, error);
   }

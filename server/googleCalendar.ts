@@ -12,7 +12,7 @@ if (!CLIENT_ID || !CLIENT_SECRET) {
 
 export class GoogleCalendarService {
   private oauth2Client: OAuth2Client;
-  
+
   constructor() {
     this.oauth2Client = new OAuth2Client(CLIENT_ID, CLIENT_SECRET, REDIRECT_URI);
   }
@@ -56,10 +56,10 @@ export class GoogleCalendarService {
   // Refresh access token if needed
   async refreshTokenIfNeeded(integration: CalendarIntegration): Promise<CalendarIntegration | null> {
     if (!integration.refreshToken) return null;
-    
+
     const now = new Date();
     const expiryTime = integration.tokenExpires ? new Date(integration.tokenExpires) : new Date(0);
-    
+
     // Refresh if token expires within next 5 minutes
     if (expiryTime.getTime() - now.getTime() > 5 * 60 * 1000) {
       return integration; // Token still valid
@@ -69,9 +69,9 @@ export class GoogleCalendarService {
       this.oauth2Client.setCredentials({
         refresh_token: integration.refreshToken,
       });
-      
+
       const { credentials } = await this.oauth2Client.refreshAccessToken();
-      
+
       return {
         ...integration,
         accessToken: credentials.access_token || integration.accessToken,
@@ -87,7 +87,7 @@ export class GoogleCalendarService {
   async getPrimaryCalendarId(): Promise<string> {
     const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
     const response = await calendar.calendarList.list();
-    
+
     const primaryCalendar = response.data.items?.find(cal => cal.primary);
     return primaryCalendar?.id || 'primary';
   }
@@ -96,7 +96,7 @@ export class GoogleCalendarService {
   async getEvents(calendarId: string = 'primary', daysAhead: number = 7): Promise<any[]> {
     try {
       const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-      
+
       const timeMin = new Date();
       const timeMax = new Date();
       timeMax.setDate(timeMax.getDate() + daysAhead);
@@ -121,19 +121,19 @@ export class GoogleCalendarService {
   convertEventToSchedule(event: any, userId: string): InsertSchedule {
     const start = event.start?.dateTime || event.start?.date;
     const end = event.end?.dateTime || event.end?.date;
-    
+
     // Parse dates
     const startDate = new Date(start);
     const endDate = new Date(end);
-    
+
     // Determine activity type based on event summary and description
     const title = event.summary || 'Google Calendar Event';
     const description = event.description || '';
     const kind = this.categorizeEvent(title, description);
-    
+
     // For all-day events, don't set times
     const isAllDay = !event.start?.dateTime;
-    
+
     return {
       userId,
       courseId: null, // We don't auto-assign courses
@@ -150,32 +150,32 @@ export class GoogleCalendarService {
   // Smart categorization of Google Calendar events
   private categorizeEvent(title: string, description: string): "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders" {
     const text = `${title} ${description}`.toLowerCase();
-    
+
     // Sports keywords
     if (text.match(/\b(sport|training|hockey|voetbal|tennis|fitness|gym|zwemmen|hardlopen|basketbal|volleyball)\b/)) {
       return 'sport';
     }
-    
-    // Work keywords  
+
+    // Work keywords
     if (text.match(/\b(werk|job|bijbaan|stage|werken|dienst|shift)\b/)) {
       return 'werk';
     }
-    
+
     // School keywords
     if (text.match(/\b(les|school|toets|tentamen|examen|college|universiteit|klas)\b/)) {
       return text.match(/\b(toets|tentamen|examen)\b/) ? 'toets' : 'les';
     }
-    
+
     // Appointment keywords
     if (text.match(/\b(afspraak|dokter|tandarts|kappers|consult|behandeling)\b/)) {
       return 'afspraak';
     }
-    
+
     // Hobby keywords
     if (text.match(/\b(muziek|band|koor|theater|kunst|cursus|hobby)\b/)) {
       return 'hobby';
     }
-    
+
     // Default to "anders"
     return 'anders';
   }
@@ -185,10 +185,10 @@ export class GoogleCalendarService {
   }
 
   private formatTime(date: Date): string {
-    return date.toLocaleTimeString('nl-NL', { 
-      hour: '2-digit', 
+    return date.toLocaleTimeString('nl-NL', {
+      hour: '2-digit',
       minute: '2-digit',
-      hour12: false 
+      hour12: false
     });
   }
 

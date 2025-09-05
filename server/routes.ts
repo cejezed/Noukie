@@ -447,7 +447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { id } = req.params;
       const { status } = req.body;
-      
+
       // Je moet ook een updateScheduleStatus functie toevoegen aan je storage
       await storage.updateScheduleStatus(id, status);
       res.json({ success: true });
@@ -819,9 +819,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /** ========= GOOGLE CALENDAR (DISABLED) ========= */
   // DISABLED: All Google Calendar routes have been commented out
   // Uncomment and restore the .disabled files to re-enable
-  
+
   // const googleCalendar = new GoogleCalendarService();
-  
+
   // app.get("/api/calendar/status/:userId", async (req, res) => {
   //   try {
   //     const { userId } = req.params;
