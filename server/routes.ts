@@ -20,6 +20,109 @@ import {
 // import { calendarImporter } from "./calendarImport";
 // import { cronManager } from "./cronJobs";
 
+// === Coach helpers (NL datum/duur parsing + simpele message store fallback) ===
+const WD = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
+const MONTHS = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
+
+function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function addDays(d: Date, n: number) { const x = new Date(d); x.setDate(x.getDate()+n); return x; }
+
+function parseRelativeDateTimeNL(inputRaw: string, now = new Date()) {
+  const input = inputRaw.toLowerCase().trim();
+  let date = startOfDay(now);
+  let time: string | null = null;
+
+  if (/\bmorgen\b/.test(input)) date = startOfDay(addDays(now, 1));
+  else if (/\bovermorgen\b/.test(input)) date = startOfDay(addDays(now, 2));
+  else if (/\bvandaag\b/.test(input)) date = startOfDay(now);
+
+  for (let i = 0; i < WD.length; i++) {
+    if (input.includes(WD[i])) {
+      const target = i; const cur = now.getDay();
+      let diff = target - cur; if (diff <= 0) diff += 7;
+      date = startOfDay(addDays(now, diff)); break;
+    }
+  }
+
+  const dmLong = input.match(/(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?/);
+  const dmShort = input.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
+
+  if (dmLong) {
+    const d = parseInt(dmLong[1], 10);
+    const mName = dmLong[2];
+    const y = dmLong[3] ? parseInt(dmLong[3], 10) : now.getFullYear();
+    const m = MONTHS.indexOf(mName);
+    if (m >= 0) date = startOfDay(new Date(y, m, d));
+  } else if (dmShort) {
+    const d = parseInt(dmShort[1], 10);
+    const m = parseInt(dmShort[2], 10) - 1;
+    let y = dmShort[3] ? parseInt(dmShort[3], 10) : now.getFullYear();
+    if (y < 100) y += 2000;
+    date = startOfDay(new Date(y, m, d));
+  }
+
+  const hhmm = input.match(/\b(\d{1,2}):(\d{2})\b/);
+  const hhmmCompact = input.match(/\b(\d{1,2})(\d{2})\b/);
+  const omUur = input.match(/\bom\s*(\d{1,2})\s*uur\b/);
+
+  if (hhmm) time = `${hhmm[1].padStart(2,"0")}:${hhmm[2]}`;
+  else if (omUur) time = `${omUur[1].padStart(2,"0")}:00`;
+  else if (hhmmCompact) {
+    const h = parseInt(hhmmCompact[1],10), m = parseInt(hhmmCompact[2],10);
+    if (h>=0 && h<=23 && m>=0 && m<=59) time = `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}`;
+  }
+
+  if (!time) {
+    if (/\b(ochtend|smorgens)\b/.test(input)) time = "09:00";
+    else if (/\b(middag|vanmiddag)\b/.test(input)) time = "14:00";
+    else if (/\b(avond|vanavond)\b/.test(input)) time = "19:00";
+  }
+
+  if (time) { const [H,M] = time.split(":").map(Number); date.setHours(H, M, 0, 0); }
+  return { date, time: time ?? null };
+}
+
+function parseEstMinutes(input: string) {
+  const m1 = input.match(/(\d{1,3})\s*min/); if (m1) return parseInt(m1[1], 10);
+  const h1 = input.match(/(\d+(?:[.,]\d+)?)\s*uur/); if (h1) return Math.round(parseFloat(h1[1].replace(",", ".")) * 60);
+  return null;
+}
+
+function extractTaskCandidates(text: string): string[] {
+  const lines = text.split(/\n/).map(s => s.trim()).filter(Boolean);
+  const picked = lines
+    .filter(l => /^[-•]/.test(l) || /^maak taak:/i.test(l))
+    .map(l => l.replace(/^[-•]\s*/,"").replace(/^maak taak:\s*/i,"").trim());
+  return picked.length ? picked : [text];
+}
+
+// In-memory fallback voor chat als storage nog geen chat-methodes heeft.
+// (wordt geleegd bij server-restart; prima voor nu)
+type ChatMsg = { role: "user"|"assistant"; content: string; created_at: string };
+const chatMem = new Map<string, ChatMsg[]>();
+
+async function saveChatMessage(userId: string, role: "user"|"assistant", content: string) {
+  const s = (storage as any);
+  if (s.createChatMessage) {
+    await s.createChatMessage({ user_id: userId, role, content });
+    return;
+  }
+  const arr = chatMem.get(userId) ?? [];
+  arr.push({ role, content, created_at: new Date().toISOString() });
+  chatMem.set(userId, arr);
+}
+async function listChatMessages(userId: string, limit = 50): Promise<ChatMsg[]> {
+  const s = (storage as any);
+  if (s.getChatMessagesByUserId) {
+    const rows = await s.getChatMessagesByUserId(userId, limit);
+    // verwacht shape: {role, content, created_at}
+    return rows;
+  }
+  const arr = chatMem.get(userId) ?? [];
+  return arr.slice(-limit);
+}
+
+
 const upload = multer({ dest: "uploads/" });
 
 /** ===== Helpers for schedule responses ===== */
@@ -55,7 +158,92 @@ function datesHaveWeekdayInRange(startISO: string, endISO: string, weekday1to7: 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Health check
+    /** ========= COACH CHAT ========= */
+  // Ophalen van geschiedenis
+  app.get("/api/chat/history", async (req, res) => {
+    try {
+      const userId = (req.query.userId as string) || (req.query.userid as string);
+      if (!userId) return res.status(400).json({ error: "Missing userId" });
+
+      const msgs = await listChatMessages(userId, 50);
+      res.json({ messages: msgs });
+    } catch (error) {
+      console.error("Chat history error:", error);
+      res.status(500).json({ error: "Failed to fetch chat history" });
+    }
+  });
+
+  // Bericht sturen + (optioneel) taken aanmaken
+  app.post("/api/chat/coach", async (req, res) => {
+    try {
+      const { userId, message } = req.body || {};
+      if (!userId || !message) return res.status(400).json({ error: "Missing userId or message" });
+
+      // 1) sla user-bericht op
+      await saveChatMessage(userId, "user", message);
+
+      // 2) heuristiek: maak taken aan als tekst daar op duidt
+      const shouldPlan = /\b(taak|taken|huiswerk|paragraaf|toets|leren|inplannen|plan|maken)\b/i.test(message);
+      const created: any[] = [];
+
+      if (shouldPlan) {
+        const now = new Date();
+        const candidates = extractTaskCandidates(message);
+
+        // (optioneel) eenvoudige course-match
+        const courses = await storage.getCoursesByUserId(userId);
+
+        for (const c of candidates) {
+          const { date } = parseRelativeDateTimeNL(c, now);
+          const est = parseEstMinutes(c);
+
+          let course_id: string | null = null;
+          if (courses?.length) {
+            const lower = c.toLowerCase();
+            const hit = courses.find((k: any) => lower.includes(String(k.name).toLowerCase()));
+            if (hit) course_id = hit.id;
+          }
+
+          // ruwe titel (simpel houden)
+          const title = c.replace(/\s+/g, " ").trim();
+
+          const task = await storage.createTask({
+            user_id: userId,
+            title: title || "Taak",
+            status: "todo",
+            due_at: date,                 // Date object is ok; jouw storage accepteert Date bij createTask
+            course_id,
+            est_minutes: est ?? 30,
+            priority: 1,
+            source: "coach",
+          } as any);
+
+          created.push(task);
+        }
+      }
+
+      // 3) coach-antwoord
+      const did = created.length;
+      const tail =
+        did > 0
+          ? `Ik heb ${did} ${did===1?"taak":"taken"} ingepland. Wil je ook een korte herhaaltaak toevoegen voor morgenavond?`
+          : `Zal ik dit vertalen naar concrete taken (met tijd en duur)? Bijvoorbeeld: “Morgen 19:00 wiskunde 3.2 oefenen (30 min)”.`;
+
+      const reply =
+`Fijn dat je dit deelt. Wat ging vandaag het lastigst?
+${tail}
+Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange sessies.`;
+
+      // 4) sla coach-bericht op
+      await saveChatMessage(userId, "assistant", reply);
+
+      res.json({ reply, created_count: did, created_tasks: created });
+    } catch (error) {
+      console.error("Chat coach error:", error);
+      res.status(500).json({ error: "Failed to handle coach chat" });
+    }
+  });
+// Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date().toISOString() });
   });

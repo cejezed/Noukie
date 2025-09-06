@@ -27,7 +27,9 @@ export default defineConfig({
     fs: { strict: true, deny: ["**/.*"] },
     hmr: {
       overlay: false
-    }
+    },
+    historyApiFallback: true,  // 👈 Voor development 404s
+    host: '0.0.0.0',          // 👈 Voor Codespaces
+    port: 5173
   },
 });
-

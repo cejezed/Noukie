@@ -8,8 +8,8 @@ import { AuthProvider, useAuth } from "@/lib/auth";
 import Layout from "@/components/Layout";
 import Login from "@/pages/Login";
 import Vandaag from "@/pages/Vandaag";
-import PlanningTemp from "@/pages/PlanningTemp";
 import Rooster from "@/pages/Rooster";
+import PlanningTemp from "@/pages/PlanningTemp"; // ← alleen als je deze pagina wilt tonen
 import LeerChat from "@/pages/LeerChat";
 import Instellingen from "@/pages/Instellingen";
 import ParentDashboard from "@/pages/ParentDashboard";
@@ -20,30 +20,19 @@ import { supabase } from "@/lib/supabase";
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
 
-  // ✔ Eerst getSession; alleen getUser() als er een sessie is
   React.useEffect(() => {
     if (loading) return;
     (async () => {
-      const { data: sessionData, error: sessErr } = await supabase.auth.getSession();
-      console.log("🪪 getSession ->", sessionData?.session?.user?.id ?? null, sessErr ?? null);
-
-      if (!sessionData.session) {
-        console.log("⏳ Nog geen sessie beschikbaar; getUser() overslaan.");
-        return;
-      }
-
-      const { data: { user: u }, error } = await supabase.auth.getUser();
-      console.log("🔎 Supabase auth.getUser ->", u, error);
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) return;
+      await supabase.auth.getUser();
     })();
   }, [loading]);
 
-  // ✔ Auth events (handig bij login/logout/refresh)
   React.useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("🔔 auth event:", event, "user:", session?.user?.id ?? null);
-    });
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {});
     return () => {
-      // @ts-ignore: types wisselen per sdk-versie
+      // @ts-ignore
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
@@ -56,11 +45,9 @@ function AuthenticatedApp() {
     );
   }
 
-  if (!user) {
-    return <Login />;
-  }
+  if (!user) return <Login />;
 
-  // Parent interface
+  // Ouder-interface
   if (user.user_metadata?.role === "parent") {
     return (
       <Layout>
@@ -73,18 +60,18 @@ function AuthenticatedApp() {
     );
   }
 
-  // Student interface
+  // Student-interface
   return (
     <Layout>
-      <Switch>
-        <Route path="/" component={Vandaag} />
-        <Route path="/rooster" component={PlanningTemp} />
-        <Route path="/mental" component={MentalPage} />
-        <Route path="/toevoegen" component={Rooster} />
-        <Route path="/help" component={LeerChat} />
-        <Route path="/instellingen" component={Instellingen} />
-        <Route component={NotFound} />
-      </Switch>
+   <Switch>
+  <Route path="/" component={Vandaag} />
+  <Route path="/rooster" component={Rooster} />
+  <Route path="/mental" component={MentalPage} />
+  <Route path="/help" component={LeerChat} />
+  <Route path="/planning" component={PlanningTemp} />
+  <Route path="/instellingen" component={Instellingen} />
+  <Route component={NotFound} />
+</Switch>
     </Layout>
   );
 }
@@ -97,7 +84,7 @@ function Router() {
   );
 }
 
-function App() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -107,5 +94,3 @@ function App() {
     </QueryClientProvider>
   );
 }
-
-export default App;

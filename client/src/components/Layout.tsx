@@ -14,9 +14,9 @@ export default function Layout({ children }: LayoutProps) {
 const tabs = [
   { id: "vandaag",  label: "Vandaag",  icon: Icons.Home, path: "/" },
   { id: "rooster",  label: "Rooster",  icon: Icons.Calendar, path: "/rooster" },
-  { id: "mental",   label: "Mentaal",  icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" }, // fallback
-  { id: "toevoegen",label: "Toevoegen",icon: Icons.Plus, path: "/toevoegen" },
+   { id: "mental",   label: "Mentaal",  icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
   { id: "help",     label: "Uitleg",   icon: Icons.HelpCircle, path: "/help" },
+  { id: "planning", label: "Planning", icon: Icons.CalendarCheck ?? Icons.Calendar, path: "/planning" },
   { id: "instellingen", label: "Instellingen", icon: Icons.Settings, path: "/instellingen" },
 ];
 
