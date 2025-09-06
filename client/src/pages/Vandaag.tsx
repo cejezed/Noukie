@@ -14,6 +14,9 @@ import { supabase } from "@/lib/supabase";
 import type { Schedule, Course, Task } from "@shared/schema";
 import CoachChat from "@/features/chat/CoachChat";
 
+// ✅ NIEUW: opnameknop importeren
+import VoiceCheckinButton from "@/features/voice/VoiceCheckinButton";
+
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 
 // Type voor coach_memory rijen (lichtgewicht)
@@ -185,7 +188,6 @@ export default function Vandaag() {
     })),
   };
 
-  // Let op: de “Noukie”-intro staat NIET meer hard in de chat (die staat bij de ℹ️ in CoachChat).
   const coachSystemHint = `
 Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
 - Gebruik context (rooster/taken/memory) om door te vragen en op te volgen.
@@ -197,7 +199,19 @@ Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
 
   return (
     <div className="p-6 space-y-10" data-testid="page-vandaag">
-      {/* === 1) Eén blok: Chat met Noukie (spraakknop zit in CoachChat) === */}
+      {/* === 0) Snelle Voice Check-in (opnameknop) === */}
+      <section aria-labelledby="voice-title" className="space-y-2">
+        <h2 id="voice-title" className="text-lg font-semibold">Snelle check-in</h2>
+        <div className="border rounded-lg p-4 flex items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground">
+            Spreek in wat je nu gaat doen of wat lastig was. Ik zet het bij je coach-notities.
+          </div>
+          {/* De eigenlijke opnameknop */}
+          <VoiceCheckinButton userId={userId} />
+        </div>
+      </section>
+
+      {/* === 1) Chat met Noukie === */}
       <section>
         <CoachChat
           systemHint={coachingSystemHintSafe(coachSystemHint)}
@@ -276,7 +290,7 @@ Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
         )}
       </section>
 
-      {/* === 3) Nieuwe taak (breed titelveld; daaronder vak & duur) === */}
+      {/* === 3) Nieuwe taak === */}
       <section aria-labelledby="add-task-title" className="space-y-3">
         <h2 id="add-task-title" className="text-lg font-semibold">Nieuwe taak</h2>
 
