@@ -5,35 +5,63 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
-import type { Task, Course, Schedule } from "@shared/schema";
+import { supabase } from "@/lib/supabase";
+import type { Task, Course } from "@shared/schema";
+
+// ---------- Helpers ----------
+async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = new Headers(init?.headers || {});
+  if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
+  return fetch(input, { ...init, headers });
+}
+
+type ScheduleItem = {
+  id: string;
+  date: string | null;       // ISO voor incidentele items
+  dayOfWeek: number | null;  // 1=ma..7=zo voor herhalend
+  startTime: string | null;  // "HH:MM:SS"
+  endTime: string | null;
+  courseId: string | null;
+  kind: string | null;       // "les" | "toets" | ...
+  title: string | null;
+};
+
+const formatTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
+const sameYMD = (a: Date, b: Date) =>
+  a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
 export default function Planning() {
   const { user } = useAuth();
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
 
-  // Weekberekening (maandag t/m zondag)
+  // Weekberekening (ma → zo)
   const getWeekDates = (offset: number) => {
     const today = new Date();
     const startOfWeek = new Date(today);
-    // JS: 0=zo..6=za → start maandag
-    const js = today.getDay();
+    const js = today.getDay(); // 0=zo..6=za
     const mondayShift = (js === 0 ? -6 : 1 - js) + offset * 7;
+    startOfWeek.setHours(0, 0, 0, 0);
     startOfWeek.setDate(today.getDate() + mondayShift);
-
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
+    endOfWeek.setHours(23, 59, 59, 999);
     return { startOfWeek, endOfWeek };
   };
 
   const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
   const weekKey = `${startOfWeek.toISOString().split("T")[0]}-${endOfWeek.toISOString().split("T")[0]}`;
 
-  // TAKEN voor deze week (API-route gebruikt ISO strings zoals je origineel)
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
+  // TAKEN (server endpoint → Authorization header mee)
+  const {
+    data: tasks = [],
+    isLoading: tasksLoading,
+    error: tasksError,
+  } = useQuery<Task[]>({
     queryKey: ["/api/tasks", user?.id, "week", weekKey],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await fetch(
+      const res = await authedFetch(
         `/api/tasks/${user?.id}/week/${startOfWeek.toISOString()}/${endOfWeek.toISOString()}`
       );
       if (!res.ok) throw new Error("Kon taken niet ophalen");
@@ -41,26 +69,44 @@ export default function Planning() {
     },
   });
 
-  // VAKKEN (expliciete queryFn toegevoegd)
-  const { data: courses = [] } = useQuery<Course[]>({
+  // VAKKEN (server endpoint → Authorization header mee)
+  const {
+    data: courses = [],
+    isLoading: coursesLoading,
+    error: coursesError,
+  } = useQuery<Course[]>({
     queryKey: ["/api/courses", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      // Deze route gebruikte je eerder in je app (op basis van je logs)
-      const res = await fetch(`/api/courses/${user?.id}`);
+      const res = await authedFetch(`/api/courses/${user?.id}`);
       if (!res.ok) throw new Error("Kon vakken niet ophalen");
       return res.json();
     },
   });
 
-  // ROOSTER (expliciete queryFn toegevoegd)
-  const { data: schedule = [] } = useQuery<Schedule[]>({
+  // ROOSTER (server endpoint → Authorization header mee + normalisatie snake_case → camelCase)
+  const {
+    data: schedule = [],
+    isLoading: scheduleLoading,
+    error: scheduleError,
+  } = useQuery<ScheduleItem[]>({
     queryKey: ["/api/schedule", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await fetch(`/api/schedule/${user?.id}`);
+      const res = await authedFetch(`/api/schedule/${user?.id}`);
       if (!res.ok) throw new Error("Kon rooster niet ophalen");
-      return res.json();
+      const raw = await res.json();
+      const toCamel = (r: any): ScheduleItem => ({
+        id: r.id,
+        date: r.date ?? r.scheduled_date ?? null,
+        dayOfWeek: r.dayOfWeek ?? r.day_of_week ?? null,
+        startTime: r.startTime ?? r.start_time ?? null,
+        endTime: r.endTime ?? r.end_time ?? null,
+        courseId: r.courseId ?? r.course_id ?? null,
+        kind: r.kind ?? r.type ?? "les",
+        title: r.title ?? r.note ?? null,
+      });
+      return (Array.isArray(raw) ? raw : []).map(toCamel);
     },
   });
 
@@ -80,23 +126,20 @@ export default function Planning() {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
 
-      // TAKEN op deze dag
+      // Tasks op de dag
       const dayTasks = tasks.filter((task) => {
         if (!task.dueAt) return false;
         const taskDate = new Date(task.dueAt);
-        return taskDate.toDateString() === date.toDateString();
+        return sameYMD(taskDate, date);
       });
 
-      // ROOSTER-items op deze dag
-      const daySchedule = (schedule as any[]).filter((item) => {
-        // CamelCase variant zoals je originele UI verwacht:
-        // - specifieke datum: item.date (ISO)
-        // - herhaling per weekdag: item.dayOfWeek (1=ma..7=zo)
+      // Rooster op de dag (datum of weekdag)
+      const daySchedule = (schedule as ScheduleItem[]).filter((item) => {
         if (item.date) {
-          const itemDate = new Date(item.date);
-          return itemDate.toDateString() === date.toDateString();
+          const d = new Date(item.date);
+          return sameYMD(d, date);
         }
-        const js = date.getDay(); // 0=zo..6=za
+        const js = date.getDay(); // 0..6
         const dow = js === 0 ? 7 : js; // 1..7
         return item.dayOfWeek === dow;
       });
@@ -112,12 +155,10 @@ export default function Planning() {
     return days;
   };
 
-  const getCourseById = (courseId: string | null) => {
+  const getCourseById = (courseId: string | null | undefined) => {
     if (!courseId) return undefined;
     return courses.find((c) => c.id === courseId);
   };
-
-  const formatTime = (t: string) => t.slice(0, 5);
 
   const getCompletionPercentage = () => {
     const total = tasks.length;
@@ -125,14 +166,24 @@ export default function Planning() {
     return total > 0 ? Math.round((done / total) * 100) : 0;
   };
 
+  const calcWeekNumber = (d: Date) => {
+    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dayNum = date.getUTCDay() || 7;
+    date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+    return Math.ceil(((+date - +yearStart) / 86400000 + 1) / 7);
+  };
+
   const weekDays = getWeekDays();
+  const isLoading = tasksLoading || scheduleLoading || coursesLoading;
+  const hasError = tasksError || scheduleError || coursesError;
 
   return (
     <div className="p-6" data-testid="page-planning">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl font-semibold">Planning</h2>
         <div className="text-sm text-muted-foreground" data-testid="week-progress">
-          Week {Math.ceil((startOfWeek.getTime() - new Date(startOfWeek.getFullYear(), 0, 1).getTime()) / (7 * 24 * 60 * 60 * 1000))} • {getCompletionPercentage()}% voltooid
+          Week {calcWeekNumber(startOfWeek)} • {getCompletionPercentage()}% voltooid
         </div>
       </div>
 
@@ -161,8 +212,15 @@ export default function Planning() {
         </Button>
       </div>
 
+      {/* Status / fouten */}
+      {hasError && (
+        <div className="mb-4 text-sm text-red-600">
+          Er ging iets mis bij het ophalen van data. Controleer je login en probeer te herladen.
+        </div>
+      )}
+
       {/* Weekoverzicht */}
-      {tasksLoading ? (
+      {isLoading ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="border border-border rounded-lg overflow-hidden animate-pulse" data-testid={`day-skeleton-${i}`}>
@@ -191,28 +249,43 @@ export default function Planning() {
 
               <div className="p-4 space-y-3">
                 {/* Roosteritems */}
-                {day.schedule.map((item: any, scheduleIndex: number) => {
-                  const course = getCourseById(item.courseId);
+                {day.schedule.map((item: ScheduleItem, scheduleIndex: number) => {
+                  const course = getCourseById(item.courseId ?? undefined);
 
-                  const getKindLabel = (kind: string) =>
-                    ({ les: "Les", toets: "TOETS", sport: "Sport/Training", werk: "Bijbaan/Werk", afspraak: "Afspraak", hobby: "Hobby/Activiteit", anders: "Anders" }[kind] || kind);
+                  const kindLabels: Record<string, string> = {
+                    les: "Les",
+                    toets: "TOETS",
+                    sport: "Sport/Training",
+                    werk: "Bijbaan/Werk",
+                    afspraak: "Afspraak",
+                    hobby: "Hobby/Activiteit",
+                    anders: "Anders",
+                  };
+                  const kindColors: Record<string, string> = {
+                    les: "bg-blue-500",
+                    toets: "bg-red-500",
+                    sport: "bg-green-500",
+                    werk: "bg-purple-500",
+                    afspraak: "bg-orange-500",
+                    hobby: "bg-pink-500",
+                    anders: "bg-gray-500",
+                  };
 
-                  const getKindColor = (kind: string) =>
-                    ({ les: "bg-blue-500", toets: "bg-red-500", sport: "bg-green-500", werk: "bg-purple-500", afspraak: "bg-orange-500", hobby: "bg-pink-500", anders: "bg-gray-500" }[kind] || "bg-muted-foreground");
+                  const kind = (item.kind ?? "les").toLowerCase();
+                  const kindLabel = kindLabels[kind] || item.kind || "Activiteit";
+                  const dotColor = kindColors[kind] || "bg-muted-foreground";
 
                   return (
                     <div key={scheduleIndex} className="flex items-center space-x-3 text-sm" data-testid={`schedule-item-${index}-${scheduleIndex}`}>
-                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getKindColor(item.kind || "les")}`} />
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
                       <span className="text-muted-foreground w-16">
-                        {item.startTime && formatTime(item.startTime)}
+                        {formatTime(item.startTime)}
                       </span>
                       <span>
-                        {item.title || course?.name || "Activiteit"} - {getKindLabel(item.kind || "les")}
+                        {item.title || course?.name || "Activiteit"} - {kindLabel}
                       </span>
                       {course && item.title && (
-                        <span className="text-xs text-muted-foreground">
-                          ({course.name})
-                        </span>
+                        <span className="text-xs text-muted-foreground">({course.name})</span>
                       )}
                     </div>
                   );
@@ -222,25 +295,22 @@ export default function Planning() {
                 {day.tasks.length > 0 && (
                   <div className="pt-2 border-t border-border space-y-2">
                     {day.tasks.map((task) => {
-                      const course = getCourseById(task.courseId);
+                      const course = getCourseById(task.courseId ?? undefined);
                       return (
                         <div key={task.id} className="flex items-center space-x-3" data-testid={`task-item-${task.id}`}>
                           <Checkbox
                             checked={task.status === "done"}
                             className="w-4 h-4"
                             data-testid={`checkbox-task-${task.id}`}
+                            disabled
                           />
                           <span className={`flex-1 text-sm ${task.status === "done" ? "line-through opacity-60" : ""}`}>
                             {task.title}
                           </span>
                           {task.estMinutes && (
-                            <span className="text-xs text-muted-foreground">
-                              {task.estMinutes}m
-                            </span>
+                            <span className="text-xs text-muted-foreground">{task.estMinutes}m</span>
                           )}
-                          {course && (
-                            <span className="text-xs text-muted-foreground">• {course.name}</span>
-                          )}
+                          {course && <span className="text-xs text-muted-foreground">• {course.name}</span>}
                         </div>
                       );
                     })}

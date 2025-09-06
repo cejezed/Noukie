@@ -15,6 +15,7 @@ import Instellingen from "@/pages/Instellingen";
 import ParentDashboard from "@/pages/ParentDashboard";
 import NotFound from "@/pages/not-found";
 import MentalPage from "@/pages/Mental";
+import ChatGeschiedenis from "@/pages/ChatGeschiedenis";
 import { supabase } from "@/lib/supabase";
 
 function AuthenticatedApp() {
@@ -64,28 +65,28 @@ function AuthenticatedApp() {
   // Student-interface — VOLGORDE EXACT VOLGENS JOUW WENS
   return (
     <Layout>
-      <Switch>
-{/* 1) Vandaag */}
-<Route path="/" component={Vandaag} />
+    <Switch>
+    {/* 1) Vandaag */}
+    <Route path="/" exact component={Vandaag} />
 
-{/* 2) Planning (weekoverzicht) */}
-<Route path="/planning" component={Planning} />
+    {/* 2) Planning */}
+    <Route path="/planning" component={Planning} />
 
-{/* 3) Rooster (activiteiten/vakken beheren) */}
-<Route path="/rooster" component={Rooster} />
+    {/* 3) Mentaal */}
+    <Route path="/mental" component={MentalPage} />
 
-{/* 4) Mentaal */}
-<Route path="/mental" component={MentalPage} />
+    {/* 4) Uitleg (LeerChat) */}
+    <Route path="/leerchat" component={LeerChat} />
 
-{/* 5) Uitleg/Help */}
-<Route path="/help" component={LeerChat} />
+    {/* 5) Archief (ChatGeschiedenis) */}
+    <Route path="/chatgeschiedenis" component={ChatGeschiedenis} />
 
-{/* 6) Instellingen */}
-<Route path="/instellingen" component={Instellingen} />
+    {/* 6) Instellingen */}
+    <Route path="/instellingen" component={Instellingen} />
 
-{/* Fallback */}
-<Route component={NotFound} />
-      </Switch>
+    {/* Fallback */}
+    <Route component={NotFound} />
+  </Switch>
     </Layout>
   );
 }

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Upload,
   Palette,
@@ -20,51 +21,42 @@ import {
   Download,
   Upload as UploadIcon,
   FileText,
-  HelpCircle
+  HelpCircle,
+  Trash2,
+  Plus,
+  Loader2,
+  Circle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
+import type { Course, Schedule } from "@shared/schema";
 
 // App kleur thema's
 const colorThemes = [
-  {
-    id: "purple",
-    name: "Paars",
-    primary: "hsl(262.1, 83.3%, 57.8%)",
-    preview: "bg-purple-500"
-  },
-  {
-    id: "blue",
-    name: "Blauw (Standaard)",
-    primary: "hsl(217.2, 91.2%, 59.8%)",
-    preview: "bg-blue-500"
-  },
-  {
-    id: "green",
-    name: "Groen",
-    primary: "hsl(142.1, 76.2%, 36.3%)",
-    preview: "bg-green-500"
-  },
-  {
-    id: "pink",
-    name: "Roze",
-    primary: "hsl(330.1, 81.2%, 60.4%)",
-    preview: "bg-pink-500"
-  }
+  { id: "purple", name: "Paars", primary: "hsl(262.1, 83.3%, 57.8%)", preview: "bg-purple-500" },
+  { id: "blue", name: "Blauw (Standaard)", primary: "hsl(217.2, 91.2%, 59.8%)", preview: "bg-blue-500" },
+  { id: "green", name: "Groen", primary: "hsl(142.1, 76.2%, 36.3%)", preview: "bg-green-500" },
+  { id: "pink", name: "Roze", primary: "hsl(330.1, 81.2%, 60.4%)", preview: "bg-pink-500" },
 ];
 
 // Jaargang opties per onderwijstype
 const educationLevels = {
   vmbo: ["vmbo 1", "vmbo 2", "vmbo 3", "vmbo 4"],
-  havo: ["havo 3", "havo 2", "havo 3", "havo 4", "havo 5"],
+  havo: ["havo 1", "havo 2", "havo 3", "havo 4", "havo 5"],
   vwo: ["vwo 1", "vwo 2", "vwo 3", "vwo 4", "vwo 5", "vwo 6"],
-  mbo: ["mbo 1", "mbo 2", "mbo 3", "mbo 4"]
+  mbo: ["mbo 1", "mbo 2", "mbo 3", "mbo 4"],
 };
+
+type Kind = "les" | "toets" | "sport" | "werk" | "afspraak" | "hobby" | "anders";
 
 export default function Instellingen() {
   const { user } = useAuth();
+  const userId = user?.id ?? "";
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // UI states
   const [selectedTheme, setSelectedTheme] = useState("purple");
   const [selectedEducation, setSelectedEducation] = useState("havo");
   const [selectedGrade, setSelectedGrade] = useState("havo 5");
@@ -73,7 +65,44 @@ export default function Instellingen() {
   const [icalUrl, setIcalUrl] = useState("");
   const [showIcalForm, setShowIcalForm] = useState(false);
 
-  // Import iCal mutation
+  // ==== Roosterbeheer in Instellingen ====
+  // Form state voor activiteit toevoegen
+  const [formData, setFormData] = useState<{
+    course_id: string | null;
+    day_of_week: number | null; // 1..7
+    start_time: string;
+    end_time: string;
+    kind: Kind;
+    title: string;
+    is_recurring: boolean;
+    date: string | null; // YYYY-MM-DD
+  }>({
+    course_id: null,
+    day_of_week: 1,
+    start_time: "",
+    end_time: "",
+    kind: "les",
+    title: "",
+    is_recurring: true,
+    date: null,
+  });
+
+  // Vakken beheren
+  const [showCourseForm, setShowCourseForm] = useState(false);
+  const [courseFormData, setCourseFormData] = useState({ name: "", color: "#4287f5" });
+
+  // Queries voor courses (voor zowel formulier als beheer)
+  const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
+    queryKey: ["courses", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("courses").select("*").eq("user_id", userId).order("name");
+      if (error) throw new Error(error.message);
+      return data as Course[];
+    },
+  });
+
+  // Mutations: iCal import (jouw bestaande)
   const importIcalMutation = useMutation({
     mutationFn: async (url: string) => {
       const response = await apiRequest("POST", "/api/schedule/import-ical", {
@@ -85,6 +114,8 @@ export default function Instellingen() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['/api/schedule'] });
       queryClient.invalidateQueries({ queryKey: ['/api/courses'] });
+      queryClient.invalidateQueries({ queryKey: ["schedule", userId] });
+      queryClient.invalidateQueries({ queryKey: ["courses", userId] });
       setIcalUrl("");
       setShowIcalForm(false);
       toast({
@@ -102,55 +133,123 @@ export default function Instellingen() {
     }
   });
 
+  // Mutations: rooster-item aanmaken
+  const createScheduleMutation = useMutation({
+    mutationFn: async (payload: Omit<Schedule, "id" | "created_at">) => {
+      const { error } = await supabase.from("schedule").insert(payload);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["schedule", userId] });
+      setFormData({
+        course_id: null, day_of_week: 1, start_time: "", end_time: "",
+        kind: "les", title: "", is_recurring: true, date: null
+      });
+      toast({ title: "Toegevoegd!", description: "Het roosteritem is succesvol toegevoegd." });
+    },
+    onError: (e:any) => toast({ title: "Fout", description: e.message, variant: "destructive" }),
+  });
+
+  // Mutations: vakken aanmaken/verwijderen
+  const createCourseMutation = useMutation({
+    mutationFn: async (payload: { name: string; color: string; user_id: string }) => {
+      const { error } = await supabase.from("courses").insert(payload);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses", userId] });
+      setCourseFormData({ name: "", color: "#4287f5" });
+      setShowCourseForm(false);
+      toast({ title: "Vak toegevoegd!", description: "Het vak is succesvol toegevoegd." });
+    },
+    onError: (e:any) => toast({ title: "Fout", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteCourseMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("courses").delete().eq("id", id);
+      if (error) throw error as any; // kan 23503 zijn
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses", userId] });
+      toast({ title: "Vak verwijderd", description: "Het vak is verwijderd." });
+    },
+    onError: (error:any) => {
+      const msg =
+        error?.code === "23503"
+          ? "Dit vak wordt gebruikt in het rooster. Verwijder eerst die lessen of wijzig de foreign key naar ON DELETE SET NULL."
+          : `Kon vak niet verwijderen: ${error?.message ?? "Onbekende fout"}`;
+      toast({ title: "Kan niet verwijderen", description: msg, variant: "destructive" });
+    },
+  });
+
+  // Handlers
   const handleThemeChange = (themeId: string) => {
     setSelectedTheme(themeId);
     const theme = colorThemes.find(t => t.id === themeId);
     if (theme) {
-      // Update CSS custom property for primary color
       document.documentElement.style.setProperty('--primary', theme.primary);
-      toast({
-        title: "Thema gewijzigd",
-        description: `App kleur veranderd naar ${theme.name}`,
-      });
+      toast({ title: "Thema gewijzigd", description: `App kleur veranderd naar ${theme.name}` });
     }
   };
 
   const handleRosterImport = (file: File) => {
-    // Handle roster file import (CSV/iCal)
     const fileType = file.name.split('.').pop()?.toLowerCase();
-
     if (!['csv', 'ics', 'ical'].includes(fileType || '')) {
-      toast({
-        title: "Ongeldig bestand",
-        description: "Upload een .csv of .ics bestand",
-        variant: "destructive",
-      });
+      toast({ title: "Ongeldig bestand", description: "Upload een .csv of .ics bestand", variant: "destructive" });
       return;
     }
-
-    toast({
-      title: "Rooster import gestart",
-      description: `${file.name} wordt geïmporteerd...`,
-    });
-
-    // TODO: Implement actual import logic
+    toast({ title: "Rooster import gestart", description: `${file.name} wordt geïmporteerd...` });
+    // TODO: implement import
   };
 
   const exportRoster = () => {
-    toast({
-      title: "Rooster export",
-      description: "Je rooster wordt gedownload als CSV bestand",
-    });
-    // TODO: Implement export logic
+    toast({ title: "Rooster export", description: "Je rooster wordt gedownload als CSV bestand" });
+    // TODO: implement export
+  };
+
+  const submitSchedule = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!userId) return;
+    if (!formData.start_time || !formData.end_time) {
+      toast({ title: "Incomplete gegevens", description: "Vul een start- en eindtijd in.", variant: "destructive" });
+      return;
+    }
+    if (formData.end_time <= formData.start_time) {
+      toast({ title: "Tijd klopt niet", description: "Eindtijd moet na begintijd liggen.", variant: "destructive" });
+      return;
+    }
+    if (formData.is_recurring) {
+      if (!formData.day_of_week) {
+        toast({ title: "Kies een dag", description: "Selecteer een weekdag voor herhalen.", variant: "destructive" });
+        return;
+      }
+    } else {
+      if (!formData.date) {
+        toast({ title: "Datum vereist", description: "Kies een datum voor eenmalige activiteit.", variant: "destructive" });
+        return;
+      }
+    }
+    const payload: Omit<Schedule, "id" | "created_at"> = {
+      user_id: userId,
+      course_id: formData.course_id || null,
+      day_of_week: formData.is_recurring ? formData.day_of_week : null,
+      date: formData.is_recurring ? null : (formData.date ?? null),
+      start_time: formData.start_time,
+      end_time: formData.end_time,
+      kind: formData.kind,
+      title: formData.title,
+      is_recurring: formData.is_recurring,
+      status: "active",
+    } as any;
+    createScheduleMutation.mutate(payload);
   };
 
   return (
     <div className="p-4 space-y-6" data-testid="instellingen-page">
       <div className="text-center mb-6">
         <h1 className="text-2xl font-bold text-foreground mb-2">Instellingen</h1>
-        <p className="text-sm text-muted-foreground">
-          Pas je app aan naar jouw wensen
-        </p>
+        <p className="text-sm text-muted-foreground">Pas je app aan naar jouw wensen</p>
       </div>
 
       {/* App Thema */}
@@ -168,9 +267,7 @@ export default function Instellingen() {
                 key={theme.id}
                 onClick={() => handleThemeChange(theme.id)}
                 className={`p-3 rounded-lg border-2 transition-all ${
-                  selectedTheme === theme.id
-                    ? 'border-primary bg-primary/10'
-                    : 'border-border hover:border-primary/50'
+                  selectedTheme === theme.id ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'
                 }`}
                 data-testid={`theme-${theme.id}`}
               >
@@ -194,7 +291,7 @@ export default function Instellingen() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="education-level">Onderwijstype</Label>
+            <Label>Onderwijstype</Label>
             <Select value={selectedEducation} onValueChange={setSelectedEducation}>
               <SelectTrigger data-testid="select-education">
                 <SelectValue placeholder="Kies onderwijstype" />
@@ -209,7 +306,7 @@ export default function Instellingen() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="grade-level">Jaargang</Label>
+            <Label>Jaargang</Label>
             <Select value={selectedGrade} onValueChange={setSelectedGrade}>
               <SelectTrigger data-testid="select-grade">
                 <SelectValue placeholder="Kies jaargang" />
@@ -223,9 +320,7 @@ export default function Instellingen() {
           </div>
 
           <div className="bg-blue-50 p-3 rounded-lg">
-            <p className="text-sm text-blue-800">
-              💡 Deze instelling helpt bij het maken van gepaste taken en uitleg
-            </p>
+            <p className="text-sm text-blue-800">💡 Deze instelling helpt bij het maken van gepaste taken en uitleg</p>
           </div>
         </CardContent>
       </Card>
@@ -241,13 +336,10 @@ export default function Instellingen() {
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <Label htmlFor="notifications">Dagelijkse herinneringen</Label>
-              <p className="text-sm text-muted-foreground">
-                Ontvang elke dag een herinnering om je huiswerk te checken
-              </p>
+              <Label>Dagelijkse herinneringen</Label>
+              <p className="text-sm text-muted-foreground">Ontvang elke dag een herinnering om je huiswerk te checken</p>
             </div>
             <Switch
-              id="notifications"
               checked={notificationsEnabled}
               onCheckedChange={setNotificationsEnabled}
               data-testid="switch-notifications"
@@ -256,11 +348,10 @@ export default function Instellingen() {
 
           {notificationsEnabled && (
             <div className="space-y-2">
-              <Label htmlFor="reminder-time">Herinnering tijd</Label>
+              <Label>Herinnering tijd</Label>
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-muted-foreground" />
                 <Input
-                  id="reminder-time"
                   type="time"
                   value={reminderTime}
                   onChange={(e) => setReminderTime(e.target.value)}
@@ -273,7 +364,7 @@ export default function Instellingen() {
         </CardContent>
       </Card>
 
-      {/* Rooster Import/Export */}
+      {/* Rooster Beheer – Import/Export */}
       <Card data-testid="roster-settings">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -285,9 +376,7 @@ export default function Instellingen() {
           <div className="space-y-3">
             <div>
               <Label htmlFor="roster-import">Rooster Importeren</Label>
-              <p className="text-sm text-muted-foreground mb-2">
-                Upload een .csv of .ics bestand van je schoolrooster
-              </p>
+              <p className="text-sm text-muted-foreground mb-2">Upload een .csv of .ics bestand van je schoolrooster</p>
               <div className="flex gap-2">
                 <Input
                   id="roster-import"
@@ -317,9 +406,7 @@ export default function Instellingen() {
 
             <div>
               <Label>Rooster Exporteren</Label>
-              <p className="text-sm text-muted-foreground mb-2">
-                Download je huidige rooster als CSV bestand
-              </p>
+              <p className="text-sm text-muted-foreground mb-2">Download je huidige rooster als CSV bestand</p>
               <Button
                 onClick={exportRoster}
                 variant="outline"
@@ -365,12 +452,15 @@ export default function Instellingen() {
               </AlertDescription>
             </Alert>
 
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              if (icalUrl.trim()) {
-                importIcalMutation.mutate(icalUrl.trim());
-              }
-            }} className="space-y-3">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (icalUrl.trim()) {
+                  importIcalMutation.mutate(icalUrl.trim());
+                }
+              }}
+              className="space-y-3"
+            >
               <div>
                 <Label htmlFor="icalUrl">iCal URL</Label>
                 <Input
@@ -381,32 +471,178 @@ export default function Instellingen() {
                   data-testid="input-ical-url"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Plak hier de iCal link van je school rooster (SomToday, Zermelo, etc.)
+                  Plak hier de iCal link van je schoolrooster (SomToday, Zermelo, etc.)
                 </p>
               </div>
 
               <div className="flex space-x-2">
-                <Button
-                  type="submit"
-                  size="sm"
-                  disabled={importIcalMutation.isPending || !icalUrl.trim()}
-                  data-testid="button-import-ical"
-                >
+                <Button type="submit" size="sm" disabled={importIcalMutation.isPending || !icalUrl.trim()} data-testid="button-import-ical">
                   {importIcalMutation.isPending ? "Importeren..." : "Rooster importeren"}
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowIcalForm(false)}
-                  data-testid="button-cancel-ical"
-                >
+                <Button type="button" variant="outline" size="sm" onClick={() => setShowIcalForm(false)} data-testid="button-cancel-ical">
                   Annuleren
                 </Button>
               </div>
             </form>
           </CardContent>
         )}
+      </Card>
+
+      {/* 🔹 NIEUW: Activiteit toevoegen (rooster) */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Activiteit toevoegen</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={submitSchedule} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Type activiteit</Label>
+                <Select value={formData.kind} onValueChange={(v:any)=>setFormData(p=>({...p, kind:v}))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="les">Les</SelectItem>
+                    <SelectItem value="toets">Toets</SelectItem>
+                    <SelectItem value="sport">Sport/Training</SelectItem>
+                    <SelectItem value="werk">Bijbaan/Werk</SelectItem>
+                    <SelectItem value="afspraak">Afspraak</SelectItem>
+                    <SelectItem value="hobby">Hobby/Activiteit</SelectItem>
+                    <SelectItem value="anders">Anders</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="title">Titel</Label>
+                <Input id="title" value={formData.title} onChange={(e)=>setFormData(p=>({...p, title:e.target.value}))} placeholder="Titel van activiteit" />
+              </div>
+            </div>
+
+            {(formData.kind === "les" || formData.kind === "toets") && (
+              <div>
+                <Label>Vak</Label>
+                <Select value={formData.course_id ?? "none"} onValueChange={(v)=>setFormData(p=>({...p, course_id: v==="none" ? null : v}))}>
+                  <SelectTrigger><SelectValue placeholder="Kies een vak" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Geen vak</SelectItem>
+                    {courses.map((c)=>(<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label>Herhaling</Label>
+                <div className="flex items-center space-x-2">
+                  <Checkbox checked={formData.is_recurring} onCheckedChange={(ch)=>setFormData(p=>({...p, is_recurring: ch===true}))}/>
+                  <span>Elke week herhalen</span>
+                </div>
+              </div>
+
+              {formData.is_recurring ? (
+                <div>
+                  <Label>Dag</Label>
+                  <Select value={(formData.day_of_week ?? 1).toString()} onValueChange={(v)=>setFormData(p=>({...p, day_of_week: parseInt(v,10)}))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Maandag</SelectItem>
+                      <SelectItem value="2">Dinsdag</SelectItem>
+                      <SelectItem value="3">Woensdag</SelectItem>
+                      <SelectItem value="4">Donderdag</SelectItem>
+                      <SelectItem value="5">Vrijdag</SelectItem>
+                      <SelectItem value="6">Zaterdag</SelectItem>
+                      <SelectItem value="7">Zondag</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div>
+                  <Label>Datum</Label>
+                  <Input type="date" value={formData.date ?? ""} onChange={(e)=>setFormData(p=>({...p, date:e.target.value}))}/>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Begintijd</Label>
+                  <Input type="time" value={formData.start_time} onChange={(e)=>setFormData(p=>({...p, start_time:e.target.value}))}/>
+                </div>
+                <div>
+                  <Label>Eindtijd</Label>
+                  <Input type="time" value={formData.end_time} onChange={(e)=>setFormData(p=>({...p, end_time:e.target.value}))}/>
+                </div>
+              </div>
+            </div>
+
+            <Button type="submit" className="w-full" disabled={createScheduleMutation.isPending || !userId}>
+              {createScheduleMutation.isPending ? (<><Loader2 className="w-4 h-4 animate-spin mr-2" />Toevoegen…</>) : "Activiteit toevoegen"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* 🔹 NIEUW: Vakken beheren */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Vakken beheren</CardTitle>
+            <Button variant="outline" size="sm" onClick={()=>setShowCourseForm(!showCourseForm)}>
+              <Plus className="w-4 h-4 mr-2" />Vak toevoegen
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {coursesLoading ? (
+            <div className="text-muted-foreground">Laden…</div>
+          ) : courses.length ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
+              {courses.map((c)=>(
+                <div key={c.id} className="bg-muted rounded-lg p-3 text-sm flex items-center gap-2" style={{ borderLeft: `4px solid ${c.color}` }}>
+                  <Circle className="w-3 h-3" style={{ color: c.color }} />
+                  <div className="flex-1 font-medium">{c.name}</div>
+                  <Button
+                    variant="ghost" size="icon" title="Verwijderen"
+                    onClick={()=>{
+                      if (confirm(`Vak "${c.name}" verwijderen?`)) deleteCourseMutation.mutate(c.id);
+                    }}
+                    disabled={deleteCourseMutation.isPending}
+                    className="text-destructive"
+                  >
+                    {deleteCourseMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <Alert><HelpCircle className="h-4 w-4" /><AlertDescription>Geen vakken toegevoegd. Voeg vakken toe om lessen in te plannen.</AlertDescription></Alert>
+          )}
+
+          {showCourseForm && (
+            <form onSubmit={(e)=>{e.preventDefault(); if (!courseFormData.name.trim()) {
+              toast({ title: "Vak naam vereist", description: "Vul een vaknaam in.", variant: "destructive" });
+              return;
+            } createCourseMutation.mutate({ ...courseFormData, user_id: userId });}}
+              className="space-y-3 p-4 bg-muted/50 rounded-lg mt-4"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="md:col-span-2">
+                  <Label>Vaknaam</Label>
+                  <Input value={courseFormData.name} onChange={(e)=>setCourseFormData({...courseFormData, name: e.target.value})} placeholder="bv. Wiskunde" />
+                </div>
+                <div>
+                  <Label>Kleur</Label>
+                  <Input type="color" value={courseFormData.color} onChange={(e)=>setCourseFormData({...courseFormData, color: e.target.value})} className="p-1 h-10" />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={createCourseMutation.isPending}>
+                  {createCourseMutation.isPending ? "Bezig…" : "Vak opslaan"}
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={()=>setShowCourseForm(false)}>Annuleren</Button>
+              </div>
+            </form>
+          )}
+        </CardContent>
       </Card>
 
       {/* Account Info */}
@@ -435,10 +671,7 @@ export default function Instellingen() {
         <Button
           className="w-full max-w-xs"
           onClick={() => {
-            toast({
-              title: "Instellingen opgeslagen",
-              description: "Je voorkeuren zijn succesvol opgeslagen",
-            });
+            toast({ title: "Instellingen opgeslagen", description: "Je voorkeuren zijn succesvol opgeslagen" });
           }}
           data-testid="button-save-settings"
         >
