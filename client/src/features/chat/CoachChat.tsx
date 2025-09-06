@@ -1,169 +1,88 @@
-// client/src/features/chat/CoachChat.tsx
-import * as React from "react";
+import React, { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/auth";
 
-type Msg = { role: "user" | "assistant"; content: string; created_at?: string };
-
-async function getAuthHeader() {
-  const token = (await supabase.auth.getSession()).data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = new Headers(init?.headers || {});
+  if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
+  return fetch(input, { ...init, headers });
 }
 
-export default function CoachChat({
-  onTasksCreated,
-}: {
-  onTasksCreated?: (n: number) => void;
-}) {
-  const { user } = useAuth();
-  const [messages, setMessages] = React.useState<Msg[]>([]);
-  const [input, setInput] = React.useState("");
-  const [busy, setBusy] = React.useState(false);
-  const listRef = React.useRef<HTMLDivElement | null>(null);
-
-  // Scroll naar onder bij nieuwe berichten
-  React.useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
-
-  // Historie laden (userId meesturen)
-  React.useEffect(() => {
-    (async () => {
-      if (!user?.id) return;
-      try {
-        const headers = await getAuthHeader();
-        const r = await fetch(`/api/chat/history?userId=${encodeURIComponent(user.id)}`, { headers });
-        if (!r.ok) return;
-        const j = await r.json();
-        const m = (j.messages ?? []).map((x: any) => ({
-          role: x.role as "user" | "assistant",
-          content: x.content as string,
-          created_at: x.created_at as string,
-        }));
-        setMessages(m);
-      } catch {
-        // stil falen; we tonen gewoon de intro prompt
-      }
-    })();
-  }, [user?.id]);
+export default function CoachChat() {
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function send() {
-    if (!input.trim() || busy || !user?.id) return;
-    const text = input.trim();
+    if (!input.trim() || pending) return;
+    setError(null);
+    const userMsg = { role: "user" as const, content: input.trim() };
+    setMessages((m) => [...m, userMsg]);
     setInput("");
-
-    // Optimistisch toevoegen
-    setMessages((m) => [...m, { role: "user", content: text }]);
-    setBusy(true);
-
+    setPending(true);
     try {
-      const headers = { "Content-Type": "application/json", ...(await getAuthHeader()) };
-      const r = await fetch("/api/chat/coach", {
+      const res = await authedFetch("/api/plan", {
         method: "POST",
-        headers,
-        body: JSON.stringify({ userId: user.id, message: text }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMsg.content }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || r.statusText);
 
-      // Antwoord tonen
-      setMessages((m) => [...m, { role: "assistant", content: j.reply ?? "" }]);
+      const text = await res.text(); // eerst als tekst lezen
+      if (!res.ok) {
+        // Toon servertekst als die leesbaar is
+        setError(text?.slice(0, 400) || `Serverfout (${res.status})`);
+        return;
+      }
 
-      // Indien taken aangemaakt → Planning refreshen
-      if (j.created_count && onTasksCreated) onTasksCreated(j.created_count as number);
+      let data: any = null;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        // Geen geldige JSON → laat tekst zien
+        setError(text?.slice(0, 400) || "Ongeldig antwoord van server (geen JSON)");
+        return;
+      }
+
+      const reply = data?.reply || data?.message || data?.text || "(geen antwoord)";
+      setMessages((m) => [...m, { role: "assistant", content: String(reply) }]);
     } catch (e: any) {
-      setMessages((m) => [
-        ...m,
-        { role: "assistant", content: `Er ging iets mis: ${e?.message || String(e)}` },
-      ]);
+      setError(e?.message ?? "Onbekende fout bij versturen");
     } finally {
-      setBusy(false);
+      setPending(false);
     }
   }
 
-  // Voorbeeld-quick actions om gebruiker te helpen starten
-  function QuickButton({ text }: { text: string }) {
-    return (
-      <button
-        type="button"
-        className="text-xs px-2 py-1 border rounded hover:bg-muted"
-        onClick={() => setInput(text)}
-      >
-        {text}
-      </button>
-    );
-  }
-
   return (
-    <div className="flex flex-col gap-3">
-      {/* Tips/quick actions */}
+    <div className="rounded-md border p-3 space-y-2">
       <div className="flex flex-wrap gap-2">
-        <QuickButton text="Vandaag ging het zo: ..." />
-        <QuickButton text="Morgen 19:00 wiskunde 3.2 oefenen (30 min)" />
-        <QuickButton text="Engels woordjes H2 plannen voor vrijdag" />
-        <QuickButton text="Ik snap paragraaf 4.1 niet, leg uit" />
-      </div>
-
-      {/* Berichten */}
-      <div
-        ref={listRef}
-        className="space-y-2 max-h-80 overflow-auto border rounded p-3 bg-background"
-      >
-        {messages.length === 0 ? (
-          <div className="text-sm italic text-muted-foreground">
-            Vertel kort hoe je schooldag ging en wat je wilt plannen. Voorbeeld:
-            “Vandaag ging wiskunde lastig. Morgen 20:00 paragraaf 3.2 oefenen (30 min).”
+        {messages.map((m, i) => (
+          <div key={i} className={m.role === "user" ? "bg-primary/10 px-2 py-1 rounded" : "bg-muted px-2 py-1 rounded"}>
+            {m.role === "user" ? "Jij: " : "Coach: "}{m.content}
           </div>
-        ) : (
-          messages.map((m, i) => (
-            <div
-              key={i}
-              className={
-                m.role === "assistant"
-                  ? "text-sm leading-relaxed"
-                  : "text-sm font-medium leading-relaxed"
-              }
-            >
-              <span className="text-muted-foreground mr-1">
-                {m.role === "assistant" ? "Coach:" : "Jij:"}
-              </span>
-              {m.content}
-            </div>
-          ))
-        )}
+        ))}
       </div>
-
-      {/* Invoer */}
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">
+          {error}
+        </div>
+      )}
       <div className="flex gap-2">
         <input
-          className="border rounded px-3 py-2 flex-1"
-          placeholder='Schrijf hier… (Enter om te sturen)'
+          className="flex-1 border rounded px-2 py-1 text-sm"
+          placeholder="Schrijf hier... (Enter om te sturen)"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !busy && !!user?.id && send()}
-          disabled={!user?.id}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); send(); } }}
         />
         <button
-          className="border rounded px-3 py-2"
+          className="border rounded px-3 text-sm"
           onClick={send}
-          disabled={busy || !input.trim() || !user?.id}
-          aria-label="Stuur"
-          title="Stuur"
+          disabled={pending}
         >
-          {busy ? "…" : "Stuur"}
+          Stuur
         </button>
       </div>
-
-      {!user?.id && (
-        <p className="text-xs text-muted-foreground">
-          Log in om te chatten en automatisch taken te laten aanmaken.
-        </p>
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        Tip: noem een tijd en duur om taken automatisch in te plannen
-        (bijv. “morgen 19:30 25 min. wiskunde 3.2”).
-      </p>
     </div>
   );
 }

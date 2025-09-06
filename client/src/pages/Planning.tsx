@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import type { Task, Course } from "@shared/schema";
+import type { Course } from "@shared/schema";
 
 // ---------- Helpers ----------
 async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
@@ -16,14 +16,23 @@ async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
   return fetch(input, { ...init, headers });
 }
 
+type TaskItem = {
+  id: string;
+  title: string;
+  status: "todo" | "doing" | "done";
+  dueAt: string | null;         // ISO
+  courseId: string | null;
+  estMinutes?: number | null;
+};
+
 type ScheduleItem = {
   id: string;
-  date: string | null;       // ISO voor incidentele items
-  dayOfWeek: number | null;  // 1=ma..7=zo voor herhalend
-  startTime: string | null;  // "HH:MM:SS"
+  date: string | null;          // ISO voor incidenteel
+  dayOfWeek: number | null;     // 1=ma..7=zo voor herhalend
+  startTime: string | null;     // "HH:MM:SS"
   endTime: string | null;
   courseId: string | null;
-  kind: string | null;       // "les" | "toets" | ...
+  kind: string | null;          // "les" | "toets" | ...
   title: string | null;
 };
 
@@ -31,11 +40,12 @@ const formatTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 const sameYMD = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+// ---------- Component ----------
 export default function Planning() {
   const { user } = useAuth();
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
 
-  // Weekberekening (ma → zo)
+  // Weekberekening (ma → zo) in lokale tijd
   const getWeekDates = (offset: number) => {
     const today = new Date();
     const startOfWeek = new Date(today);
@@ -52,12 +62,12 @@ export default function Planning() {
   const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
   const weekKey = `${startOfWeek.toISOString().split("T")[0]}-${endOfWeek.toISOString().split("T")[0]}`;
 
-  // TAKEN (server endpoint → Authorization header mee)
+  // TAKEN (server endpoint → Authorization header + normalisatie)
   const {
     data: tasks = [],
     isLoading: tasksLoading,
     error: tasksError,
-  } = useQuery<Task[]>({
+  } = useQuery<TaskItem[]>({
     queryKey: ["/api/tasks", user?.id, "week", weekKey],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -65,11 +75,20 @@ export default function Planning() {
         `/api/tasks/${user?.id}/week/${startOfWeek.toISOString()}/${endOfWeek.toISOString()}`
       );
       if (!res.ok) throw new Error("Kon taken niet ophalen");
-      return res.json();
+      const raw = await res.json();
+      const toCamel = (r: any): TaskItem => ({
+        id: r.id,
+        title: r.title,
+        status: r.status,
+        dueAt: r.dueAt ?? r.due_at ?? null,
+        courseId: r.courseId ?? r.course_id ?? null,
+        estMinutes: r.estMinutes ?? r.est_minutes ?? null,
+      });
+      return (Array.isArray(raw) ? raw : []).map(toCamel);
     },
   });
 
-  // VAKKEN (server endpoint → Authorization header mee)
+  // VAKKEN (server endpoint → Authorization header)
   const {
     data: courses = [],
     isLoading: coursesLoading,
@@ -84,7 +103,7 @@ export default function Planning() {
     },
   });
 
-  // ROOSTER (server endpoint → Authorization header mee + normalisatie snake_case → camelCase)
+  // ROOSTER (server endpoint → Authorization header + normalisatie)
   const {
     data: schedule = [],
     isLoading: scheduleLoading,
@@ -139,8 +158,8 @@ export default function Planning() {
           const d = new Date(item.date);
           return sameYMD(d, date);
         }
-        const js = date.getDay(); // 0..6
-        const dow = js === 0 ? 7 : js; // 1..7
+        const js = date.getDay();       // 0..6
+        const dow = js === 0 ? 7 : js;  // 1..7
         return item.dayOfWeek === dow;
       });
 
@@ -307,9 +326,9 @@ export default function Planning() {
                           <span className={`flex-1 text-sm ${task.status === "done" ? "line-through opacity-60" : ""}`}>
                             {task.title}
                           </span>
-                          {task.estMinutes && (
+                          {task.estMinutes ? (
                             <span className="text-xs text-muted-foreground">{task.estMinutes}m</span>
-                          )}
+                          ) : null}
                           {course && <span className="text-xs text-muted-foreground">• {course.name}</span>}
                         </div>
                       );
