@@ -6,8 +6,8 @@ import { supabase } from "@/lib/supabase";
  * ---------------------------------------------
  * - +1 punt bij invullen (max 1 per dag)
  * - −1 punt per overgeslagen dag (bij eerstvolgend bezoek verrekend)
- * - Beloningen claimen uit lokale punten
- * - Slaat check-ins/positives op in Supabase (RLS: eigen data)
+ * - Beloningen claimen uit database punten
+ * - Slaat check-ins/positives/punten op in Supabase (RLS: eigen data)
  */
 
 export type PositiveCategory =
@@ -53,7 +53,7 @@ function parseYyyyMmDd(s?: string | null): Date | null {
   return new Date(y, mo - 1, da);
 }
 
-// ---- Supabase helper --------------------------------------------------------
+// ---- Database helpers --------------------------------------------------------
 async function saveToSupabase(payload: any, userId: string) {
   // 1) Upsert checkin (uniek op user_id + date)
   const { error } = await supabase
@@ -87,6 +87,104 @@ async function saveToSupabase(payload: any, userId: string) {
   }
 }
 
+async function savePointsToDatabase(userId: string, points: number) {
+  try {
+    console.log('Saving points to database:', { userId, points }); // Debug log
+    
+    const { error } = await supabase
+      .from('user_points')
+      .upsert({ 
+        user_id: userId, 
+        points: points
+      }, { 
+        onConflict: 'user_id' 
+      });
+    
+    if (error) {
+      console.error('Supabase error details:', error);
+      throw error;
+    }
+    
+    console.log('Points saved successfully to database!'); // Debug log
+  } catch (error) {
+    console.error('Error saving points to database:', error);
+    throw error; // Re-throw to handle in calling function
+  }
+}
+
+async function loadPointsFromDatabase(userId: string): Promise<number> {
+  try {
+    console.log('Loading points from database for user:', userId); // Debug log
+    
+    const { data, error } = await supabase
+      .from('user_points')
+      .select('points')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('Error loading points:', error);
+      return 0;
+    }
+    
+    const points = data?.points || 0;
+    console.log('Loaded points from database:', points); // Debug log
+    return points;
+  } catch (error) {
+    console.error('Error loading points from database:', error);
+    return 0;
+  }
+}
+
+async function saveRewardsToDatabase(userId: string, rewards: any[]) {
+  try {
+    console.log('Saving rewards to database:', { userId, rewards }); // Debug log
+    
+    const { error } = await supabase
+      .from('user_rewards')
+      .upsert({ 
+        user_id: userId, 
+        rewards: rewards
+      }, { 
+        onConflict: 'user_id' 
+      });
+    
+    if (error) {
+      console.error('Supabase error details:', error);
+      throw error;
+    }
+    
+    console.log('Rewards saved successfully to database!'); // Debug log
+  } catch (error) {
+    console.error('Error saving rewards to database:', error);
+    throw error; // Re-throw to handle in calling function
+  }
+}
+
+async function loadRewardsFromDatabase(userId: string): Promise<any[]> {
+  try {
+    console.log('Loading rewards from database for user:', userId); // Debug log
+    
+    const { data, error } = await supabase
+      .from('user_rewards')
+      .select('rewards')
+      .eq('user_id', userId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+      console.error('Error loading rewards:', error);
+      return [];
+    }
+    
+    const rewards = data?.rewards || [];
+    console.log('Loaded rewards from database:', rewards); // Debug log
+    return rewards;
+  } catch (error) {
+    console.error('Error loading rewards from database:', error);
+    return [];
+  }
+}
+
 // -----------------------------------------------------------------------------
 
 export default function MentalCheckin({
@@ -110,7 +208,7 @@ export default function MentalCheckin({
   const todayStr = yyyyMmDd(new Date());
   const dayKey = useMemo(() => `mentalCheckin:${userId}:${todayStr}`, [userId, todayStr]);
 
-  // Rewards keys
+  // Rewards keys (still use localStorage as backup)
   const pointsKey = useMemo(() => `mentalPoints:${userId}`, [userId]);
   const reconKey = useMemo(() => `mentalLastRecon:${userId}`, [userId]);
   const rewardsKey = useMemo(() => `mentalRewards:${userId}`, [userId]);
@@ -129,19 +227,43 @@ export default function MentalCheckin({
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
   // Rewards state
-  const [points, setPoints] = useState<number>(() => {
-    const raw = localStorage.getItem(pointsKey);
-    const n = raw ? parseInt(raw, 10) : 0;
-    return Number.isFinite(n) ? n : 0;
-  });
-  const [redeemed, setRedeemed] = useState<{ label: string; points: number; dateIso: string }[]>(() => {
-    const raw = localStorage.getItem(rewardsKey);
-    try {
-      return raw ? JSON.parse(raw) : [];
-    } catch {
-      return [];
-    }
-  });
+  const [points, setPoints] = useState<number>(0);
+  const [redeemed, setRedeemed] = useState<{ label: string; points: number; dateIso: string }[]>([]);
+
+  // Load data from database on mount
+  useEffect(() => {
+    const loadUserData = async () => {
+      if (!userId) {
+        console.error('No userId provided to MentalCheckin');
+        return;
+      }
+      
+      try {
+        // Load points from database
+        const dbPoints = await loadPointsFromDatabase(userId);
+        setPoints(dbPoints);
+        
+        // Also update localStorage as backup
+        localStorage.setItem(pointsKey, String(dbPoints));
+        
+        // Load rewards from database
+        const dbRewards = await loadRewardsFromDatabase(userId);
+        setRedeemed(dbRewards);
+        
+        // Also update localStorage as backup
+        localStorage.setItem(rewardsKey, JSON.stringify(dbRewards));
+      } catch (error) {
+        console.error('Error loading user data:', error);
+        // Fallback to localStorage if database fails
+        const localPoints = parseInt(localStorage.getItem(pointsKey) || '0');
+        const localRewards = JSON.parse(localStorage.getItem(rewardsKey) || '[]');
+        setPoints(localPoints);
+        setRedeemed(localRewards);
+      }
+    };
+    
+    loadUserData();
+  }, [userId, pointsKey, rewardsKey]);
 
   // Init: submitted today? reconcile points for missed days
   useEffect(() => {
@@ -167,6 +289,12 @@ export default function MentalCheckin({
       setPoints((prev) => {
         const next = allowNegative ? prev - decrements : Math.max(0, prev - decrements);
         localStorage.setItem(pointsKey, String(next));
+        
+        // Save to database with error handling
+        savePointsToDatabase(userId, next).catch((error) => {
+          console.error('Failed to save decremented points to database:', error);
+        });
+        
         return next;
       });
     }
@@ -224,12 +352,20 @@ export default function MentalCheckin({
         setPoints((prev) => {
           const next = prev + 1;
           localStorage.setItem(pointsKey, String(next));
+          
+          // Save to database with better error handling
+          savePointsToDatabase(userId, next).catch((error) => {
+            console.error('Failed to save points to database after checkin:', error);
+            setError('Checkin opgeslagen, maar punten konden niet worden bijgewerkt.');
+          });
+          
           return next;
         });
       }
 
       setOkMsg("Bedankt! Je check-in is opgeslagen ✨");
     } catch (e: any) {
+      console.error('Error saving checkin:', e);
       setError(e?.message ?? "Opslaan mislukt");
     } finally {
       setSaving(false);
@@ -268,22 +404,39 @@ export default function MentalCheckin({
   function canClaim(tier: RewardTier) {
     return points >= tier.points;
   }
-  function claim(tier: RewardTier) {
+  
+  async function claim(tier: RewardTier) {
     if (!canClaim(tier)) return;
     if (!confirm(`Beloning claimen: ${tier.label} voor ${tier.points} punten?`)) return;
-    const now = new Date();
-    const record = { label: tier.label, points: tier.points, dateIso: now.toISOString() };
-    const nextRedeemed = [...redeemed, record];
-    setRedeemed(nextRedeemed);
-    localStorage.setItem(rewardsKey, JSON.stringify(nextRedeemed));
+    
+    try {
+      const now = new Date();
+      const record = { label: tier.label, points: tier.points, dateIso: now.toISOString() };
+      const nextRedeemed = [...redeemed, record];
+      
+      setRedeemed(nextRedeemed);
+      localStorage.setItem(rewardsKey, JSON.stringify(nextRedeemed));
+      
+      // Save rewards to database
+      await saveRewardsToDatabase(userId, nextRedeemed);
 
-    setPoints((prev) => {
-      const next = allowNegative ? prev - tier.points : Math.max(0, prev - tier.points);
-      localStorage.setItem(pointsKey, String(next));
-      return next;
-    });
+      setPoints((prev) => {
+        const next = allowNegative ? prev - tier.points : Math.max(0, prev - tier.points);
+        localStorage.setItem(pointsKey, String(next));
+        
+        // Save points to database
+        savePointsToDatabase(userId, next).catch((error) => {
+          console.error('Failed to save points after reward claim:', error);
+        });
+        
+        return next;
+      });
 
-    alert(`Gefeliciteerd! Je hebt '${tier.label}' geclaimd.`);
+      alert(`Gefeliciteerd! Je hebt '${tier.label}' geclaimd.`);
+    } catch (error) {
+      console.error('Error claiming reward:', error);
+      alert('Er ging iets mis bij het claimen van je beloning. Probeer het opnieuw.');
+    }
   }
 
   const nextTier = rewardTiers.find((t) => points < t.points) || null;
@@ -369,7 +522,7 @@ export default function MentalCheckin({
             checked={medication}
             onChange={(e) => setMedication(e.target.checked)}
           />
-          <span>Extra Medicatie nodig gehad?</span>
+          <span>Extra Medicatie</span>
         </label>
       </div>
 

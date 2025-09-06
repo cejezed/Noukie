@@ -11,17 +11,15 @@ export default function Layout({ children }: LayoutProps) {
   const [location] = useLocation();
   const { user, signOut } = useAuth();
 
-const tabs = [
-  { id: "vandaag",  label: "Vandaag",  icon: Icons.Home, path: "/" },
-  { id: "rooster",  label: "Rooster",  icon: Icons.Calendar, path: "/rooster" },
-   { id: "mental",   label: "Mentaal",  icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
-  { id: "help",     label: "Uitleg",   icon: Icons.HelpCircle, path: "/help" },
-  { id: "planning", label: "Planning", icon: Icons.CalendarCheck ?? Icons.Calendar, path: "/planning" },
-  { id: "instellingen", label: "Instellingen", icon: Icons.Settings, path: "/instellingen" },
-];
+  const tabs = [
+    { id: "vandaag",  label: "Vandaag",  icon: Icons.Home, path: "/" },
+    { id: "rooster",  label: "Rooster",  icon: Icons.Calendar, path: "/rooster" },
+    { id: "mental",   label: "Mentaal",  icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
+    { id: "help",     label: "Uitleg",   icon: Icons.HelpCircle, path: "/help" },
+    { id: "planning", label: "Planning", icon: Icons.CalendarCheck ?? Icons.Calendar, path: "/planning" },
+    { id: "instellingen", label: "Instellingen", icon: Icons.Settings, path: "/instellingen" },
+  ];
 
-
-  // No tabs for parents - they only have the dashboard
   const isParent = user?.user_metadata?.role === "parent";
 
   return (
@@ -37,9 +35,9 @@ const tabs = [
             />
           </div>
           <div className="text-center flex-1 mx-4">
-            <h1 className="text-lg font-semibold">Hi {user?.user_metadata?.name || 'Anouk'}! 👋</h1>
+            <h1 className="text-lg font-semibold">Hi {user?.user_metadata?.name || "Anouk"}! 👋</h1>
             <p className="text-sm text-primary-foreground/80">
-              {user?.user_metadata?.role === "parent" ? "Ouder dashboard" : "Klaar voor vandaag?"}
+              {isParent ? "Ouder dashboard" : "Klaar voor vandaag?"}
             </p>
           </div>
           <Button
@@ -80,9 +78,7 @@ const tabs = [
                     >
                       <Icon className="w-5 h-5 mb-1" />
                       <span className="text-xs font-medium">{tab.label}</span>
-                      {isActive && (
-                        <div className="tab-indicator" />
-                      )}
+                      {isActive && <div className="tab-indicator" />}
                     </button>
                   </div>
                 </Link>

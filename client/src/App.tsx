@@ -4,12 +4,12 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth } from "@/lib/auth";
 import Layout from "@/components/Layout";
+import { useAuth } from "@/lib/auth";
 import Login from "@/pages/Login";
 import Vandaag from "@/pages/Vandaag";
 import Rooster from "@/pages/Rooster";
-import PlanningTemp from "@/pages/PlanningTemp"; // ← alleen als je deze pagina wilt tonen
+import Planning from "@/pages/Planning";
 import LeerChat from "@/pages/LeerChat";
 import Instellingen from "@/pages/Instellingen";
 import ParentDashboard from "@/pages/ParentDashboard";
@@ -20,6 +20,7 @@ import { supabase } from "@/lib/supabase";
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
 
+  // Alleen voor debug/logs; verwijderd als je wilt
   React.useEffect(() => {
     if (loading) return;
     (async () => {
@@ -32,7 +33,7 @@ function AuthenticatedApp() {
   React.useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange(() => {});
     return () => {
-      // @ts-ignore
+      // @ts-ignore sdk variaties
       sub?.subscription?.unsubscribe?.();
     };
   }, []);
@@ -60,27 +61,32 @@ function AuthenticatedApp() {
     );
   }
 
-  // Student-interface
+  // Student-interface — VOLGORDE EXACT VOLGENS JOUW WENS
   return (
     <Layout>
-   <Switch>
-  <Route path="/" component={Vandaag} />
-  <Route path="/rooster" component={Rooster} />
-  <Route path="/mental" component={MentalPage} />
-  <Route path="/help" component={LeerChat} />
-  <Route path="/planning" component={PlanningTemp} />
-  <Route path="/instellingen" component={Instellingen} />
-  <Route component={NotFound} />
-</Switch>
-    </Layout>
-  );
-}
+      <Switch>
+{/* 1) Vandaag */}
+<Route path="/" component={Vandaag} />
 
-function Router() {
-  return (
-    <AuthProvider>
-      <AuthenticatedApp />
-    </AuthProvider>
+{/* 2) Planning (weekoverzicht) */}
+<Route path="/planning" component={Planning} />
+
+{/* 3) Rooster (activiteiten/vakken beheren) */}
+<Route path="/rooster" component={Rooster} />
+
+{/* 4) Mentaal */}
+<Route path="/mental" component={MentalPage} />
+
+{/* 5) Uitleg/Help */}
+<Route path="/help" component={LeerChat} />
+
+{/* 6) Instellingen */}
+<Route path="/instellingen" component={Instellingen} />
+
+{/* Fallback */}
+<Route component={NotFound} />
+      </Switch>
+    </Layout>
   );
 }
 
@@ -89,7 +95,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <AuthenticatedApp />
       </TooltipProvider>
     </QueryClientProvider>
   );
