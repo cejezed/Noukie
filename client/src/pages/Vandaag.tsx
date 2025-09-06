@@ -16,6 +16,16 @@ import CoachChat from "@/features/chat/CoachChat";
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 
+// Type voor coach_memory rijen (lichtgewicht)
+type CoachMemory = {
+  id: string;
+  user_id: string;
+  course: string;
+  status: string | null;       // "moeilijk" | "ging beter" | "ok" | null
+  note: string | null;
+  last_update: string | null;  // ISO
+};
+
 export default function Vandaag() {
   const { user } = useAuth();
   const userId = user?.id ?? "";
@@ -84,6 +94,20 @@ export default function Vandaag() {
     },
   });
 
+  // === Coach-memory (voor proactieve opvolging) ===
+  const { data: coachMemory = [] } = useQuery<CoachMemory[]>({
+    queryKey: ["coach-memory", userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("coach_memory")
+        .select("*")
+        .eq("user_id", userId);
+      if (error) throw new Error(error.message);
+      return data as CoachMemory[];
+    },
+  });
+
   // === Taken mutations ===
   const qcKey = ["tasks-today", userId, today.iso] as const;
 
@@ -143,7 +167,7 @@ export default function Vandaag() {
     setTitle(""); setCourseId(null); setEstMinutes("");
   };
 
-  // === Context voor Noukie (optioneel, kan je in CoachChat gebruiken) ===
+  // === Context voor Noukie (CoachChat) ===
   const coachContext = {
     todayDate: today.iso,
     todaySchedule: todayItems.map((i) => ({
@@ -153,23 +177,30 @@ export default function Vandaag() {
       end: i.end_time,
     })),
     openTasks: tasksToday.map((t) => ({ id: t.id, title: t.title, status: t.status, courseId: t.course_id })),
+    difficulties: coachMemory.map((m) => ({
+      course: m.course,
+      status: m.status,
+      note: m.note,
+      lastUpdate: m.last_update,
+    })),
   };
 
+  // Let op: de “Noukie”-intro staat NIET meer hard in de chat (die staat bij de ℹ️ in CoachChat).
   const coachSystemHint = `
-Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
+Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
 - Gebruik context (rooster/taken/memory) om door te vragen en op te volgen.
 - Zie je vandaag een les voor een vak dat eerder “moeilijk” was? Vraag: “Hoe ging het vandaag vs. vorige keer?”
 - Stel maximaal 3 concrete acties met tijden (HH:MM) en duur in minuten.
 - Vier kleine successen en wees empathisch. Stel 1 verduidelijkingsvraag als info ontbreekt.
+- Indien blijvende info (moeilijkheden/voorkeuren/doelen) naar voren komt, geef die terug als 'signals' JSON.
 `.trim();
 
   return (
     <div className="p-6 space-y-10" data-testid="page-vandaag">
-      {/* === 1) ÉÉN blok: Chat met Noukie === */}
+      {/* === 1) Eén blok: Chat met Noukie (spraakknop zit in CoachChat) === */}
       <section>
         <CoachChat
-          // Je kunt transcript hier als prefill meegeven als je spraak in CoachChat hebt ingebouwd
-          systemHint={coachSystemHint}
+          systemHint={coachingSystemHintSafe(coachSystemHint)}
           context={coachContext}
           size="large"
         />
@@ -245,7 +276,7 @@ Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
         )}
       </section>
 
-      {/* === 3) Nieuwe taak (rustig, breed titelveld; daaronder vak & duur) === */}
+      {/* === 3) Nieuwe taak (breed titelveld; daaronder vak & duur) === */}
       <section aria-labelledby="add-task-title" className="space-y-3">
         <h2 id="add-task-title" className="text-lg font-semibold">Nieuwe taak</h2>
 
@@ -302,4 +333,10 @@ Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
       </section>
     </div>
   );
+}
+
+/** optioneel: kleine guard tegen lege strings in systemHint */
+function coachingSystemHintSafe(s: string | undefined) {
+  const t = (s || "").trim();
+  return t.length ? t : "Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.";
 }
