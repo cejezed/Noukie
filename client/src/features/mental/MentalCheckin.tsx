@@ -21,8 +21,8 @@ export type RewardTier = { points: number; label: string };
 
 const DEFAULT_TIERS: RewardTier[] = [
   { points: 25, label: "Samen shoppen" },
-  { points: 50, label: "Dagje Walibi" },
-  { points: 100, label: "Phantasialand" },
+  { points: 100, label: "Dagje Walibi" },
+  { points: 200, label: "Phantasialand" },
 ];
 
 const POSITIVE_PROMPTS: { category: PositiveCategory; label: string }[] = [

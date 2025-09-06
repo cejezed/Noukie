@@ -1,10 +1,8 @@
 import * as React from "react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Mic, Square, RefreshCcw, Info, Check, Trash2 } from "lucide-react";
+import { Loader2, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,14 +13,6 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Schedule, Course, Task } from "@shared/schema";
 import CoachChat from "@/features/chat/CoachChat";
-
-// geauthenticeerde fetch (voor /api/asr)
-async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const headers = new Headers(init?.headers || {});
-  if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
-  return fetch(input, { ...init, headers });
-}
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 
@@ -68,12 +58,9 @@ export default function Vandaag() {
   const todayItems = React.useMemo(() => {
     const arr = (schedule as Schedule[]).filter((it) => {
       const notCancelled = (it.status || "active") !== "cancelled";
-      the: {
-        const isWeeklyToday = it.is_recurring && it.day_of_week === today.dow;
-        const isSingleToday = !it.is_recurring && it.date === today.iso;
-        if (notCancelled && (isWeeklyToday || isSingleToday)) return true;
-      }
-      return false;
+      const isWeeklyToday = it.is_recurring && it.day_of_week === today.dow;
+      const isSingleToday = !it.is_recurring && it.date === today.iso;
+      return notCancelled && (isWeeklyToday || isSingleToday);
     });
     return arr.sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
   }, [schedule, today]);
@@ -97,92 +84,13 @@ export default function Vandaag() {
     },
   });
 
-  // === Coach + Spraak ===
-  const [isRecording, setIsRecording] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [isUploading, setIsUploading] = useState(false);
-  const [transcript, setTranscript] = useState<string | null>(null);
-  const [coachPrefill, setCoachPrefill] = useState<string>("");
-
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<BlobPart[]>([]);
-  const timerRef = useRef<number | null>(null);
-
-  function getPreferredAudioMime(): string {
-    const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
-    for (const t of candidates) {
-      if ((window as any).MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
-    }
-    return "audio/webm";
-  }
-
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = getPreferredAudioMime();
-      const mr = new MediaRecorder(stream, { mimeType });
-      chunksRef.current = [];
-      setTranscript(null);
-
-      mr.ondataavailable = (e) => e.data && e.data.size > 0 && chunksRef.current.push(e.data);
-      mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: mimeType });
-        await uploadAudio(blob);
-      };
-
-      mediaRecorderRef.current = mr;
-      mr.start();
-      setIsRecording(true);
-      setSeconds(0);
-
-      timerRef.current = window.setInterval(() => {
-        setSeconds((s) => {
-          if (s >= 59) {
-            stopRecording();
-            return 60;
-          }
-          return s + 1;
-        });
-      }, 1000) as unknown as number;
-    } catch (err: any) {
-      toast({ title: "Microfoon geweigerd", description: err?.message ?? "Kan microfoon niet openen.", variant: "destructive" });
-    }
-  }
-
-  function stopRecording() {
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
-    const mr = mediaRecorderRef.current;
-    if (mr && mr.state !== "inactive") mr.stop();
-    setIsRecording(false);
-  }
-
-  async function uploadAudio(blob: Blob) {
-    try {
-      setIsUploading(true);
-      const form = new FormData();
-      const ext = blob.type.includes("mp4") ? "m4a" : blob.type.includes("ogg") ? "ogg" : "webm";
-      form.append("audio", blob, `checkin.${ext}`);
-      const res = await authedFetch("/api/asr", { method: "POST", body: form });
-      if (!res.ok) throw new Error(`Upload mislukt (${res.status})`);
-      const data = await res.json().catch(() => ({}));
-      const text = data?.text || data?.transcript || "(geen transcript ontvangen)";
-      setTranscript(text);
-      toast({ title: "Opname verwerkt", description: "Transcript is binnen." });
-    } catch (e: any) {
-      toast({ title: "Fout bij uploaden", description: e?.message ?? "Onbekende fout", variant: "destructive" });
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
   // === Taken mutations ===
   const qcKey = ["tasks-today", userId, today.iso] as const;
 
   const addTaskMutation = useMutation({
     mutationFn: async (input: { title: string; courseId: string | null; estMinutes: number | null }) => {
       const dueDate = new Date(today.date);
-      dueDate.setHours(20, 0, 0, 0);
+      dueDate.setHours(20, 0, 0, 0); // neutraal tijdstip voor dagfilter
       const { error } = await supabase.from("tasks").insert({
         user_id: userId,
         title: input.title,
@@ -235,95 +143,39 @@ export default function Vandaag() {
     setTitle(""); setCourseId(null); setEstMinutes("");
   };
 
+  // === Context voor Noukie (optioneel, kan je in CoachChat gebruiken) ===
+  const coachContext = {
+    todayDate: today.iso,
+    todaySchedule: todayItems.map((i) => ({
+      kind: i.kind,
+      course: getCourseById(i.course_id)?.name ?? i.title ?? "Activiteit",
+      start: i.start_time,
+      end: i.end_time,
+    })),
+    openTasks: tasksToday.map((t) => ({ id: t.id, title: t.title, status: t.status, courseId: t.course_id })),
+  };
+
   const coachSystemHint = `
-Je bent een studiecoach. Integreer opvolging:
-- Verwijs naar eerdere sessies (bv. “vorige keer was wiskunde lastig — hoe ging het nu?”).
-- Stel korte, concrete vervolgstappen met realistische duur.
-- Tekst via spraak is gewoon een normaal gebruikersbericht.
-  `.trim();
+Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
+- Gebruik context (rooster/taken/memory) om door te vragen en op te volgen.
+- Zie je vandaag een les voor een vak dat eerder “moeilijk” was? Vraag: “Hoe ging het vandaag vs. vorige keer?”
+- Stel maximaal 3 concrete acties met tijden (HH:MM) en duur in minuten.
+- Vier kleine successen en wees empathisch. Stel 1 verduidelijkingsvraag als info ontbreekt.
+`.trim();
 
   return (
     <div className="p-6 space-y-10" data-testid="page-vandaag">
-
-      {/* === 1) COACH === */}
+      {/* === 1) ÉÉN blok: Chat met Noukie === */}
       <section>
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <h2 className="text-xl font-semibold">Coach</h2>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Uitleg coach">
-                      <Info className="h-4 w-4" />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-lg">
-                    <DialogHeader>
-                      <DialogTitle>Hoe gebruik je de coach?</DialogTitle>
-                      <DialogDescription>
-                        Typ of spreek in wat je wilt leren, plannen of vragen.  
-                        De coach onthoudt eerdere gesprekken en volgt op.
-                      </DialogDescription>
-                    </DialogHeader>
-                  </DialogContent>
-                </Dialog>
-              </div>
-
-              {!isRecording ? (
-                <Button onClick={startRecording} size="sm" variant="default" disabled={isUploading}>
-                  <Mic className="w-4 h-4 mr-2" /> Spreek in
-                </Button>
-              ) : (
-                <Button variant="destructive" size="sm" onClick={stopRecording}>
-                  <Square className="w-4 h-4 mr-2" /> Stop ({seconds}s)
-                </Button>
-              )}
-            </div>
-          </CardHeader>
-
-          <CardContent>
-            {transcript && (
-              <div className="mb-3 p-3 rounded-md bg-muted text-sm whitespace-pre-wrap">
-                {transcript}
-                <div className="mt-2 flex gap-2">
-                  <Button size="sm" onClick={() => setCoachPrefill(transcript)}>Naar coach sturen</Button>
-                  <Button variant="outline" size="sm" onClick={() => setTranscript(null)}>Opnieuw opnemen</Button>
-                </div>
-              </div>
-            )}
-
-            {/* Groot invoerveld voor de coach */}
-            <Textarea
-              placeholder="Vertel wat je wilt oefenen, waar je moeite mee hebt of wat je wilt plannen. Je kunt ook inspreken."
-              className="min-h-24 text-base"
-              value={coachPrefill}
-              onChange={(e) => setCoachPrefill(e.target.value)}
-            />
-
-            <div className="mt-3 flex justify-end">
-              <Button
-                onClick={() => {
-                  if (coachPrefill.trim()) setCoachPrefill(coachPrefill.trim());
-                }}
-              >
-                Verstuur naar coach
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="mt-6">
-          <CoachChat
-            prefill={coachPrefill}
-            onPrefillConsumed={() => setCoachPrefill("")}
-            systemHint={coachSystemHint}
-            size="large"
-          />
-        </div>
+        <CoachChat
+          // Je kunt transcript hier als prefill meegeven als je spraak in CoachChat hebt ingebouwd
+          systemHint={coachSystemHint}
+          context={coachContext}
+          size="large"
+        />
       </section>
 
-      {/* === 2) VANDAAG === */}
+      {/* === 2) Vandaag: rooster + taken === */}
       <section>
         <h2 className="text-lg font-semibold mb-3">Vandaag</h2>
 
@@ -393,7 +245,7 @@ Je bent een studiecoach. Integreer opvolging:
         )}
       </section>
 
-      {/* === 3) NIEUWE TAAK === */}
+      {/* === 3) Nieuwe taak (rustig, breed titelveld; daaronder vak & duur) === */}
       <section aria-labelledby="add-task-title" className="space-y-3">
         <h2 id="add-task-title" className="text-lg font-semibold">Nieuwe taak</h2>
 

@@ -8,31 +8,23 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Course } from "@shared/schema";
 
-// ---------- Helpers ----------
-async function authedFetch(input: RequestInfo | URL, init?: RequestInit) {
-  const { data: { session } } = await supabase.auth.getSession();
-  const headers = new Headers(init?.headers || {});
-  if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
-  return fetch(input, { ...init, headers });
-}
-
 type TaskItem = {
   id: string;
   title: string;
   status: "todo" | "doing" | "done";
-  dueAt: string | null;         // ISO
+  dueAt: string | null;
   courseId: string | null;
   estMinutes?: number | null;
 };
 
 type ScheduleItem = {
   id: string;
-  date: string | null;          // ISO voor incidenteel
-  dayOfWeek: number | null;     // 1=ma..7=zo voor herhalend
-  startTime: string | null;     // "HH:MM:SS"
+  date: string | null;
+  dayOfWeek: number | null;
+  startTime: string | null;
   endTime: string | null;
   courseId: string | null;
-  kind: string | null;          // "les" | "toets" | ...
+  kind: string | null;
   title: string | null;
 };
 
@@ -40,7 +32,6 @@ const formatTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 const sameYMD = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-// ---------- Component ----------
 export default function Planning() {
   const { user } = useAuth();
   const [currentWeekOffset, setCurrentWeekOffset] = useState(0);
@@ -62,70 +53,111 @@ export default function Planning() {
   const { startOfWeek, endOfWeek } = getWeekDates(currentWeekOffset);
   const weekKey = `${startOfWeek.toISOString().split("T")[0]}-${endOfWeek.toISOString().split("T")[0]}`;
 
-  // TAKEN (server endpoint → Authorization header + normalisatie)
+  // TAKEN - Direct Supabase call
   const {
     data: tasks = [],
     isLoading: tasksLoading,
     error: tasksError,
   } = useQuery<TaskItem[]>({
-    queryKey: ["/api/tasks", user?.id, "week", weekKey],
+    queryKey: ["tasks", user?.id, weekKey],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await authedFetch(
-        `/api/tasks/${user?.id}/week/${startOfWeek.toISOString()}/${endOfWeek.toISOString()}`
-      );
-      if (!res.ok) throw new Error("Kon taken niet ophalen");
-      const raw = await res.json();
-      const toCamel = (r: any): TaskItem => ({
-        id: r.id,
-        title: r.title,
-        status: r.status,
-        dueAt: r.dueAt ?? r.due_at ?? null,
-        courseId: r.courseId ?? r.course_id ?? null,
-        estMinutes: r.estMinutes ?? r.est_minutes ?? null,
-      });
-      return (Array.isArray(raw) ? raw : []).map(toCamel);
+      console.log('Fetching tasks for week:', { startOfWeek, endOfWeek, userId: user?.id });
+      
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', user!.id)
+        .gte('due_at', startOfWeek.toISOString())
+        .lte('due_at', endOfWeek.toISOString())
+        .order('due_at', { ascending: true });
+        
+      if (error) {
+        console.error('Tasks query error:', error);
+        throw error;
+      }
+      
+      console.log('Tasks fetched:', data?.length || 0);
+      
+      // Convert from snake_case to camelCase
+      const tasks = (data || []).map((row: any): TaskItem => ({
+        id: row.id,
+        title: row.title,
+        status: row.status,
+        dueAt: row.due_at,
+        courseId: row.course_id,
+        estMinutes: row.est_minutes,
+      }));
+      
+      return tasks;
     },
   });
 
-  // VAKKEN (server endpoint → Authorization header)
+  // VAKKEN - Direct Supabase call
   const {
     data: courses = [],
     isLoading: coursesLoading,
     error: coursesError,
   } = useQuery<Course[]>({
-    queryKey: ["/api/courses", user?.id],
+    queryKey: ["courses", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await authedFetch(`/api/courses/${user?.id}`);
-      if (!res.ok) throw new Error("Kon vakken niet ophalen");
-      return res.json();
+      console.log('Fetching courses for user:', user?.id);
+      
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('user_id', user!.id)
+        .order('name', { ascending: true });
+        
+      if (error) {
+        console.error('Courses query error:', error);
+        throw error;
+      }
+      
+      console.log('Courses fetched:', data?.length || 0);
+      return data || [];
     },
   });
 
-  // ROOSTER (server endpoint → Authorization header + normalisatie)
+  // ROOSTER - Direct Supabase call
   const {
     data: schedule = [],
     isLoading: scheduleLoading,
     error: scheduleError,
   } = useQuery<ScheduleItem[]>({
-    queryKey: ["/api/schedule", user?.id],
+    queryKey: ["schedule", user?.id, weekKey],
     enabled: !!user?.id,
     queryFn: async () => {
-      const res = await authedFetch(`/api/schedule/${user?.id}`);
-      if (!res.ok) throw new Error("Kon rooster niet ophalen");
-      const raw = await res.json();
-      const toCamel = (r: any): ScheduleItem => ({
-        id: r.id,
-        date: r.date ?? r.scheduled_date ?? null,
-        dayOfWeek: r.dayOfWeek ?? r.day_of_week ?? null,
-        startTime: r.startTime ?? r.start_time ?? null,
-        endTime: r.endTime ?? r.end_time ?? null,
-        courseId: r.courseId ?? r.course_id ?? null,
-        kind: r.kind ?? r.type ?? "les",
-        title: r.title ?? r.note ?? null,
-      });
-      return (Array.isArray(raw) ? raw : []).map(toCamel);
+      console.log('Fetching schedule for week:', { startOfWeek, endOfWeek, userId: user?.id });
+      
+      // Get both recurring (day_of_week based) and one-time (date based) schedule items
+      const { data, error } = await supabase
+        .from('schedule')
+        .select('*')
+        .eq('user_id', user!.id)
+        .or(`date.is.null,date.gte.${startOfWeek.toISOString().split('T')[0]},date.lte.${endOfWeek.toISOString().split('T')[0]}`);
+        
+      if (error) {
+        console.error('Schedule query error:', error);
+        throw error;
+      }
+      
+      console.log('Schedule items fetched:', data?.length || 0);
+      
+      // Convert from snake_case to camelCase
+      const scheduleItems = (data || []).map((row: any): ScheduleItem => ({
+        id: row.id,
+        date: row.date,
+        dayOfWeek: row.day_of_week,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        courseId: row.course_id,
+        kind: row.kind || row.type || 'les',
+        title: row.title || row.note,
+      }));
+      
+      return scheduleItems;
     },
   });
 
@@ -153,14 +185,21 @@ export default function Planning() {
       });
 
       // Rooster op de dag (datum of weekdag)
-      const daySchedule = (schedule as ScheduleItem[]).filter((item) => {
+      const daySchedule = schedule.filter((item) => {
+        // Check for specific date match
         if (item.date) {
-          const d = new Date(item.date);
-          return sameYMD(d, date);
+          const scheduleDate = new Date(item.date);
+          return sameYMD(scheduleDate, date);
         }
-        const js = date.getDay();       // 0..6
-        const dow = js === 0 ? 7 : js;  // 1..7
-        return item.dayOfWeek === dow;
+        
+        // Check for recurring day of week match
+        if (item.dayOfWeek) {
+          const js = date.getDay(); // 0=Sunday, 1=Monday, etc.
+          const dow = js === 0 ? 7 : js; // Convert to 1=Monday, 7=Sunday
+          return item.dayOfWeek === dow;
+        }
+        
+        return false;
       });
 
       days.push({
@@ -196,6 +235,17 @@ export default function Planning() {
   const weekDays = getWeekDays();
   const isLoading = tasksLoading || scheduleLoading || coursesLoading;
   const hasError = tasksError || scheduleError || coursesError;
+
+  // Debug logging
+  console.log('Planning render:', {
+    user: user?.id,
+    weekKey,
+    isLoading,
+    hasError,
+    tasksCount: tasks.length,
+    scheduleCount: schedule.length,
+    coursesCount: courses.length,
+  });
 
   return (
     <div className="p-6" data-testid="page-planning">
@@ -234,7 +284,14 @@ export default function Planning() {
       {/* Status / fouten */}
       {hasError && (
         <div className="mb-4 text-sm text-red-600">
-          Er ging iets mis bij het ophalen van data. Controleer je login en probeer te herladen.
+          Er ging iets mis bij het ophalen van data: {String(tasksError || scheduleError || coursesError)}
+        </div>
+      )}
+
+      {/* Debug info in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mb-4 p-2 bg-gray-100 text-xs">
+          Debug: {tasks.length} taken, {schedule.length} rooster items, {courses.length} vakken
         </div>
       )}
 
@@ -261,7 +318,7 @@ export default function Planning() {
                     {day.name} {day.formattedDate}
                   </h4>
                   <span className="text-sm text-muted-foreground" data-testid={`task-count-${index}`}>
-                    {day.tasks.length} taken
+                    {day.tasks.length} taken, {day.schedule.length} activiteiten
                   </span>
                 </div>
               </div>
