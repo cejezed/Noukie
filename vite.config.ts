@@ -1,10 +1,11 @@
+// vite.config.ts (in projectroot)
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-  plugins: [react()],
   root: "client",
+  plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(process.cwd(), "client/src"),
@@ -12,16 +13,11 @@ export default defineConfig({
       "@assets": path.resolve(process.cwd(), "attached_assets"),
     },
   },
+  publicDir: "public",           // => client/public → kopie naar client/dist
   build: {
-    outDir: "./dist",
+    outDir: "dist",              // ⚠️ NIET ../dist maar gewoon "dist" → client/dist
     assetsDir: "assets",
-    emptyOutDir: false,
+    emptyOutDir: true,
   },
   base: "/",
-  server: {
-    fs: { strict: true, deny: ["**/.*"] },
-    hmr: { overlay: false },
-    host: "0.0.0.0",
-    port: 5173,
-  },
 });

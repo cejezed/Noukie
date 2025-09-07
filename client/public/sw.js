@@ -1,73 +1,101 @@
-// Een unieke naam voor de cache. Verhoog dit nummer (v2, v3, etc.) als u grote wijzigingen aan de app maakt.
-const CACHE_NAME = 'huiswerkcoach-noukie-v1';
-
-// De essentiële "shell" van de app die we altijd willen cachen.
-const FILES_TO_CACHE = [
-  '/', // De hoofdpagina
-  '/manifest.webmanifest', // Het manifest-bestand
-  '/favicon.ico' // Het icoon
+// --- Config ---
+const CACHE_NAME = "huiswerkcoach-noukie-v2";
+const PRECACHE = [
+  "/",                     // hoofdroute (SPA shell)
+  "/index.html",          // voor zekerheid
+  "/manifest.webmanifest",
+  "/favicon.ico",
+  // voeg hier evt. je app-shell CSS/JS in productie aan toe, bv:
+  // "/assets/index-ABC123.js",
+  // "/assets/index-XYZ789.css",
 ];
 
-// Event listener voor de 'install' fase
-self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    try {
-      const cache = await caches.open(CACHE_NAME);
-      console.log('[Service Worker] Bestanden worden gecached...');
-
-      // Deze aanpak is robuuster dan cache.addAll().
-      // Het probeert elk bestand apart te cachen en stopt niet als één bestand mislukt.
-      const promises = FILES_TO_CACHE.map((url) => {
-        return cache.add(url).catch((reason) => {
-          console.warn(`[Service Worker] Kon bestand niet cachen: ${url}`, reason);
-        });
-      });
-      await Promise.all(promises);
-
-    } catch (error) {
-      console.error('[Service Worker] Installatie mislukt:', error);
-    }
-  })());
+// --- Lifecycle ---
+self.addEventListener("install", (event) => {
+  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        PRECACHE.map((url) =>
+          cache.add(url).catch((err) => {
+            console.warn("[SW] Precache skip:", url, err);
+          })
+        )
+      )
+    )
+  );
 });
 
-// Event listener voor de 'fetch' fase (wanneer de app data of bestanden opvraagt)
-self.addEventListener('fetch', (event) => {
-  // We reageren alleen op GET-verzoeken.
-  if (event.request.method !== 'GET') {
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    (async () => {
+      const names = await caches.keys();
+      await Promise.all(
+        names.map((n) => (n !== CACHE_NAME ? caches.delete(n) : undefined))
+      );
+      await self.clients.claim();
+    })()
+  );
+});
+
+// --- Helpers ---
+const isSameOrigin = (url) => url.origin === self.location.origin;
+const isAPI = (url) => url.pathname.startsWith("/api/");
+
+// --- Fetch strategy ---
+self.addEventListener("fetch", (event) => {
+  const { request } = event;
+
+  // Alleen GET cachen
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+
+  // Cross-origin: laat door naar netwerk (niet cachen)
+  if (!isSameOrigin(url)) return;
+
+  // API calls: altijd netwerk (niet cachen)
+  if (isAPI(url)) {
+    event.respondWith(fetch(request));
     return;
   }
-  
-  event.respondWith((async () => {
-    try {
-      // Probeer eerst het netwerk om de nieuwste versie te krijgen.
-      const networkResponse = await fetch(event.request);
 
-      // Als dat lukt, slaan we een kopie op in de cache voor offline gebruik.
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(event.request, networkResponse.clone());
-
-      return networkResponse;
-    } catch (error) {
-      // Als het netwerk mislukt (bijv. offline), probeer het dan uit de cache te halen.
-      console.log('[Service Worker] Netwerkfout, probeer cache:', event.request.url);
-      const cachedResponse = await caches.match(event.request);
-      return cachedResponse;
-    }
-  })());
-});
-
-// Event listener voor de 'activate' fase (ruimt oude caches op)
-self.addEventListener('activate', (event) => {
-  event.waitUntil((async () => {
-    const cacheNames = await caches.keys();
-    await Promise.all(
-      cacheNames.map((cacheName) => {
-        if (cacheName !== CACHE_NAME) {
-          console.log('[Service Worker] Oude cache wordt verwijderd:', cacheName);
-          return caches.delete(cacheName);
+  // Navigaties/HTML: network-first met fallback op cache
+  if (request.mode === "navigate" || url.pathname === "/") {
+    event.respondWith(
+      (async () => {
+        try {
+          const fresh = await fetch(request);
+          const cache = await caches.open(CACHE_NAME);
+          cache.put("/", fresh.clone()); // shell updaten
+          return fresh;
+        } catch {
+          const cached = await caches.match("/");
+          return cached || new Response("Offline", { status: 503 });
         }
-      })
+      })()
     );
-  })());
-});
+    return;
+  }
 
+  // Overige same-origin statische assets: cache-first + background update
+  event.respondWith(
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request, { ignoreSearch: true });
+      if (cached) {
+        // update op achtergrond
+        fetch(request)
+          .then((res) => {
+            if (res && res.ok) cache.put(request, res.clone());
+          })
+          .catch(() => {});
+        return cached;
+      }
+      // niet in cache → probeer netwerk en sla op
+      const res = await fetch(request);
+      if (res && res.ok) cache.put(request, res.clone());
+      return res;
+    })()
+  );
+});
