@@ -1,6 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import type { Request, Response } from 'express';
+import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { createClient } from '@supabase/supabase-js';
+import { Buffer } from 'buffer'; // <-- Add this import
 
 // Initialize AI clients
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -13,7 +15,7 @@ const supabase = createClient(
 );
 
 // Helper function to convert image URL to Gemini format
-async function urlToGoogleGenerativePart(url) {
+async function urlToGoogleGenerativePart(url: string): Promise<Part> {
   const response = await fetch(url);
   const contentType = response.headers.get("content-type") || 'image/jpeg';
   const buffer = await response.arrayBuffer();
@@ -25,7 +27,7 @@ async function urlToGoogleGenerativePart(url) {
   };
 }
 
-export default async function handler(req, res) {
+export default async function handler(req: Request, res: Response) {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -79,22 +81,22 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
     // Add conversation history if available
     if (history && history.length > 0) {
       promptText += `\n\nVorige conversatie:\n`;
-      history.forEach((msg, index) => {
+      history.forEach((msg: any, index: number) => {
         promptText += `${msg.role === 'user' ? 'Leerling' : 'Tutor'}: ${msg.text}\n`;
       });
       promptText += `\nGeef nu je volgende antwoord rekening houdend met deze context.`;
     }
     
-    const contentParts = [promptText];
+    const contentParts: (string | Part)[] = [promptText];
     
     if (imageUrl) {
       console.log('🖼️ Processing image...');
       try {
         const imagePart = await urlToGoogleGenerativePart(imageUrl);
         contentParts.push(imagePart);
-      } catch (imageError) {
+      } catch (imageError: any) {
         console.error('❌ Image processing failed:', imageError);
-        return res.status(400).json({ error: 'Afbeelding kon niet worden verwerkt.' });
+        return res.status(400).json({ error: 'Afbeelding kon niet worden verwerkt.', details: imageError.message });
       }
     }
     
@@ -115,10 +117,10 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
         voice: "nova", 
         input: aiResponseText.substring(0, 4000) // Limit length for TTS
       });
-      const buffer = Buffer.from(await mp3.arrayBuffer());
-      aiAudioUrl = `data:audio/mpeg;base64,${buffer.toString('base64')}`;
+      const audioBuffer = Buffer.from(await mp3.arrayBuffer());
+      aiAudioUrl = `data:audio/mpeg;base64,${audioBuffer.toString('base64')}`;
       console.log('✅ Audio generated successfully');
-    } catch (audioError) {
+    } catch (audioError: any) {
       console.error('⚠️ Audio generation failed (continuing without audio):', audioError);
       // Continue without audio - don't fail the whole request
     }
@@ -130,7 +132,7 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
       aiAudioUrl 
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error in chat function:", error);
     res.status(500).json({ 
       error: 'Interne serverfout.', 

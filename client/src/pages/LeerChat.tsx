@@ -54,6 +54,20 @@ export default function LeerChat() {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // START NIEUWE FUNCTIE
+  const startNewChat = () => {
+    setMessages([]);
+    setSelectedSessionId('new');
+    setCurrentSessionId(null);
+    setOgave('');
+    setPoging('');
+    toast({
+      title: "Nieuwe chat gestart",
+      description: "Je kunt nu een nieuwe vraag stellen.",
+    });
+  };
+  // EINDE NIEUWE FUNCTIE
+
   // Vakken laden - Direct Supabase
   useEffect(() => {
     const loadCourseOptions = async () => {
@@ -163,7 +177,7 @@ export default function LeerChat() {
   const callGeminiAI = async (prompt: string, imageUrl?: string): Promise<string> => {
     // Voor nu een placeholder - dit zou een directe call naar Google AI zijn
     // Je hebt de GEMINI_API_KEY nodig in je environment variables
-    
+
     // Placeholder response
     const responses = [
       "Dat is een interessante vraag! Kun je me vertellen wat je al hebt geprobeerd?",
@@ -172,10 +186,10 @@ export default function LeerChat() {
       "Ik zie dat je hier moeite mee hebt. Laten we beginnen met de basis.",
       "Prima vraag! Heb je de formule al gevonden die je nodig hebt?"
     ];
-    
+
     // Simuleer AI thinking tijd
     await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 2000));
-    
+
     return responses[Math.floor(Math.random() * responses.length)];
   };
 
@@ -183,12 +197,12 @@ export default function LeerChat() {
   const handleSendMessage = async (imageUrl?: string) => {
     if ((!opgave.trim() && !imageUrl) || isGenerating || !user || !selectedCourse) return;
 
-    const userMessage: Message = { 
-      id: Date.now(), 
-      sender: "user", 
-      text: opgave || "Kun je helpen met deze afbeelding?", 
-      poging, 
-      imageUrl 
+    const userMessage: Message = {
+      id: Date.now(),
+      sender: "user",
+      text: opgave || "Kun je helpen met deze afbeelding?",
+      poging,
+      imageUrl
     };
     const newMessagesList = [...messages, userMessage];
     setMessages(newMessagesList);
@@ -198,10 +212,10 @@ export default function LeerChat() {
 
     try {
       // Build prompt voor AI
-      const historyContext = messages.length > 0 
+      const historyContext = messages.length > 0
         ? messages.slice(-6).map(msg => `${msg.sender}: ${msg.text}`).join('\n')
         : '';
-      
+
       const fullPrompt = `
 Je bent een vriendelijke AI-tutor voor een havo 5-leerling. Het vak is: ${selectedCourse}.
 De vraag is: "${userMessage.text}". De eigen poging is: "${userMessage.poging || 'Niet ingevuld.'}"
@@ -215,12 +229,12 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
 
       // Call AI (placeholder for now)
       const aiResponseText = await callGeminiAI(fullPrompt, imageUrl);
-      
+
       console.log('AI response received:', aiResponseText.substring(0, 100) + '...');
-      
-      const aiMessage: Message = { 
-        id: Date.now() + 1, 
-        sender: "ai", 
+
+      const aiMessage: Message = {
+        id: Date.now() + 1,
+        sender: "ai",
         text: aiResponseText,
         // Audio generation weggelaten voor nu - kan later toegevoegd worden
       };
@@ -230,17 +244,17 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
       // Opslaan in Supabase
       try {
         if (currentSessionId) {
-          await supabase.from("chatsessies").update({ 
-            berichten: finalMessagesList, 
-            updated_at: new Date().toISOString() 
+          await supabase.from("chatsessies").update({
+            berichten: finalMessagesList,
+            updated_at: new Date().toISOString()
           }).eq("id", currentSessionId);
         } else {
-          const { data: ins, error: insertError } = await supabase.from("chatsessies").insert({ 
-            user_id: user.id, 
-            vak: selectedCourse, 
-            berichten: finalMessagesList 
+          const { data: ins, error: insertError } = await supabase.from("chatsessies").insert({
+            user_id: user.id,
+            vak: selectedCourse,
+            berichten: finalMessagesList
           }).select("id").single();
-          
+
           if (insertError) throw insertError;
           if (ins) setCurrentSessionId(ins.id);
         }
@@ -255,12 +269,12 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
 
     } catch (error: any) {
       console.error('Chat error:', error);
-      toast({ 
-        variant: "destructive", 
-        title: "AI fout", 
+      toast({
+        variant: "destructive",
+        title: "AI fout",
         description: error.message || "Er ging iets mis met de AI response."
       });
-      
+
       // Remove the user message if AI failed
       setMessages(messages);
     } finally {
@@ -277,7 +291,7 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
     try {
       const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
       if (uploadError) throw uploadError;
-      
+
       const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
       await handleSendMessage(data.publicUrl);
     } catch (error: any) {
@@ -323,7 +337,7 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
               </p>
             </div>
           )}
-          
+
           {/* Berichten */}
           {messages.map(msg => (
             <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
@@ -344,7 +358,7 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
               </div>
             </div>
           ))}
-          
+
           {/* Laad-indicator */}
           {isGenerating && (
             <div className="flex justify-start">
@@ -360,11 +374,22 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
           )}
         </div>
       </ScrollArea>
-      
+
       <Card>
         <CardHeader className="flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg">Stel je vraag</CardTitle>
           <div className="flex items-center gap-2">
+            {/* NIEUWE KNOP OM CHAT TE STARTEN */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={startNewChat}
+              title="Start een nieuwe chat"
+            >
+              <Repeat className="w-5 h-5 text-muted-foreground" />
+            </Button>
+            {/* EINDE NIEUWE KNOP */}
+
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -387,53 +412,53 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
             </Dialog>
           </div>
         </CardHeader>
-        
+
         <CardContent className="p-4 pt-0 space-y-4">
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="opgave-text">Opgave of Begrip</Label>
-              <Textarea 
-                id="opgave-text" 
-                value={opgave} 
-                onChange={e => setOgave(e.target.value)} 
-                placeholder="Typ of plak hier de opgave..." 
-                rows={3} 
+              <Textarea
+                id="opgave-text"
+                value={opgave}
+                onChange={e => setOgave(e.target.value)}
+                placeholder="Typ of plak hier de opgave..."
+                rows={3}
               />
             </div>
             <div>
               <Label htmlFor="poging-text">Mijn eigen poging (optioneel)</Label>
-              <Textarea 
-                id="poging-text" 
-                value={poging} 
-                onChange={e => setPoging(e.target.value)} 
-                placeholder="Wat heb je zelf al geprobeerd?" 
-                rows={3} 
+              <Textarea
+                id="poging-text"
+                value={poging}
+                onChange={e => setPoging(e.target.value)}
+                placeholder="Wat heb je zelf al geprobeerd?"
+                rows={3}
               />
             </div>
           </div>
-          
+
           <div className="flex items-end justify-between">
             <div className="flex items-center gap-2">
-              <input 
-                type="file" 
-                accept="image/*" 
-                ref={fileInputRef} 
-                onChange={handleImageUpload} 
-                className="hidden" 
+              <input
+                type="file"
+                accept="image/*"
+                ref={fileInputRef}
+                onChange={handleImageUpload}
+                className="hidden"
               />
-              <Button 
-                variant="outline" 
-                size="icon" 
-                onClick={() => fileInputRef.current?.click()} 
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading || isGenerating}
               >
                 {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
               </Button>
-              
+
               <Button variant="outline" size="icon" disabled title="Voice input niet beschikbaar">
                 <Mic className="w-4 h-4" />
               </Button>
-              
+
               <Select value={selectedCourse} onValueChange={setSelectedCourse}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder={loadingCourses ? "Vakken laden..." : "Kies een vak"} />
@@ -451,10 +476,10 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
                 </SelectContent>
               </Select>
             </div>
-            
-            <Button 
-              onClick={() => handleSendMessage()} 
-              disabled={!opgave.trim() || isGenerating || !selectedCourse} 
+
+            <Button
+              onClick={() => handleSendMessage()}
+              disabled={!opgave.trim() || isGenerating || !selectedCourse}
               size="lg"
             >
               <Send className="w-5 h-5 mr-2" />
