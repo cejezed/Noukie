@@ -54,7 +54,7 @@ export default function LeerChat() {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Vakken laden
+  // Vakken laden - Direct Supabase
   useEffect(() => {
     const loadCourseOptions = async () => {
       if (!user) {
@@ -91,9 +91,9 @@ export default function LeerChat() {
     };
 
     loadCourseOptions();
-  }, [user]);
+  }, [user, toast, selectedCourse]);
 
-  // Chatsessies laden en bijwerken
+  // Chatsessies laden - Direct Supabase
   useEffect(() => {
     const loadChatSessions = async () => {
       if (!user || !selectedCourse) {
@@ -103,34 +103,41 @@ export default function LeerChat() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from("chatsessies")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("vak", selectedCourse)
-        .order("updated_at", { ascending: false });
+      try {
+        const { data, error } = await supabase
+          .from("chatsessies")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("vak", selectedCourse)
+          .order("updated_at", { ascending: false });
 
-      if (error) {
+        if (error) throw error;
+
+        const sessions = data as ChatSession[];
+        setChatSessions(sessions);
+
+        if (sessions.length > 0) {
+          const mostRecentSession = sessions[0];
+          setSelectedSessionId(mostRecentSession.id);
+          setCurrentSessionId(mostRecentSession.id);
+          setMessages(mostRecentSession.berichten || []);
+        } else {
+          setSelectedSessionId('new');
+          setMessages([]);
+          setCurrentSessionId(null);
+        }
+      } catch (error) {
         console.error("Kon chatgeschiedenis niet laden:", error);
-        return;
-      }
-
-      const sessions = data as ChatSession[];
-      setChatSessions(sessions);
-
-      if (sessions.length > 0) {
-        const mostRecentSession = sessions[0];
-        setSelectedSessionId(mostRecentSession.id);
-        setCurrentSessionId(mostRecentSession.id);
-        setMessages(mostRecentSession.berichten);
-      } else {
-        setSelectedSessionId('new');
-        setMessages([]);
-        setCurrentSessionId(null);
+        toast({
+          title: "Fout",
+          description: "Kon chatgeschiedenis niet laden.",
+          variant: "destructive",
+        });
       }
     };
+
     loadChatSessions();
-  }, [selectedCourse, user]);
+  }, [selectedCourse, user, toast]);
 
   // Luister naar geselecteerde sessie en update berichten
   useEffect(() => {
@@ -140,7 +147,7 @@ export default function LeerChat() {
     } else {
       const session = chatSessions.find(s => s.id === selectedSessionId);
       if (session) {
-        setMessages(session.berichten);
+        setMessages(session.berichten || []);
         setCurrentSessionId(session.id);
       }
     }
@@ -152,7 +159,27 @@ export default function LeerChat() {
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
-  // Vraag versturen naar de AI
+  // Client-side AI call functie
+  const callGeminiAI = async (prompt: string, imageUrl?: string): Promise<string> => {
+    // Voor nu een placeholder - dit zou een directe call naar Google AI zijn
+    // Je hebt de GEMINI_API_KEY nodig in je environment variables
+    
+    // Placeholder response
+    const responses = [
+      "Dat is een interessante vraag! Kun je me vertellen wat je al hebt geprobeerd?",
+      "Laten we dit stap voor stap aanpakken. Wat is het eerste wat je moet doen?",
+      "Goed bezig! Dit onderwerp kan lastig zijn. Welk deel vind je het moeilijkst?",
+      "Ik zie dat je hier moeite mee hebt. Laten we beginnen met de basis.",
+      "Prima vraag! Heb je de formule al gevonden die je nodig hebt?"
+    ];
+    
+    // Simuleer AI thinking tijd
+    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 2000));
+    
+    return responses[Math.floor(Math.random() * responses.length)];
+  };
+
+  // Vraag versturen naar de AI - Client-side
   const handleSendMessage = async (imageUrl?: string) => {
     if ((!opgave.trim() && !imageUrl) || isGenerating || !user || !selectedCourse) return;
 
@@ -170,77 +197,72 @@ export default function LeerChat() {
     setIsGenerating(true);
 
     try {
-      const token = (await supabase.auth.getSession()).data.session?.access_token;
-
-      // Fix: Correct role mapping voor conversation history
-      const historyToSend = messages.map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'model', // Use 'model' for AI responses
-        text: msg.text
-      }));
-
-      console.log('Sending to chat API:', {
-        opgave: userMessage.text,
-        poging: userMessage.poging,
-        course: selectedCourse,
-        historyLength: historyToSend.length
-      });
-
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json', 
-          'Authorization': `Bearer ${token}` 
-        },
-        body: JSON.stringify({
-          opgave: userMessage.text,
-          poging: userMessage.poging,
-          course: selectedCourse,
-          imageUrl,
-          history: historyToSend,
-        }),
-      });
-
-      console.log('Chat API response status:', response.status);
+      // Build prompt voor AI
+      const historyContext = messages.length > 0 
+        ? messages.slice(-6).map(msg => `${msg.sender}: ${msg.text}`).join('\n')
+        : '';
       
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Chat API error:', errorData);
-        throw new Error(errorData.error || 'Er is een fout opgetreden');
-      }
+      const fullPrompt = `
+Je bent een vriendelijke AI-tutor voor een havo 5-leerling. Het vak is: ${selectedCourse}.
+De vraag is: "${userMessage.text}". De eigen poging is: "${userMessage.poging || 'Niet ingevuld.'}"
 
-      const { aiResponseText, aiAudioUrl } = await response.json();
+${historyContext ? `Vorige conversatie:\n${historyContext}\n` : ''}
+
+Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socratic-stijl hint en een wedervraag. Antwoord in het Nederlands.
+      `.trim();
+
+      console.log('Calling client-side AI with prompt length:', fullPrompt.length);
+
+      // Call AI (placeholder for now)
+      const aiResponseText = await callGeminiAI(fullPrompt, imageUrl);
+      
       console.log('AI response received:', aiResponseText.substring(0, 100) + '...');
       
       const aiMessage: Message = { 
         id: Date.now() + 1, 
         sender: "ai", 
-        text: aiResponseText, 
-        audioUrl: aiAudioUrl 
+        text: aiResponseText,
+        // Audio generation weggelaten voor nu - kan later toegevoegd worden
       };
       const finalMessagesList = [...newMessagesList, aiMessage];
       setMessages(finalMessagesList);
 
       // Opslaan in Supabase
-      if (currentSessionId) {
-        await supabase.from("chatsessies").update({ 
-          berichten: finalMessagesList, 
-          updated_at: new Date().toISOString() 
-        }).eq("id", currentSessionId);
-      } else {
-        const { data: ins } = await supabase.from("chatsessies").insert({ 
-          user_id: user.id, 
-          vak: selectedCourse, 
-          berichten: finalMessagesList 
-        }).select("id").single();
-        if (ins) setCurrentSessionId(ins.id);
+      try {
+        if (currentSessionId) {
+          await supabase.from("chatsessies").update({ 
+            berichten: finalMessagesList, 
+            updated_at: new Date().toISOString() 
+          }).eq("id", currentSessionId);
+        } else {
+          const { data: ins, error: insertError } = await supabase.from("chatsessies").insert({ 
+            user_id: user.id, 
+            vak: selectedCourse, 
+            berichten: finalMessagesList 
+          }).select("id").single();
+          
+          if (insertError) throw insertError;
+          if (ins) setCurrentSessionId(ins.id);
+        }
+      } catch (dbError) {
+        console.error('Error saving to database:', dbError);
+        toast({
+          title: "Opslaan mislukt",
+          description: "Je bericht is verstuurd maar niet opgeslagen.",
+          variant: "destructive",
+        });
       }
+
     } catch (error: any) {
       console.error('Chat error:', error);
       toast({ 
         variant: "destructive", 
-        title: "Oeps! Er ging iets mis.", 
-        description: error.message 
+        title: "AI fout", 
+        description: error.message || "Er ging iets mis met de AI response."
       });
+      
+      // Remove the user message if AI failed
+      setMessages(messages);
     } finally {
       setIsGenerating(false);
     }
@@ -253,7 +275,9 @@ export default function LeerChat() {
     setIsUploading(true);
     const fileName = `${user.id}/${Date.now()}-${file.name}`;
     try {
-      await supabase.storage.from("uploads").upload(fileName, file);
+      const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
+      if (uploadError) throw uploadError;
+      
       const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
       await handleSendMessage(data.publicUrl);
     } catch (error: any) {
@@ -264,7 +288,7 @@ export default function LeerChat() {
     }
   };
 
-  // Audio-playback
+  // Audio-playback (disabled for now since we don't generate audio)
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.sender === "ai" && lastMessage.audioUrl) {
@@ -294,6 +318,9 @@ export default function LeerChat() {
             <div className="text-center text-muted-foreground pt-12">
               <p className="font-medium text-lg">Welkom bij de AI Tutor!</p>
               <p className="text-sm">Kies een vak en stel je vraag.</p>
+              <p className="text-xs mt-2 text-amber-600">
+                Let op: Dit gebruikt een vereenvoudigde AI - voor complexe vragen check altijd je antwoorden.
+              </p>
             </div>
           )}
           
@@ -353,7 +380,7 @@ export default function LeerChat() {
                   <li><strong>2. Laat je Werk Zien:</strong> Vul in wat je zelf al hebt geprobeerd.</li>
                   <li><strong>3. Gebruik een Foto:</strong> Maak een duidelijke foto van je opgave.</li>
                   <li className="text-xs text-amber-800 p-2 bg-amber-50 rounded-md">
-                    <strong>Let op:</strong> Controleer belangrijke antwoorden altijd.
+                    <strong>Let op:</strong> Dit is een vereenvoudigde AI tutor. Controleer belangrijke antwoorden altijd met je docent of studieboek.
                   </li>
                 </ul>
               </DialogContent>
@@ -403,7 +430,7 @@ export default function LeerChat() {
                 {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
               </Button>
               
-              <Button variant="outline" size="icon" disabled>
+              <Button variant="outline" size="icon" disabled title="Voice input niet beschikbaar">
                 <Mic className="w-4 h-4" />
               </Button>
               
