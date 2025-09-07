@@ -18,9 +18,9 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "dist",
+    outDir: "../dist",    // Veranderd van "dist" naar "../dist"
     assetsDir: "assets",
-    emptyOutDir: true,
+    emptyOutDir: false,   // Veranderd van true naar false
   },
   base: "/",
   server: {
@@ -28,8 +28,8 @@ export default defineConfig({
     hmr: {
       overlay: false
     },
-    historyApiFallback: true,  // 👈 Voor development 404s
-    host: '0.0.0.0',          // 👈 Voor Codespaces
+    historyApiFallback: true,
+    host: '0.0.0.0',
     port: 5173
   },
 });
