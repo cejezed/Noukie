@@ -1,6 +1,6 @@
 // client/src/pages/Vandaag.tsx
 import * as React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Mic, Square, Send, Plus, Loader2, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,21 @@ import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import type { Task, Course } from "@shared/schema";
 
-// Kleine helpers
 const fmtDate = (d?: string | null) => (d ? d.slice(0, 10) : "");
 const todayIso = () => new Date().toISOString().slice(0, 10);
+
+// -------- opname helpers
+const pickMimeType = () => {
+  const opts = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", ""];
+  for (const t of opts) {
+    // @ts-expect-error: isTypeSupported kan ontbreken in type defs
+    if (!t || (window.MediaRecorder?.isTypeSupported?.(t) ?? false)) return t;
+  }
+  return "";
+};
+const stopTracks = (stream?: MediaStream | null) => {
+  stream?.getTracks()?.forEach((t) => t.stop());
+};
 
 export default function Vandaag() {
   const { toast } = useToast();
@@ -24,28 +36,23 @@ export default function Vandaag() {
   const userId = user?.id ?? "";
   const qc = useQueryClient();
 
-  // -----------------------------
-  // STATE: nieuw taak-formulier
-  // -----------------------------
+  // ---------- nieuw taak formulier
   const [createOpen, setCreateOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [courseId, setCourseId] = useState<string>("");
   const [dueDate, setDueDate] = useState<string>(todayIso());
   const [notes, setNotes] = useState("");
 
-  // -----------------------------
-  // STATE: opname / ASR
-  // -----------------------------
+  // ---------- opname state
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [transcript, setTranscript] = useState("");
+  const [sending, setSending] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordChunksRef = useRef<BlobPart[]>([]);
-  const recordTimeoutRef = useRef<number | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
+  const timeoutRef = useRef<number | null>(null);
 
-  // -----------------------------
-  // DATA: courses + taken vandaag
-  // -----------------------------
+  // ---------- data
   const { data: courses } = useQuery<Course[]>({
     queryKey: ["courses", userId],
     enabled: !!userId,
@@ -55,7 +62,7 @@ export default function Vandaag() {
     },
   });
 
-  const { data: tasksToday, isLoading: tasksLoading, refetch: refetchTasks } = useQuery<Task[]>({
+  const { data: tasksToday, isLoading: tasksLoading } = useQuery<Task[]>({
     queryKey: ["tasks", userId, "today"],
     enabled: !!userId,
     queryFn: async () => {
@@ -64,9 +71,7 @@ export default function Vandaag() {
     },
   });
 
-  // -----------------------------
-  // MUTATIES
-  // -----------------------------
+  // ---------- mutaties taken
   const createTask = useMutation({
     mutationFn: async (body: Partial<Task>) => {
       const res = await apiRequest("POST", "/api/tasks", body);
@@ -76,8 +81,7 @@ export default function Vandaag() {
     onSuccess: () => {
       toast({ title: "Taak aangemaakt", description: "Je taak staat bij vandaag." });
       setCreateOpen(false);
-      setTitle("");
-      setNotes("");
+      setTitle(""); setNotes("");
       qc.invalidateQueries({ queryKey: ["tasks", userId, "today"] });
     },
     onError: (e: any) => {
@@ -103,10 +107,8 @@ export default function Vandaag() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", userId, "today"] }),
   });
 
-  // -----------------------------
-  // HANDLERS: taak aanmaken
-  // -----------------------------
-  const handleCreateTask = async () => {
+  // ---------- handlers taken
+  const handleCreateTask = () => {
     if (!userId) {
       toast({ title: "Niet ingelogd", variant: "destructive", description: "Log eerst in om taken te kunnen maken." });
       return;
@@ -125,32 +127,55 @@ export default function Vandaag() {
     } as Partial<Task>);
   };
 
-  // -----------------------------
-  // HANDLERS: opname
-  // -----------------------------
+  // ---------- handlers opname
   const startRecording = async () => {
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        toast({ title: "Opnemen niet ondersteund", variant: "destructive", description: "Deze browser ondersteunt geen microfoon-opname." });
+      if (!("MediaRecorder" in window) || !navigator.mediaDevices?.getUserMedia) {
+        toast({
+          title: "Opnemen niet ondersteund",
+          variant: "destructive",
+          description: "Probeer Chrome/Edge op desktop of een recente mobiele browser."
+        });
         return;
       }
+
+      // UI meteen laten reageren
+      setIsRecording(true);
+      setAudioBlob(null);
+      setTranscript("");
+      chunksRef.current = [];
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
-      recordChunksRef.current = [];
+      const mimeType = pickMimeType();
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+
+      mr.onerror = (ev) => {
+        console.error("MediaRecorder error", ev);
+        toast({ title: "Opnamefout", variant: "destructive", description: "Kon niet opnemen." });
+        setIsRecording(false);
+        stopTracks(stream);
+      };
       mr.ondataavailable = (e) => {
-        if (e.data.size > 0) recordChunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
       mr.onstop = () => {
-        const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
-        setAudioBlob(blob);
+        try {
+          const type = mimeType || (chunksRef.current[0] as any)?.type || "audio/webm";
+          const blob = new Blob(chunksRef.current, { type });
+          setAudioBlob(blob);
+        } finally {
+          stopTracks(stream); // microfoon vrijgeven
+        }
       };
+
       mr.start();
       mediaRecorderRef.current = mr;
-      setIsRecording(true);
+      (mediaRecorderRef.current as any).__stream = stream;
 
-      // max 60s
-      recordTimeoutRef.current = window.setTimeout(() => {
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      // Max 60s safeguard
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = window.setTimeout(() => {
+        if (mediaRecorderRef.current?.state === "recording") {
           mediaRecorderRef.current.stop();
           setIsRecording(false);
           toast({ title: "Opname gestopt", description: "Maximale duur (60s) bereikt." });
@@ -158,53 +183,76 @@ export default function Vandaag() {
       }, 60_000);
     } catch (e: any) {
       console.error(e);
-      toast({ title: "Kan microfoon niet starten", variant: "destructive", description: e?.message ?? "Onbekende fout" });
+      setIsRecording(false);
+      toast({
+        title: "Kan microfoon niet starten",
+        variant: "destructive",
+        description:
+          e?.name === "NotAllowedError"
+            ? "Toestemming geweigerd. Sta microfoontoegang toe."
+            : e?.message ?? "Onbekende fout"
+      });
     }
   };
 
   const stopRecording = () => {
     try {
-      if (recordTimeoutRef.current) {
-        clearTimeout(recordTimeoutRef.current);
-        recordTimeoutRef.current = null;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
       }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-        mediaRecorderRef.current.stop();
+      const mr = mediaRecorderRef.current;
+      if (mr?.state === "recording") {
+        mr.stop();
+      } else {
+        // geen recording, maar sluit eventueel open stream
+        stopTracks((mr as any)?.__stream);
       }
-      setIsRecording(false);
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsRecording(false);
     }
   };
 
   const sendRecording = async () => {
+    if (!audioBlob) {
+      toast({ title: "Geen opname", variant: "destructive", description: "Neem eerst iets op." });
+      return;
+    }
     try {
-      if (!audioBlob) {
-        toast({ title: "Geen opname", variant: "destructive", description: "Neem eerst iets op." });
-        return;
-      }
+      setSending(true);
+      // webm → .webm, mp4 → .m4a voor nette bestandsnaam
+      const filename = audioBlob.type?.includes("mp4") ? "opname.m4a" : "opname.webm";
       const fd = new FormData();
-      fd.append("audio", audioBlob, "opname.webm");
+      fd.append("audio", audioBlob, filename);
 
       const res = await fetch("/api/asr", { method: "POST", body: fd });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`ASR ${res.status}: ${txt || "geen details"}`);
-      }
-      const data = await res.json();
-      const t = data?.text || data?.transcript || "";
-      setTranscript(t);
+      const txt = await res.text();
 
-      toast({ title: "Transcriptie gelukt", description: t || "Geen tekst gedetecteerd." });
+      if (!res.ok) {
+        console.error("ASR error", res.status, txt);
+        throw new Error(`ASR ${res.status} ${txt || ""}`.trim());
+      }
+
+      // probeer JSON, anders plain text
+      try {
+        const j = JSON.parse(txt);
+        const t = j?.text || j?.transcript || "";
+        setTranscript(t);
+        toast({ title: "Transcriptie gelukt", description: t || "Geen tekst gedetecteerd." });
+      } catch {
+        setTranscript(txt);
+        toast({ title: "Transcriptie gelukt", description: txt || "Geen tekst gedetecteerd." });
+      }
     } catch (e: any) {
-      console.error(e);
       toast({ title: "Versturen mislukt", variant: "destructive", description: e?.message ?? "Onbekende fout" });
+    } finally {
+      setSending(false);
     }
   };
 
-  // -----------------------------
-  // RENDER
-  // -----------------------------
+  // ---------- render
   if (authLoading) {
     return (
       <div className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
@@ -215,12 +263,12 @@ export default function Vandaag() {
   }
 
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-8">
       {/* Header */}
       <div className="flex items-end justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold">Vandaag</h1>
-          <p className="text-sm text-muted-foreground">Taken en snelle spraaknotities</p>
+          <p className="text-sm text-muted-foreground">Taken en spraaknotities</p>
         </div>
         <Button type="button" onClick={() => setCreateOpen((v) => !v)} variant="secondary">
           <Plus className="h-4 w-4 mr-2" /> Nieuwe taak
@@ -303,29 +351,39 @@ export default function Vandaag() {
         )}
       </div>
 
-      {/* Opnemen */}
+      {/* Opnemen + Versturen */}
       <div className="space-y-2">
         <h2 className="text-base font-medium">Snel opnemen</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" onClick={startRecording} disabled={isRecording} variant="default">
+          <Button type="button" onClick={startRecording} disabled={isRecording}>
             <Mic className="h-4 w-4 mr-2" /> Opnemen
           </Button>
           <Button type="button" onClick={stopRecording} disabled={!isRecording} variant="secondary">
             <Square className="h-4 w-4 mr-2" /> Stop
           </Button>
-          <Button type="button" onClick={sendRecording} disabled={!audioBlob} variant="outline">
-            <Send className="h-4 w-4 mr-2" /> Stuur
+          <Button type="button" onClick={sendRecording} disabled={!audioBlob || sending} variant="outline">
+            {sending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+            Verstuur
           </Button>
           <div className="text-sm text-muted-foreground">
             {isRecording ? "Bezig met opnemen… (max 60s)" : audioBlob ? "Klaar om te versturen" : "Nog geen opname"}
           </div>
         </div>
+
         {transcript ? (
           <div className="rounded-xl border p-3 text-sm">
             <div className="mb-1 font-medium">Transcriptie</div>
             <p className="whitespace-pre-wrap">{transcript}</p>
           </div>
         ) : null}
+
+        {!("MediaRecorder" in window) && (
+          <Alert>
+            <AlertDescription>
+              MediaRecorder wordt niet ondersteund in deze browser. Probeer Chrome of Edge op desktop.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
     </div>
   );
