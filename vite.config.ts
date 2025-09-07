@@ -13,9 +13,8 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../dist",
+    outDir: "./dist",
     assetsDir: "assets",
-    // belangrijk: zo ruimt Vite niet per ongeluk andere mappen op
     emptyOutDir: false,
   },
   base: "/",
