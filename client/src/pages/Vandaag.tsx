@@ -15,8 +15,7 @@ import type { Schedule, Course, Task } from "@shared/schema";
 import CoachChat, { type CoachChatHandle } from "@/features/chat/CoachChat";
 import VoiceCheckinButton from "@/features/voice/VoiceCheckinButton";
 
-// 👇 Onboarding modal
-import AppIntroModal from "@/components/AppIntroModal";
+
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 
