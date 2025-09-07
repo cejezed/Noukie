@@ -1,5 +1,5 @@
 import "dotenv/config";
-import express, { type Request, type Response, type NextFunction } from "express";
+import express, { type Request, type Response } from "express";
 import cors from "cors";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,12 +14,13 @@ import voiceTestRouter from "./routes/voiceTest";
 import { handleCreateCourse, handleGetCourses, handleDeleteCourse } from "./handlers/courses.ts";
 import { handleGetTasksForToday, handleGetTasksForWeek, handleUpdateTaskStatus, handleDeleteTask, handleCreateTask } from "./handlers/tasks.ts";
 import { handleGetSchedule, handleCreateScheduleItem, handleDeleteScheduleItem, handleCancelScheduleItem } from "./handlers/schedule.ts";
-import { handleChatRequest } from "./handlers/chat.ts";
+import { handleChatRequest, explain } from "./handlers/chat.ts"; // explain toegevoegd
 
 // ----------------------------------------------------------------------------
 // App bootstrap
 // ----------------------------------------------------------------------------
 const app = express();
+export default app; // ⬅️ Belangrijk voor Vercel serverless
 
 // Basis security/infra
 app.disable("x-powered-by");
@@ -38,25 +39,26 @@ app.get("/api/health", (_req, res) => {
 
 // --- API Routes ---
 // Courses
-app.post('/api/courses', handleCreateCourse);
-app.get('/api/courses/:userId', handleGetCourses);
-app.delete('/api/courses/:courseId', handleDeleteCourse);
+app.post("/api/courses", handleCreateCourse);
+app.get("/api/courses/:userId", handleGetCourses);
+app.delete("/api/courses/:courseId", handleDeleteCourse);
 
 // Tasks
-app.post('/api/tasks', handleCreateTask);
-app.get('/api/tasks/:userId/today', handleGetTasksForToday);
-app.get('/api/tasks/:userId/week/:week_start/:week_end', handleGetTasksForWeek);
-app.patch('/api/tasks/:taskId/status', handleUpdateTaskStatus);
-app.delete('/api/tasks/:taskId', handleDeleteTask);
+app.post("/api/tasks", handleCreateTask);
+app.get("/api/tasks/:userId/today", handleGetTasksForToday);
+app.get("/api/tasks/:userId/week/:week_start/:week_end", handleGetTasksForWeek);
+app.patch("/api/tasks/:taskId/status", handleUpdateTaskStatus);
+app.delete("/api/tasks/:taskId", handleDeleteTask);
 
 // Schedule
-app.post('/api/schedule', handleCreateScheduleItem);
-app.get('/api/schedule/:userId', handleGetSchedule);
-app.delete('/api/schedule/:itemId', handleDeleteScheduleItem);
-app.patch('/api/schedule/:itemId/cancel', handleCancelScheduleItem);
+app.post("/api/schedule", handleCreateScheduleItem);
+app.get("/api/schedule/:userId", handleGetSchedule);
+app.delete("/api/schedule/:itemId", handleDeleteScheduleItem);
+app.patch("/api/schedule/:itemId/cancel", handleCancelScheduleItem);
 
 // AI & Voice
-app.post('/api/chat', handleChatRequest);
+app.post("/api/chat", handleChatRequest);
+app.post("/api/explain", explain); // duidelijke 400 bij ontbrekende {text}
 app.use("/api/voice-test", voiceTestRouter);
 
 // ----------------------------------------------------------------------------
@@ -65,78 +67,91 @@ app.use("/api/voice-test", voiceTestRouter);
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
 // Voice ingest endpoint
-app.post('/api/ingest', upload.single('audio'), async (req: Request, res: Response) => {
+app.post("/api/ingest", upload.single("audio"), async (req: Request, res: Response) => {
   try {
-    console.log('Voice ingest request received');
-    
+    console.log("Voice ingest request received");
+
     if (!req.file) {
-      return res.status(400).json({ error: 'No audio file provided' });
+      return res.status(400).json({ error: "No audio file provided" });
     }
 
-    console.log('Audio file received:', {
+    console.log("Audio file received:", {
       originalname: req.file.originalname,
       mimetype: req.file.mimetype,
-      size: req.file.size
+      size: req.file.size,
     });
 
-    // TODO: Add real audio processing here (speech-to-text, AI analysis, etc.)
-    // For now, return a simple response
+    // TODO: Echte audioverwerking toevoegen
     const response = {
       text: "Audio ontvangen en verwerkt",
-      agentReply: "Bedankt voor je voice check-in! Ik heb je opname ontvangen en verwerkt."
+      agentReply: "Bedankt voor je voice check-in! Ik heb je opname ontvangen en verwerkt.",
     };
 
     res.json(response);
-  } catch (error) {
-    console.error('Voice ingest error:', error);
-    res.status(500).json({ error: 'Audio processing failed', details: error.message });
+  } catch (error: any) {
+    console.error("Voice ingest error:", error);
+    res.status(500).json({ error: "Audio processing failed", details: error.message });
   }
 });
 
 // ----------------------------------------------------------------------------
-// Static file serving and SPA fallback
+// Static file serving en SPA fallback
 // ----------------------------------------------------------------------------
 
-(async () => {
-  const server = await registerRoutes(app);
-  
-  // Setup Vite in development or serve static files in production
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
-  } else {
-    // Serve static files from dist directory
-    app.use(express.static('dist'));
-  }
+// 🔹 Op Vercel: GEEN listen(), wél statics + SPA fallback meteen registreren
+if (process.env.VERCEL) {
+  // Client assets komen uit client/dist (Vite output)
+  app.use(express.static("client/dist"));
 
-  // SPA fallback - MUST be after all API routes and static file serving
-  // This handles client-side routing (React Router, Wouter, etc.)
-  app.get('*', (req: Request, res: Response) => {
-    // Skip API routes - these should return 404 if not found
-    if (req.path.startsWith('/api/')) {
-      return res.status(404).json({ error: 'API route not found' });
+  // SPA fallback NA alle API routes
+  app.get("*", (req: Request, res: Response) => {
+    if (req.path.startsWith("/api/")) {
+      return res.status(404).json({ error: "API route not found" });
     }
-    
-    // For all other routes, serve the main HTML file
-    // This allows client-side routing to handle routes like /rooster, /mental, etc.
-    const indexPath = path.join(process.cwd(), 'dist', 'index.html');
-    
-    // Check if index.html exists
+    const indexPath = path.join(process.cwd(), "client", "dist", "index.html");
     if (fs.existsSync(indexPath)) {
       res.sendFile(indexPath);
     } else {
-      // Fallback error if index.html doesn't exist
-      res.status(404).json({ 
-        error: 'Application not built', 
-        message: 'Run npm run build first' 
+      res.status(404).json({
+        error: "Application not built",
+        message: "Run npm run build first",
       });
     }
   });
+} else {
+  // 🔹 Lokaal / niet-Vercel: behoud je bestaande dev/prod gedrag en listen()
+  (async () => {
+    const server = await registerRoutes(app);
 
-  const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
-    log(`serving on port ${port}`);
+    if (app.get("env") === "development") {
+      await setupVite(app, server);
+    } else {
+      // Serve client statics in productie
+      app.use(express.static("client/dist"));
+    }
+
+    // SPA fallback
+    app.get("*", (req: Request, res: Response) => {
+      if (req.path.startsWith("/api/")) {
+        return res.status(404).json({ error: "API route not found" });
+      }
+      const indexPath = path.join(process.cwd(), "client", "dist", "index.html");
+      if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+      } else {
+        res.status(404).json({
+          error: "Application not built",
+          message: "Run npm run build first",
+        });
+      }
+    });
+
+    const port = parseInt(process.env.PORT || "5000", 10);
+    server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+      log(`serving on port ${port}`);
+    });
+  })().catch((e) => {
+    console.error("Fatal bootstrap error:", e);
+    process.exit(1);
   });
-})().catch((e) => {
-  console.error("Fatal bootstrap error:", e);
-  process.exit(1);
-});
+}

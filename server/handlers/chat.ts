@@ -1,3 +1,9 @@
+// server/handlers/chat.ts
+import type { Request, Response } from "express";
+
+/**
+ * Bestaande chat-handler (ONGEWIJZIGD)
+ */
 export async function handleChatRequest(req: Request, res: Response) {
   try {
     // ... bestaande auth code ...
@@ -64,5 +70,44 @@ export async function handleChatRequest(req: Request, res: Response) {
   } catch (error: any) {
     console.error("Chat error details:", error);
     res.status(500).json({ error: 'Interne serverfout.', details: error.message });
+  }
+}
+
+/**
+ * NIEUWE: uitleg-endpoint voor /api/explain
+ * - accepteert { text } of { message } in JSON body
+ * - geeft duidelijke 400 terug als input ontbreekt
+ * - placeholder logic; vervang door je eigen LLM/uitleg-service wanneer gewenst
+ */
+export async function explain(req: Request, res: Response) {
+  try {
+    const body = req.body ?? {};
+    const raw = (typeof body.text === "string" ? body.text : body.message) as string | undefined;
+    const text = raw?.trim() ?? "";
+
+    if (text.length < 3) {
+      return res.status(400).json({
+        error: "MISSING_TEXT",
+        message: 'Stuur JSON met { "text": "<min. 3 tekens>" } (of "message").',
+        example: { text: "Leg fotosynthese uit in simpele stappen." }
+      });
+    }
+
+    const subject =
+      typeof body.subject === "string" && body.subject.trim().length
+        ? body.subject.trim()
+        : undefined;
+
+    // TODO: vervang dit blok door je echte uitleg/LLM-call
+    const explanation =
+      `Uitleg${subject ? ` (vak: ${subject})` : ""}:\n` +
+      `• Samenvatting van je vraag: "${text}".\n` +
+      `• Geef 2–3 korte, stapsgewijze hints (geen volledige oplossing).\n` +
+      `• Voeg één concreet voorbeeld toe.\n`;
+
+    return res.json({ explanation });
+  } catch (e: any) {
+    console.error("[explain] error", e);
+    return res.status(500).json({ error: "internal_error", detail: String(e?.message || e) });
   }
 }
