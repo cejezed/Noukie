@@ -16,10 +16,6 @@ import {
   HelpCircle,
   Settings,
   CheckCircle,
-  Clock,
-  BookOpen,
-  Users,
-  Smartphone,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -74,7 +70,6 @@ const introSteps = [
             </p>
           </div>
         </div>
-
         <div className="space-y-3">
           <h4 className="font-semibold">Hoe werkt het?</h4>
           <div className="space-y-2 text-sm">
@@ -108,7 +103,6 @@ const introSteps = [
             </p>
           </div>
         </div>
-
         <div className="space-y-3">
           <h4 className="font-semibold">Handige functies:</h4>
           <ul className="space-y-2 text-sm">
@@ -142,7 +136,6 @@ const introSteps = [
             </p>
           </div>
         </div>
-
         <div className="space-y-3">
           <h4 className="font-semibold">Wat kun je toevoegen?</h4>
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -180,7 +173,6 @@ const introSteps = [
             </p>
           </div>
         </div>
-
         <div className="space-y-3">
           <h4 className="font-semibold">Hoe gebruik je dit?</h4>
           <div className="space-y-2 text-sm">
@@ -218,7 +210,6 @@ const introSteps = [
             </p>
           </div>
         </div>
-
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="space-y-2">
             <h5 className="font-medium">🎨 App Kleuren</h5>
@@ -251,28 +242,24 @@ const introSteps = [
               Doe elke ochtend een voice check-in. Vertel wat je gisteren hebt gedaan en wat je vandaag wilt bereiken.
             </p>
           </div>
-
           <div className="p-3 bg-blue-50 rounded-lg">
             <h4 className="font-semibold text-blue-800 mb-2">📱 Gebruik foto's</h4>
             <p className="text-sm text-blue-700">
               Als je ergens niet uitkomt, maak een foto van de opdracht. Ik geef je dan stap-voor-stap uitleg.
             </p>
           </div>
-
           <div className="p-3 bg-indigo-50 rounded-lg">
             <h4 className="font-semibold text-indigo-800 mb-2">📅 SomToday rooster</h4>
             <p className="text-sm text-indigo-700">
               Gebruik je SomToday? Exporteer je rooster als iCal URL en importeer het in één keer via het Rooster tabblad!
             </p>
           </div>
-
           <div className="p-3 bg-green-50 rounded-lg">
-            <h4 className="font-semibold text-green-800 mb-2">👨 👩 👧 👦 Betrek je ouders</h4>
+            <h4 className="font-semibold text-green-800 mb-2">👨‍👩‍👧‍👦 Betrek je ouders</h4>
             <p className="text-sm text-green-700">
               Je ouders kunnen een eigen account maken om je voortgang te volgen. Vraag het ze!
             </p>
           </div>
-
           <div className="p-3 bg-purple-50 rounded-lg">
             <h4 className="font-semibold text-purple-800 mb-2">🔄 Wees consistent</h4>
             <p className="text-sm text-purple-700">
@@ -288,79 +275,45 @@ const introSteps = [
 export default function AppIntroModal({ open, onOpenChange }: AppIntroModalProps) {
   const [currentStep, setCurrentStep] = useState(0);
 
-  const nextStep = () => {
-    if (currentStep < introSteps.length - 1) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 0) {
-      setCurrentStep(currentStep - 1);
-    }
-  };
-
-  const handleClose = () => {
-    setCurrentStep(0);
-    onOpenChange(false);
-  };
+  const nextStep = () => { if (currentStep < introSteps.length - 1) setCurrentStep(currentStep + 1); };
+  const prevStep = () => { if (currentStep > 0) setCurrentStep(currentStep - 1); };
+  const handleClose = () => { setCurrentStep(0); onOpenChange(false); };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto" data-testid="app-intro-modal">
+      <DialogContent
+        className="sm:max-w-md w-[min(680px,calc(100vw-2rem))] max-h-[85vh] overflow-y-auto rounded-2xl"
+        data-testid="app-intro-modal"
+      >
         <DialogHeader>
-          <DialogTitle className="text-center">
-            {introSteps[currentStep].title}
-          </DialogTitle>
+          <DialogTitle className="text-center">{introSteps[currentStep].title}</DialogTitle>
           <DialogDescription className="text-center">
             Stap {currentStep + 1} van {introSteps.length}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-4">
-          {introSteps[currentStep].content}
-        </div>
-
+        <div className="py-4">{introSteps[currentStep].content}</div>
         <Separator />
 
         <div className="flex items-center justify-between pt-4">
-          <Button
-            variant="outline"
-            onClick={prevStep}
-            disabled={currentStep === 0}
-            className="flex items-center gap-2"
-            data-testid="button-prev-step"
-          >
+          <Button variant="outline" onClick={prevStep} disabled={currentStep === 0} className="flex items-center gap-2" data-testid="button-prev-step">
             <ChevronLeft className="w-4 h-4" />
             Vorige
           </Button>
 
           <div className="flex gap-2">
             {introSteps.map((_, index) => (
-              <div
-                key={index}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  index === currentStep ? 'bg-primary' : 'bg-muted'
-                }`}
-              />
+              <div key={index} className={`w-2 h-2 rounded-full transition-colors ${index === currentStep ? "bg-primary" : "bg-muted"}`} />
             ))}
           </div>
 
           {currentStep < introSteps.length - 1 ? (
-            <Button
-              onClick={nextStep}
-              className="flex items-center gap-2"
-              data-testid="button-next-step"
-            >
+            <Button onClick={nextStep} className="flex items-center gap-2" data-testid="button-next-step">
               Volgende
               <ChevronRight className="w-4 h-4" />
             </Button>
           ) : (
-            <Button
-              onClick={handleClose}
-              className="flex items-center gap-2"
-              data-testid="button-close-intro"
-            >
+            <Button onClick={handleClose} className="flex items-center gap-2" data-testid="button-close-intro">
               Start!
               <CheckCircle className="w-4 h-4" />
             </Button>

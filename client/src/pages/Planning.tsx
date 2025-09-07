@@ -373,12 +373,27 @@ export default function Planning() {
                     {day.tasks.map((task) => {
                       const course = getCourseById(task.courseId ?? undefined);
                       return (
-                        <div key={task.id} className="flex items-center space-x-3" data-testid={`task-item-${task.id}`}>
+                        <div key={task.id} className="flex items-center space-x-3 group" data-testid={`task-item-${task.id}`}>
                           <Checkbox
                             checked={task.status === "done"}
                             className="w-4 h-4"
                             data-testid={`checkbox-task-${task.id}`}
-                            disabled
+                            onCheckedChange={async (checked) => {
+                              const newStatus = checked ? "done" : "todo";
+                              try {
+                                const { error } = await supabase
+                                  .from('tasks')
+                                  .update({ status: newStatus })
+                                  .eq('id', task.id);
+                                
+                                if (error) throw error;
+                                
+                                // Refetch data to update UI
+                                window.location.reload();
+                              } catch (error) {
+                                console.error('Error updating task:', error);
+                              }
+                            }}
                           />
                           <span className={`flex-1 text-sm ${task.status === "done" ? "line-through opacity-60" : ""}`}>
                             {task.title}
@@ -387,6 +402,29 @@ export default function Planning() {
                             <span className="text-xs text-muted-foreground">{task.estMinutes}m</span>
                           ) : null}
                           {course && <span className="text-xs text-muted-foreground">• {course.name}</span>}
+                          <button
+                            onClick={async () => {
+                              if (confirm('Weet je zeker dat je deze taak wilt verwijderen?')) {
+                                try {
+                                  const { error } = await supabase
+                                    .from('tasks')
+                                    .delete()
+                                    .eq('id', task.id);
+                                  
+                                  if (error) throw error;
+                                  
+                                  // Refetch data to update UI
+                                  window.location.reload();
+                                } catch (error) {
+                                  console.error('Error deleting task:', error);
+                                }
+                              }
+                            }}
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-700 text-xs px-2 py-1"
+                            title="Taak verwijderen"
+                          >
+                            ×
+                          </button>
                         </div>
                       );
                     })}

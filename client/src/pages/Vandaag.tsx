@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,9 +12,11 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Schedule, Course, Task } from "@shared/schema";
-import CoachChat from "@/features/chat/CoachChat";
-import type { CoachChatHandle } from "@/features/chat/CoachChat";
+import CoachChat, { type CoachChatHandle } from "@/features/chat/CoachChat";
 import VoiceCheckinButton from "@/features/voice/VoiceCheckinButton";
+
+// 👇 Onboarding modal
+import AppIntroModal from "@/features/onboarding/AppIntroModal";
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 
@@ -23,7 +25,7 @@ type CoachMemory = {
   id: string;
   user_id: string;
   course: string;
-  status: string | null;
+  status: string | null;       // "moeilijk" | "ging beter" | "ok" | null
   note: string | null;
   last_update: string | null;  // ISO
 };
@@ -33,6 +35,20 @@ export default function Vandaag() {
   const userId = user?.id ?? "";
   const { toast } = useToast();
   const qc = useQueryClient();
+
+  // === EINDELIJK: Onboarding pop-up, afgestemd op nieuwe pagina-opbouw ===
+  const [introOpen, setIntroOpen] = useState(false);
+  useEffect(() => {
+    if (!userId) return;
+    const key = `noukie_seen_intro:${userId}`;
+    const force = new URLSearchParams(location.search).get("showIntro") === "1"; // handmatige trigger
+    const seen = localStorage.getItem(key) === "1";
+    if (force || !seen) setIntroOpen(true);
+  }, [userId]);
+  const handleIntroChange = (open: boolean) => {
+    if (!open && userId) localStorage.setItem(`noukie_seen_intro:${userId}`, "1");
+    setIntroOpen(open);
+  };
 
   // === Datum helpers ===
   const today = useMemo(() => {
@@ -101,7 +117,10 @@ export default function Vandaag() {
     queryKey: ["coach-memory", userId],
     enabled: !!userId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("coach_memory").select("*").eq("user_id", userId);
+      const { data, error } = await supabase
+        .from("coach_memory")
+        .select("*")
+        .eq("user_id", userId);
       if (error) throw new Error(error.message);
       return data as CoachMemory[];
     },
@@ -113,7 +132,7 @@ export default function Vandaag() {
   const addTaskMutation = useMutation({
     mutationFn: async (input: { title: string; courseId: string | null; estMinutes: number | null }) => {
       const dueDate = new Date(today.date);
-      dueDate.setHours(20, 0, 0, 0);
+      dueDate.setHours(20, 0, 0, 0); // neutraal tijdstip voor dagfilter
       const { error } = await supabase.from("tasks").insert({
         user_id: userId,
         title: input.title,
@@ -147,7 +166,26 @@ export default function Vandaag() {
     onSuccess: () => qc.invalidateQueries({ queryKey: qcKey as any }),
   });
 
-  // === Unified composer voor chat ===
+  // === Quick add taak ===
+  const [title, setTitle] = useState("");
+  const [courseId, setCourseId] = useState<string | null>(null);
+  const [estMinutes, setEstMinutes] = useState<string>("");
+
+  const onAddTask = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!title.trim()) {
+      toast({ title: "Titel is verplicht", variant: "destructive" });
+      return;
+    }
+    addTaskMutation.mutate({
+      title: title.trim(),
+      courseId,
+      estMinutes: estMinutes ? Number(estMinutes) : null,
+    });
+    setTitle(""); setCourseId(null); setEstMinutes("");
+  };
+
+  // === Unified composer (voor CoachChat) ===
   const coachRef = useRef<CoachChatHandle>(null);
   const [msg, setMsg] = useState("");
 
@@ -155,7 +193,7 @@ export default function Vandaag() {
     if (e) e.preventDefault();
     const text = msg.trim();
     if (!text) return;
-    coachRef.current?.sendMessage(text);   // via CoachChat imperative handle
+    coachRef.current?.sendMessage(text);
     setMsg("");
   }
 
@@ -177,47 +215,77 @@ export default function Vandaag() {
     })),
   };
 
+  // === Proactieve openingsvraag ===
+  const difficultSet = new Set(
+    coachMemory
+      .filter((m) => (m.status ?? "").toLowerCase() === "moeilijk")
+      .map((m) => (m.course ?? "").toLowerCase().trim())
+  );
+  const todayCourseNames = todayItems
+    .map((i) => (getCourseById(i.course_id)?.name ?? i.title ?? "").trim())
+    .filter(Boolean);
+  const flaggedToday = todayCourseNames.filter((n) => difficultSet.has(n.toLowerCase()));
+  const initialCoachMsg = flaggedToday.length
+    ? `Ik zie vandaag ${flaggedToday.join(" en ")} op je rooster — dat was eerder “moeilijk”. Hoe ging het vandaag? Zullen we 2–3 korte acties plannen?`
+    : tasksToday.length
+    ? `Zullen we je dag opdelen in 2–3 blokken en de belangrijkste taak eerst doen? Wat voelt nu het lastigst?`
+    : `Wat wil je vandaag oefenen of afronden? Ik kijk mee naar je rooster en stel concrete, haalbare blokken voor.`;
+
   const coachSystemHint = `
-Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
-- Gebruik context (rooster/taken/memory) om door te vragen en op te volgen.
-- Zie je vandaag een les voor een vak dat eerder “moeilijk” was? Vraag: “Hoe ging het vandaag vs. vorige keer?”
-- Stel maximaal 3 concrete acties met tijden (HH:MM) en duur in minuten.
-- Vier kleine successen en wees empathisch. Stel 1 verduidelijkingsvraag als info ontbreekt.
-- Indien blijvende info (moeilijkheden/voorkeuren/doelen) naar voren komt, geef die terug als 'signals' JSON.
+Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
+- Gebruik context (rooster/taken/memory).
+- Zie je vandaag een les voor een vak dat eerder “moeilijk” was? Vraag daar naar.
+- Stel max. 3 concrete acties met tijden (HH:MM) en duur in minuten.
+- Vier kleine successen en stel 1 verduidelijkingsvraag als info ontbreekt.
+- Komen blijvende inzichten naar voren, geef die terug als 'signals' JSON.
 `.trim();
 
   return (
     <div className="p-6 space-y-10" data-testid="page-vandaag">
-      {/* === 1) Chat met Noukie (zonder ingebouwde composer) === */}
+      {/* ✅ Eenmalige onboarding pop-up voor de nieuwe pagina-opbouw */}
+      <AppIntroModal open={introOpen} onOpenChange={handleIntroChange} />
+
+      {/* 1) Chat met Noukie (ℹ️ blijft; interne composer uit) */}
       <section>
         <CoachChat
           ref={coachRef}
           systemHint={coachingSystemHintSafe(coachSystemHint)}
           context={coachContext}
           size="large"
-          hideComposer    // ✅ verberg interne input/hint; we gebruiken de unified composer hieronder
+          hideComposer
+          initialAssistantMessage={initialCoachMsg}
         />
       </section>
 
-      {/* === 2) Unified composer: één groot veld + blauwe opnameknop eronder === */}
+      {/* 2) Composer: groot veld + opnameknop + stuur */}
       <section aria-labelledby="composer-title" className="space-y-3">
         <h2 id="composer-title" className="text-lg font-semibold">Bericht aan Noukie</h2>
         <form onSubmit={handleSend} className="space-y-3">
           <Textarea
-            placeholder="Vertel hier wat je wilt oefenen, waar je moeite mee hebt of wat je wilt plannen."
+            placeholder="Schrijf hier wat je wilt oefenen of plannen. Voorbeeld: ‘Morgen toets bio H3 → vandaag 30m samenvatting + 20m begrippen’. Vertel ook wat lastig voelt; ik plan korte, haalbare stappen."
             value={msg}
             onChange={(e) => setMsg(e.target.value)}
-            rows={4}
-            className="min-h-28 text-base"
+            rows={5}
+            className="min-h-32 text-base"
           />
           <div className="flex flex-col sm:flex-row gap-2">
             <VoiceCheckinButton
               userId={userId}
-              // transcript direct in het veld plakken (geen aparte secties)
-              onComplete={(res) => {
+              onComplete={async (res) => {
                 const t = res?.text?.trim();
                 if (!t) return;
                 setMsg((prev) => (prev ? prev + (prev.endsWith("\n") ? "" : "\n") + t : t));
+                try {
+                  await supabase.from("coach_memory").insert({
+                    user_id: userId,
+                    course: "algemeen",
+                    status: null,
+                    note: t,
+                  });
+                  toast({ title: "Check-in opgeslagen", description: t });
+                } catch (e: any) {
+                  toast({ title: "Opslaan mislukt", description: e?.message ?? "Onbekende fout", variant: "destructive" });
+                }
               }}
               labelIdle="🎙️ Opnemen"
               labelStop="Stop"
@@ -227,7 +295,7 @@ Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
         </form>
       </section>
 
-      {/* === 3) Vandaag: rooster + taken === */}
+      {/* 3) Vandaag: rooster + taken */}
       <section>
         <h2 className="text-lg font-semibold mb-3">Vandaag</h2>
 
@@ -255,7 +323,7 @@ Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
           <Alert className="mb-4"><AlertDescription>Geen roosteritems voor vandaag.</AlertDescription></Alert>
         )}
 
-        {/* Taken — actieknoppen ALTIJD zichtbaar */}
+        {/* Taken — knoppen altijd zichtbaar */}
         {tasksLoading ? (
           <div className="text-center py-3"><Loader2 className="w-5 h-5 animate-spin inline-block" /></div>
         ) : (
@@ -263,56 +331,68 @@ Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.
             {tasksToday.map((task) => {
               const isDone = task.status === "done";
               return (
-                <div
-                  key={task.id}
-                  className={`border rounded px-3 py-2 flex items-center justify-between ${isDone ? "opacity-70" : ""}`}
-                >
+                <div key={task.id} className={`border rounded px-3 py-2 flex items-center justify-between ${isDone ? "opacity-70" : ""}`}>
                   <div className={`text-sm ${isDone ? "line-through" : ""}`}>{task.title}</div>
                   <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      title={isDone ? "Markeer als niet afgerond" : "Markeer als afgerond"}
-                      onClick={() => toggleTaskMutation.mutate(task)}
-                    >
+                    <Button variant="outline" size="icon" title={isDone ? "Markeer als niet afgerond" : "Markeer als afgerond"} onClick={() => toggleTaskMutation.mutate(task)}>
                       <Check className="w-4 h-4" />
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      title="Verwijderen"
-                      onClick={() => deleteTaskMutation.mutate(task)}
-                      className="text-destructive"
-                    >
+                    <Button variant="outline" size="icon" title="Verwijderen" onClick={() => deleteTaskMutation.mutate(task)} className="text-destructive">
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
               );
             })}
-            {tasksToday.length === 0 && (
-              <Alert><AlertDescription>Geen taken voor vandaag.</AlertDescription></Alert>
-            )}
+            {tasksToday.length === 0 && <Alert><AlertDescription>Geen taken voor vandaag.</AlertDescription></Alert>}
           </div>
         )}
       </section>
 
-      {/* === 4) Nieuwe taak — ongewijzigd === */}
+      {/* 4) Nieuwe taak */}
       <section aria-labelledby="add-task-title" className="space-y-3">
         <h2 id="add-task-title" className="text-lg font-semibold">Nieuwe taak</h2>
-        <form onSubmit={(e) => {
-          e.preventDefault();
-          const form = e.currentTarget as HTMLFormElement;
-          // jouw bestaande onAddTask logica staat al hierboven als functie; roep die hier indien je het formulier wilt behouden
-        }} className="space-y-3">
-          {/* je bestaande 'Nieuwe taak' velden en submit-knop laten zoals je had */}
+        <form onSubmit={onAddTask} className="space-y-3">
+          <div>
+            <Label htmlFor="t-title">Titel / omschrijving</Label>
+            <Textarea
+              id="t-title"
+              placeholder="Bijv. Wiskunde §2.3 oefenen, Engelse woordjes H2, samenvatting H4"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              rows={3}
+              className="min-h-24 text-base"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <Label htmlFor="t-course">Vak (optioneel)</Label>
+              <Select value={courseId ?? "none"} onValueChange={(v) => setCourseId(v === "none" ? null : v)}>
+                <SelectTrigger id="t-course"><SelectValue placeholder="Kies vak" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Geen vak</SelectItem>
+                  {courses.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="t-min">Duur (min, opt.)</Label>
+              <Input id="t-min" type="number" min={5} step={5} placeholder="30" value={estMinutes} onChange={(e) => setEstMinutes(e.target.value)} />
+            </div>
+            <div className="sm:col-span-1 flex items-end justify-start sm:justify-end">
+              <Button type="submit" disabled={addTaskMutation.isPending} className="w-full sm:w-auto">
+                {addTaskMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                {addTaskMutation.isPending ? "Toevoegen…" : "Toevoegen"}
+              </Button>
+            </div>
+          </div>
         </form>
       </section>
     </div>
   );
 }
 
-/** optioneel: kleine guard tegen lege strings in systemHint */
+/** kleine guard tegen lege strings in systemHint */
 function coachingSystemHintSafe(s: string | undefined) {
   const t = (s || "").trim();
   return t.length ? t : "Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.";
