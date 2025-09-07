@@ -1,405 +1,332 @@
+// client/src/pages/Vandaag.tsx
 import * as React from "react";
-import { useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Check, Trash2 } from "lucide-react";
+import { Mic, Square, Send, Plus, Loader2, Check, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
-import type { Schedule, Course, Task } from "@shared/schema";
-import CoachChat, { type CoachChatHandle } from "@/features/chat/CoachChat";
-import VoiceCheckinButton from "@/features/voice/VoiceCheckinButton";
+import { apiRequest } from "@/lib/queryClient";
+import type { Task, Course } from "@shared/schema";
 
-const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
-
-// Type voor coach_memory rijen (lichtgewicht)
-type CoachMemory = {
-  id: string;
-  user_id: string;
-  course: string;
-  status: string | null;       // "moeilijk" | "ging beter" | "ok" | null
-  note: string | null;
-  last_update: string | null;  // ISO
-};
+// Kleine helpers
+const fmtDate = (d?: string | null) => (d ? d.slice(0, 10) : "");
+const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function Vandaag() {
-  const { user } = useAuth();
-  const userId = user?.id ?? "";
   const { toast } = useToast();
+  const { user, isLoading: authLoading } = useAuth();
+  const userId = user?.id ?? "";
   const qc = useQueryClient();
 
-  // === Datum helpers ===
-  const today = useMemo(() => {
-    const d = new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    const iso = `${yyyy}-${mm}-${dd}`;
-    const js = d.getDay();
-    const dow = js === 0 ? 7 : js; // 1..7
-    return { date: d, iso, dow };
-  }, []);
+  // -----------------------------
+  // STATE: nieuw taak-formulier
+  // -----------------------------
+  const [createOpen, setCreateOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [courseId, setCourseId] = useState<string>("");
+  const [dueDate, setDueDate] = useState<string>(todayIso());
+  const [notes, setNotes] = useState("");
 
-  // === Courses & Schedule ===
-  const { data: courses = [] } = useQuery<Course[]>({
+  // -----------------------------
+  // STATE: opname / ASR
+  // -----------------------------
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [transcript, setTranscript] = useState("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordChunksRef = useRef<BlobPart[]>([]);
+  const recordTimeoutRef = useRef<number | null>(null);
+
+  // -----------------------------
+  // DATA: courses + taken vandaag
+  // -----------------------------
+  const { data: courses } = useQuery<Course[]>({
     queryKey: ["courses", userId],
     enabled: !!userId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("courses").select("*").eq("user_id", userId).order("name");
-      if (error) throw new Error(error.message);
-      return data as Course[];
+      const res = await apiRequest("GET", `/api/courses/${userId}`);
+      return res.json();
     },
   });
 
-  const { data: schedule = [], isLoading: scheduleLoading } = useQuery<Schedule[]>({
-    queryKey: ["schedule", userId],
+  const { data: tasksToday, isLoading: tasksLoading, refetch: refetchTasks } = useQuery<Task[]>({
+    queryKey: ["tasks", userId, "today"],
     enabled: !!userId,
     queryFn: async () => {
-      const { data, error } = await supabase.from("schedule").select("*").eq("user_id", userId);
-      if (error) throw new Error(error.message);
-      return data as Schedule[];
+      const res = await apiRequest("GET", `/api/tasks/${userId}?date=${todayIso()}`);
+      return res.json();
     },
   });
 
-  const todayItems = useMemo(() => {
-    const arr = (schedule as Schedule[]).filter((it) => {
-      const notCancelled = (it.status || "active") !== "cancelled";
-      const isWeeklyToday = it.is_recurring && it.day_of_week === today.dow;
-      const isSingleToday = !it.is_recurring && it.date === today.iso;
-      return notCancelled && (isWeeklyToday || isSingleToday);
-    });
-    return arr.sort((a, b) => (a.start_time || "").localeCompare(b.start_time || ""));
-  }, [schedule, today]);
-
-  const getCourseById = (courseId: string | null) => courses.find((c) => c.id === courseId);
-
-  // === Taken vandaag ===
-  const { data: tasksToday = [], isLoading: tasksLoading } = useQuery<Task[]>({
-    queryKey: ["tasks-today", userId, today.iso],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("tasks")
-        .select("*")
-        .eq("user_id", userId)
-        .gte("due_at", `${today.iso}T00:00:00.000Z`)
-        .lte("due_at", `${today.iso}T23:59:59.999Z`)
-        .order("due_at", { ascending: true });
-      if (error) throw new Error(error.message);
-      return data as Task[];
-    },
-  });
-
-  // === Coach-memory (voor proactieve opvolging) ===
-  const { data: coachMemory = [] } = useQuery<CoachMemory[]>({
-    queryKey: ["coach-memory", userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("coach_memory")
-        .select("*")
-        .eq("user_id", userId);
-      if (error) throw new Error(error.message);
-      return data as CoachMemory[];
-    },
-  });
-
-  // === Taken mutations ===
-  const qcKey = ["tasks-today", userId, today.iso] as const;
-
-  const addTaskMutation = useMutation({
-    mutationFn: async (input: { title: string; courseId: string | null; estMinutes: number | null }) => {
-      const dueDate = new Date(today.date);
-      dueDate.setHours(20, 0, 0, 0); // neutraal tijdstip voor dagfilter
-      const { error } = await supabase.from("tasks").insert({
-        user_id: userId,
-        title: input.title,
-        status: "todo",
-        due_at: dueDate.toISOString(),
-        course_id: input.courseId,
-        est_minutes: input.estMinutes,
-      });
-      if (error) throw new Error(error.message);
+  // -----------------------------
+  // MUTATIES
+  // -----------------------------
+  const createTask = useMutation({
+    mutationFn: async (body: Partial<Task>) => {
+      const res = await apiRequest("POST", "/api/tasks", body);
+      if (!res.ok) throw new Error(`Task create failed: ${res.status}`);
+      return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qcKey as any });
-      toast({ title: "Taak toegevoegd" });
+      toast({ title: "Taak aangemaakt", description: "Je taak staat bij vandaag." });
+      setCreateOpen(false);
+      setTitle("");
+      setNotes("");
+      qc.invalidateQueries({ queryKey: ["tasks", userId, "today"] });
+    },
+    onError: (e: any) => {
+      toast({ title: "Mislukt", variant: "destructive", description: e?.message ?? "Onbekende fout" });
     },
   });
 
-  const toggleTaskMutation = useMutation({
+  const toggleDone = useMutation({
     mutationFn: async (task: Task) => {
-      const next = task.status === "done" ? "todo" : "done";
-      const { error } = await supabase.from("tasks").update({ status: next }).eq("id", (task as any).id);
-      if (error) throw new Error(error.message);
+      const res = await apiRequest("PATCH", `/api/tasks/${task.id}`, { isDone: !task.isDone });
+      if (!res.ok) throw new Error(`Task update failed: ${res.status}`);
+      return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: qcKey as any }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", userId, "today"] }),
   });
 
-  const deleteTaskMutation = useMutation({
-    mutationFn: async (task: Task) => {
-      const { error } = await supabase.from("tasks").delete().eq("id", (task as any).id);
-      if (error) throw new Error(error.message);
+  const delTask = useMutation({
+    mutationFn: async (taskId: string) => {
+      const res = await apiRequest("DELETE", `/api/tasks/${taskId}`);
+      if (!res.ok) throw new Error(`Task delete failed: ${res.status}`);
+      return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: qcKey as any }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks", userId, "today"] }),
   });
 
-  // === Quick add taak ===
-  const [title, setTitle] = useState("");
-  const [courseId, setCourseId] = useState<string | null>(null);
-  const [estMinutes, setEstMinutes] = useState<string>("");
-
-  const onAddTask = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      toast({ title: "Titel is verplicht", variant: "destructive" });
+  // -----------------------------
+  // HANDLERS: taak aanmaken
+  // -----------------------------
+  const handleCreateTask = async () => {
+    if (!userId) {
+      toast({ title: "Niet ingelogd", variant: "destructive", description: "Log eerst in om taken te kunnen maken." });
       return;
     }
-    addTaskMutation.mutate({
+    if (!title.trim()) {
+      toast({ title: "Titel ontbreekt", variant: "destructive", description: "Geef je taak een korte titel." });
+      return;
+    }
+    createTask.mutate({
+      userId,
       title: title.trim(),
-      courseId,
-      estMinutes: estMinutes ? Number(estMinutes) : null,
-    });
-    setTitle(""); setCourseId(null); setEstMinutes("");
+      dueDate,
+      courseId: courseId || null,
+      notes: notes || null,
+      isDone: false,
+    } as Partial<Task>);
   };
 
-  // === Unified composer (voor CoachChat) ===
-  const coachRef = useRef<CoachChatHandle>(null);
-  const [msg, setMsg] = useState("");
+  // -----------------------------
+  // HANDLERS: opname
+  // -----------------------------
+  const startRecording = async () => {
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        toast({ title: "Opnemen niet ondersteund", variant: "destructive", description: "Deze browser ondersteunt geen microfoon-opname." });
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      recordChunksRef.current = [];
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) recordChunksRef.current.push(e.data);
+      };
+      mr.onstop = () => {
+        const blob = new Blob(recordChunksRef.current, { type: "audio/webm" });
+        setAudioBlob(blob);
+      };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
 
-  function handleSend(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    const text = msg.trim();
-    if (!text) return;
-    coachRef.current?.sendMessage(text);
-    setMsg("");
+      // max 60s
+      recordTimeoutRef.current = window.setTimeout(() => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+          mediaRecorderRef.current.stop();
+          setIsRecording(false);
+          toast({ title: "Opname gestopt", description: "Maximale duur (60s) bereikt." });
+        }
+      }, 60_000);
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Kan microfoon niet starten", variant: "destructive", description: e?.message ?? "Onbekende fout" });
+    }
+  };
+
+  const stopRecording = () => {
+    try {
+      if (recordTimeoutRef.current) {
+        clearTimeout(recordTimeoutRef.current);
+        recordTimeoutRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const sendRecording = async () => {
+    try {
+      if (!audioBlob) {
+        toast({ title: "Geen opname", variant: "destructive", description: "Neem eerst iets op." });
+        return;
+      }
+      const fd = new FormData();
+      fd.append("audio", audioBlob, "opname.webm");
+
+      const res = await fetch("/api/asr", { method: "POST", body: fd });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`ASR ${res.status}: ${txt || "geen details"}`);
+      }
+      const data = await res.json();
+      const t = data?.text || data?.transcript || "";
+      setTranscript(t);
+
+      toast({ title: "Transcriptie gelukt", description: t || "Geen tekst gedetecteerd." });
+    } catch (e: any) {
+      console.error(e);
+      toast({ title: "Versturen mislukt", variant: "destructive", description: e?.message ?? "Onbekende fout" });
+    }
+  };
+
+  // -----------------------------
+  // RENDER
+  // -----------------------------
+  if (authLoading) {
+    return (
+      <div className="p-4 flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Bezig met inloggen…
+      </div>
+    );
   }
 
-  // === Context voor Noukie (CoachChat) ===
-  const coachContext = {
-    todayDate: today.iso,
-    todaySchedule: todayItems.map((i) => ({
-      kind: i.kind,
-      course: getCourseById(i.course_id)?.name ?? i.title ?? "Activiteit",
-      start: i.start_time,
-      end: i.end_time,
-    })),
-    openTasks: tasksToday.map((t) => ({ id: t.id, title: t.title, status: t.status, courseId: t.course_id })),
-    difficulties: coachMemory.map((m) => ({
-      course: m.course,
-      status: m.status,
-      note: m.note,
-      lastUpdate: m.last_update,
-    })),
-  };
-
-  // === Proactieve openingsvraag ===
-  const difficultSet = new Set(
-    coachMemory
-      .filter((m) => (m.status ?? "").toLowerCase() === "moeilijk")
-      .map((m) => (m.course ?? "").toLowerCase().trim())
-  );
-  const todayCourseNames = todayItems
-    .map((i) => (getCourseById(i.course_id)?.name ?? i.title ?? "").trim())
-    .filter(Boolean);
-  const flaggedToday = todayCourseNames.filter((n) => difficultSet.has(n.toLowerCase()));
-  const initialCoachMsg = flaggedToday.length
-    ? `Ik zie vandaag ${flaggedToday.join(" en ")} op je rooster — dat was eerder “moeilijk”. Hoe ging het vandaag? Zullen we 2–3 korte acties plannen?`
-    : tasksToday.length
-    ? `Zullen we je dag opdelen in 2–3 blokken en de belangrijkste taak eerst doen? Wat voelt nu het lastigst?`
-    : `Wat wil je vandaag oefenen of afronden? Ik kijk mee naar je rooster en stel concrete, haalbare blokken voor.`;
-
-  const coachSystemHint = `
-Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
-- Gebruik context (rooster/taken/memory).
-- Zie je vandaag een les voor een vak dat eerder “moeilijk” was? Vraag daar naar.
-- Stel max. 3 concrete acties met tijden (HH:MM) en duur in minuten.
-- Vier kleine successen en stel 1 verduidelijkingsvraag als info ontbreekt.
-- Komen blijvende inzichten naar voren, geef die terug als 'signals' JSON.
-`.trim();
-
   return (
-    <div className="p-6 space-y-10" data-testid="page-vandaag">
-      {/* 1) Chat met Noukie (ℹ️ blijft; interne composer uit) */}
-      <section>
-        <CoachChat
-          ref={coachRef}
-          systemHint={coachingSystemHintSafe(coachSystemHint)}
-          context={coachContext}
-          size="large"
-          hideComposer
-          initialAssistantMessage={initialCoachMsg}
-        />
-      </section>
+    <div className="p-4 space-y-6">
+      {/* Header */}
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Vandaag</h1>
+          <p className="text-sm text-muted-foreground">Taken en snelle spraaknotities</p>
+        </div>
+        <Button type="button" onClick={() => setCreateOpen((v) => !v)} variant="secondary">
+          <Plus className="h-4 w-4 mr-2" /> Nieuwe taak
+        </Button>
+      </div>
 
-      {/* 2) Composer: groot veld + opnameknop + stuur */}
-      <section aria-labelledby="composer-title" className="space-y-3">
-        <h2 id="composer-title" className="text-lg font-semibold">Bericht aan Noukie</h2>
-        <form onSubmit={handleSend} className="space-y-3">
-          <Textarea
-            placeholder="Schrijf hier wat je wilt oefenen of plannen. Voorbeeld: ‘Morgen toets bio H3 → vandaag 30m samenvatting + 20m begrippen’. Vertel ook wat lastig voelt; ik plan korte, haalbare stappen."
-            value={msg}
-            onChange={(e) => setMsg(e.target.value)}
-            rows={5}
-            className="min-h-32 text-base"
-          />
-          <div className="flex flex-col sm:flex-row gap-2">
-            <VoiceCheckinButton
-              userId={userId}
-              onComplete={async (res) => {
-                const t = res?.text?.trim();
-                if (!t) return;
-                setMsg((prev) => (prev ? prev + (prev.endsWith("\n") ? "" : "\n") + t : t));
-                try {
-                  await supabase.from("coach_memory").insert({
-                    user_id: userId,
-                    course: "algemeen",
-                    status: null,
-                    note: t,
-                  });
-                  toast({ title: "Check-in opgeslagen", description: t });
-                } catch (e: any) {
-                  toast({ title: "Opslaan mislukt", description: e?.message ?? "Onbekende fout", variant: "destructive" });
-                }
-              }}
-              labelIdle="🎙️ Opnemen"
-              labelStop="Stop"
-            />
-            <Button type="submit">Stuur</Button>
-          </div>
-        </form>
-      </section>
-
-      {/* 3) Vandaag: rooster + taken */}
-      <section>
-        <h2 className="text-lg font-semibold mb-3">Vandaag</h2>
-
-        {/* Roosteritems */}
-        {scheduleLoading ? (
-          <div className="text-center py-3"><Loader2 className="w-5 h-5 animate-spin inline-block" /></div>
-        ) : todayItems.length ? (
-          <div className="space-y-2 mb-4">
-            {todayItems.map((item) => {
-              const course = getCourseById(item.course_id);
-              return (
-                <div key={item.id} className="border rounded p-3 flex items-center justify-between">
-                  <div>
-                    <div className="font-medium">{item.title || course?.name || "Activiteit"}</div>
-                    <div className="text-sm text-muted-foreground">
-                      {fmtTime(item.start_time)}{item.end_time ? ` – ${fmtTime(item.end_time)}` : ""}
-                    </div>
-                  </div>
-                  <span className="text-xs bg-muted px-2 py-0.5 rounded capitalize">{item.kind || "les"}</span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <Alert className="mb-4"><AlertDescription>Geen roosteritems voor vandaag.</AlertDescription></Alert>
-        )}
-
-        {/* Taken — knoppen altijd zichtbaar */}
-        {tasksLoading ? (
-          <div className="text-center py-3"><Loader2 className="w-5 h-5 animate-spin inline-block" /></div>
-        ) : (
-          <div className="space-y-2">
-            {tasksToday.map((task) => {
-              const isDone = task.status === "done";
-              return (
-                <div key={task.id} className={`border rounded px-3 py-2 flex items-center justify-between ${isDone ? "opacity-70" : ""}`}>
-                  <div className={`text-sm ${isDone ? "line-through" : ""}`}>{task.title}</div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      title={isDone ? "Markeer als niet afgerond" : "Markeer als afgerond"}
-                      onClick={() => toggleTaskMutation.mutate(task)}
-                    >
-                      <Check className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      title="Verwijderen"
-                      onClick={() => deleteTaskMutation.mutate(task)}
-                      className="text-destructive"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-            {tasksToday.length === 0 && <Alert><AlertDescription>Geen taken voor vandaag.</AlertDescription></Alert>}
-          </div>
-        )}
-      </section>
-
-      {/* 4) Nieuwe taak */}
-      <section aria-labelledby="add-task-title" className="space-y-3">
-        <h2 id="add-task-title" className="text-lg font-semibold">Nieuwe taak</h2>
-        <form onSubmit={onAddTask} className="space-y-3">
-          <div>
-            <Label htmlFor="t-title">Titel / omschrijving</Label>
-            <Textarea
-              id="t-title"
-              placeholder="Bijv. Wiskunde §2.3 oefenen, Engelse woordjes H2, samenvatting H4"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              rows={3}
-              className="min-h-24 text-base"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Taak maken */}
+      {createOpen && (
+        <div className="rounded-2xl border p-4 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="t-course">Vak (optioneel)</Label>
-              <Select value={courseId ?? "none"} onValueChange={(v) => setCourseId(v === "none" ? null : v)}>
-                <SelectTrigger id="t-course">
-                  <SelectValue placeholder="Kies vak" />
-                </SelectTrigger>
+              <Label>Titel</Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Bijv. Wiskunde paragraaf 4.2" />
+            </div>
+            <div>
+              <Label>Vak (optioneel)</Label>
+              <Select value={courseId} onValueChange={setCourseId}>
+                <SelectTrigger><SelectValue placeholder="Kies vak" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Geen vak</SelectItem>
-                  {courses.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  {(courses ?? []).map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                   ))}
+                  <SelectItem value="">—</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-
             <div>
-              <Label htmlFor="t-min">Duur (min, opt.)</Label>
-              <Input
-                id="t-min"
-                type="number"
-                min={5}
-                step={5}
-                placeholder="30"
-                value={estMinutes}
-                onChange={(e) => setEstMinutes(e.target.value)}
-              />
+              <Label>Datum</Label>
+              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
-
-            <div className="sm:col-span-1 flex items-end justify-start sm:justify-end">
-              <Button type="submit" disabled={addTaskMutation.isPending} className="w-full sm:w-auto">
-                {addTaskMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {addTaskMutation.isPending ? "Toevoegen…" : "Toevoegen"}
-              </Button>
+            <div className="md:col-span-2">
+              <Label>Notities</Label>
+              <Textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Extra info…" />
             </div>
           </div>
-        </form>
-      </section>
+          <div className="flex gap-2">
+            <Button type="button" onClick={handleCreateTask} disabled={createTask.isPending}>
+              {createTask.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Opslaan
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>Annuleren</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Taken vandaag */}
+      <div className="space-y-2">
+        <h2 className="text-base font-medium">Vandaag ({todayIso()})</h2>
+        {tasksLoading ? (
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Laden…
+          </div>
+        ) : (tasksToday?.length ?? 0) === 0 ? (
+          <Alert><AlertDescription>Geen taken voor vandaag. Maak er eentje met “Nieuwe taak”.</AlertDescription></Alert>
+        ) : (
+          <ul className="divide-y rounded-2xl border">
+            {tasksToday!.map((t) => (
+              <li key={t.id} className="p-3 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => toggleDone.mutate(t)}
+                  className={`h-6 w-6 rounded border flex items-center justify-center ${t.isDone ? "bg-green-500/10 border-green-500" : "bg-transparent"}`}
+                  title={t.isDone ? "Markeer als niet gedaan" : "Markeer als gedaan"}
+                >
+                  {t.isDone ? <Check className="h-4 w-4" /> : null}
+                </button>
+                <div className="flex-1">
+                  <div className="font-medium">{t.title}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {t.courseName ? `${t.courseName} · ` : ""}{fmtDate(t.dueDate)}
+                    {t.notes ? ` · ${t.notes}` : ""}
+                  </div>
+                </div>
+                <Button type="button" size="icon" variant="ghost" onClick={() => delTask.mutate(String(t.id))} title="Verwijderen">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Opnemen */}
+      <div className="space-y-2">
+        <h2 className="text-base font-medium">Snel opnemen</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={startRecording} disabled={isRecording} variant="default">
+            <Mic className="h-4 w-4 mr-2" /> Opnemen
+          </Button>
+          <Button type="button" onClick={stopRecording} disabled={!isRecording} variant="secondary">
+            <Square className="h-4 w-4 mr-2" /> Stop
+          </Button>
+          <Button type="button" onClick={sendRecording} disabled={!audioBlob} variant="outline">
+            <Send className="h-4 w-4 mr-2" /> Stuur
+          </Button>
+          <div className="text-sm text-muted-foreground">
+            {isRecording ? "Bezig met opnemen… (max 60s)" : audioBlob ? "Klaar om te versturen" : "Nog geen opname"}
+          </div>
+        </div>
+        {transcript ? (
+          <div className="rounded-xl border p-3 text-sm">
+            <div className="mb-1 font-medium">Transcriptie</div>
+            <p className="whitespace-pre-wrap">{transcript}</p>
+          </div>
+        ) : null}
+      </div>
     </div>
   );
-}
-
-/** kleine guard tegen lege strings in systemHint */
-function coachingSystemHintSafe(s: string | undefined) {
-  const t = (s || "").trim();
-  return t.length ? t : "Je bent een vriendelijke studiecoach. Wees proactief, positief en kort.";
 }
