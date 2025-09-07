@@ -14,7 +14,7 @@ import { supabase } from "@/lib/supabase";
 import type { Schedule, Course, Task } from "@shared/schema";
 import CoachChat, { type CoachChatHandle } from "@/features/chat/CoachChat";
 import VoiceCheckinButton from "@/features/voice/VoiceCheckinButton";
-import AppintroModal from "@/components/AppintroModal";
+import AppIntroModal from "@/components/AppIntroModal";
 
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
@@ -242,7 +242,7 @@ Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
   return (
     <div className="p-6 space-y-10" data-testid="page-vandaag">
       {/* ✅ Eenmalige onboarding pop-up voor de nieuwe pagina-opbouw */}
-      <AppintroModal open={introOpen} onOpenChange={handleIntroChange} />
+      <AppIntroModal open={introOpen} onOpenChange={handleIntroChange} />
 
       {/* 1) Chat met Noukie (ℹ️ blijft; interne composer uit) */}
       <section>
