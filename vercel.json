@@ -1,13 +1,17 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "client/dist",
   "functions": {
     "dist/index.js": {
       "runtime": "@vercel/node"
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/dist/index.js" },
-    { "source": "/(.*)", "destination": "/client/dist/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/dist/index.js"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
