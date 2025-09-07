@@ -1,14 +1,12 @@
 {
+  "buildCommand": "npm run build",
+  "outputDirectory": "client/dist",
   "functions": {
     "dist/index.js": {
       "runtime": "@vercel/node"
     }
   },
   "rewrites": [
-    {
-      "source": "/manifest.webmanifest",
-      "destination": "/client/dist/manifest.webmanifest"
-    },
     {
       "source": "/api/(.*)",
       "destination": "/dist/index.js"
