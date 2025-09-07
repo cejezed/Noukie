@@ -14,7 +14,7 @@ import voiceTestRouter from "./routes/voiceTest";
 import { handleCreateCourse, handleGetCourses, handleDeleteCourse } from "./handlers/courses.ts";
 import { handleGetTasksForToday, handleGetTasksForWeek, handleUpdateTaskStatus, handleDeleteTask, handleCreateTask } from "./handlers/tasks.ts";
 import { handleGetSchedule, handleCreateScheduleItem, handleDeleteScheduleItem, handleCancelScheduleItem } from "./handlers/schedule.ts";
-import { handleChatRequest, explain } from "./handlers/chat.ts"; // explain toegevoegd
+import { handleChatRequest, explain } from "./handlers/chat.ts";
 
 // ----------------------------------------------------------------------------
 // App bootstrap
@@ -58,7 +58,7 @@ app.patch("/api/schedule/:itemId/cancel", handleCancelScheduleItem);
 
 // AI & Voice
 app.post("/api/chat", handleChatRequest);
-app.post("/api/explain", explain); // duidelijke 400 bij ontbrekende {text}
+app.post("/api/explain", explain);
 app.use("/api/voice-test", voiceTestRouter);
 
 // ----------------------------------------------------------------------------
@@ -78,13 +78,13 @@ app.post("/api/ingest", upload.single("audio"), async (req: Request, res: Respon
     console.log("Audio file received:", {
       originalname: req.file.originalname,
       mimetype: req.file.mimetype,
-      size: req.file.size,
+      size: req.file.size
     });
 
-    // TODO: Echte audioverwerking toevoegen
+    // TODO: voeg echte audioverwerking toe
     const response = {
       text: "Audio ontvangen en verwerkt",
-      agentReply: "Bedankt voor je voice check-in! Ik heb je opname ontvangen en verwerkt.",
+      agentReply: "Bedankt voor je voice check-in! Ik heb je opname ontvangen en verwerkt."
     };
 
     res.json(response);
@@ -95,42 +95,16 @@ app.post("/api/ingest", upload.single("audio"), async (req: Request, res: Respon
 });
 
 // ----------------------------------------------------------------------------
-// Static file serving en SPA fallback
+// Static file serving and SPA fallback
 // ----------------------------------------------------------------------------
 
-// 🔹 Op Vercel: GEEN listen(), wél statics + SPA fallback meteen registreren
-if (process.env.VERCEL) {
-  // Client assets komen uit client/dist (Vite output)
-  app.use(express.static("client/dist"));
+(async () => {
+  const server = await registerRoutes(app);
 
-  // SPA fallback NA alle API routes
-  app.get("*", (req: Request, res: Response) => {
-    if (req.path.startsWith("/api/")) {
-      return res.status(404).json({ error: "API route not found" });
-    }
-    const indexPath = path.join(process.cwd(), "client", "dist", "index.html");
-    if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
-    } else {
-      res.status(404).json({
-        error: "Application not built",
-        message: "Run npm run build first",
-      });
-    }
-  });
-} else {
-  // 🔹 Lokaal / niet-Vercel: behoud je bestaande dev/prod gedrag en listen()
-  (async () => {
-    const server = await registerRoutes(app);
+  if (process.env.VERCEL) {
+    // Vercel serverless: géén listen(); wel statics + SPA fallback
+    app.use(express.static("client/dist"));
 
-    if (app.get("env") === "development") {
-      await setupVite(app, server);
-    } else {
-      // Serve client statics in productie
-      app.use(express.static("client/dist"));
-    }
-
-    // SPA fallback
     app.get("*", (req: Request, res: Response) => {
       if (req.path.startsWith("/api/")) {
         return res.status(404).json({ error: "API route not found" });
@@ -141,17 +115,44 @@ if (process.env.VERCEL) {
       } else {
         res.status(404).json({
           error: "Application not built",
-          message: "Run npm run build first",
+          message: "Run npm run build first"
         });
       }
     });
 
-    const port = parseInt(process.env.PORT || "5000", 10);
-    server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
-      log(`serving on port ${port}`);
-    });
-  })().catch((e) => {
-    console.error("Fatal bootstrap error:", e);
-    process.exit(1);
+    // Belangrijk: geen server.listen() aanroepen op Vercel
+    return;
+  }
+
+  // Niet-Vercel (lokaal/andere hosting)
+  if (app.get("env") === "development") {
+    await setupVite(app, server);
+  } else {
+    app.use(express.static("client/dist"));
+  }
+
+  // SPA fallback
+  app.get("*", (req: Request, res: Response) => {
+    if (req.path.startsWith("/api/")) {
+      return res.status(404).json({ error: "API route not found" });
+    }
+
+    const indexPath = path.join(process.cwd(), "client", "dist", "index.html");
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      res.status(404).json({
+        error: "Application not built",
+        message: "Run npm run build first"
+      });
+    }
   });
-}
+
+  const port = parseInt(process.env.PORT || "5000", 10);
+  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+    log(`serving on port ${port}`);
+  });
+})().catch((e) => {
+  console.error("Fatal bootstrap error:", e);
+  process.exit(1);
+});
