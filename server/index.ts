@@ -20,9 +20,9 @@ async function createAppServer() {
     const vite = await createViteServer({
       configFile: path.resolve(process.cwd(), "vite.config.ts"),
       root: path.resolve(process.cwd(), "client"),
-      server: { 
+      server: {
         middlewareMode: true,
-        hmr: { 
+        hmr: {
           server,
           overlay: false,
         },
@@ -32,7 +32,7 @@ async function createAppServer() {
     });
 
     app.use(vite.middlewares);
-    
+
     // SPA fallback voor development - ALTIJD als laatste
     app.get('*', async (req, res, next) => {
       try {
@@ -60,10 +60,10 @@ async function createAppServer() {
   } else {
     // PROD: serve static files
     const dist = path.resolve(process.cwd(), "dist");
-    
+
     // Serve static assets
     app.use(express.static(dist));
-    
+
     // SPA fallback voor production - ALTIJD als laatste
     app.get("*", (_req, res) => {
       res.sendFile(path.join(dist, "index.html"));
