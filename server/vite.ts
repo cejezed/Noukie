@@ -22,8 +22,16 @@ export function log(message: string, source = "express") {
 export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
-    hmr: { server },
+    hmr: { 
+      server,
+      // Voor Codespaces - gebruik de juiste host en poort
+      port: process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 24678,
+      host: 'localhost'
+    },
     allowedHosts: true as const,
+    // Voeg deze toe voor Codespaces
+    host: true,
+    cors: true,
   };
 
   const vite = await createViteServer({

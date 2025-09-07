@@ -3,12 +3,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-  plugins: [
-    react(),
-    ...(process.env.NODE_ENV !== "production" && process.env.REPL_ID
-      ? [ (await import("@replit/vite-plugin-cartographer")).cartographer() ]
-      : []),
-  ],
+  plugins: [react()],
   root: "client",
   resolve: {
     alias: {
@@ -18,18 +13,16 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../dist",    // Veranderd van "dist" naar "../dist"
+    outDir: "../dist",
     assetsDir: "assets",
-    emptyOutDir: false,   // Veranderd van true naar false
+    // belangrijk: zo ruimt Vite niet per ongeluk andere mappen op
+    emptyOutDir: false,
   },
   base: "/",
   server: {
     fs: { strict: true, deny: ["**/.*"] },
-    hmr: {
-      overlay: false
-    },
-    historyApiFallback: true,
-    host: '0.0.0.0',
-    port: 5173
+    hmr: { overlay: false },
+    host: "0.0.0.0",
+    port: 5173,
   },
 });

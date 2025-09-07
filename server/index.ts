@@ -1,158 +1,48 @@
+// server/index.ts
 import "dotenv/config";
-import express, { type Request, type Response } from "express";
-import cors from "cors";
-import fs from "node:fs";
+import express from "express";
 import path from "node:path";
-import multer from "multer";
+import { createServer } from "node:http";
 
-import { registerRoutes } from "./routes.ts";
-import { setupVite, serveStatic, log } from "./vite";
-import { startDailyReminderCron } from "./services/cron";
-import voiceTestRouter from "./routes/voiceTest";
+async function createAppServer() {
+  const app = express();
+  const server = createServer(app);
 
-// Importeren van ALLE benodigde API handlers
-import { handleCreateCourse, handleGetCourses, handleDeleteCourse } from "./handlers/courses.ts";
-import { handleGetTasksForToday, handleGetTasksForWeek, handleUpdateTaskStatus, handleDeleteTask, handleCreateTask } from "./handlers/tasks.ts";
-import { handleGetSchedule, handleCreateScheduleItem, handleDeleteScheduleItem, handleCancelScheduleItem } from "./handlers/schedule.ts";
-import { handleChatRequest, explain } from "./handlers/chat.ts";
-
-// ----------------------------------------------------------------------------
-// App bootstrap
-// ----------------------------------------------------------------------------
-const app = express();
-export default app; // ⬅️ Belangrijk voor Vercel serverless
-
-// Basis security/infra
-app.disable("x-powered-by");
-app.set("trust proxy", true);
-
-// Parsers ALTIJD vóór routes
-app.use(cors());
-app.use(express.json({ limit: "5mb" }));
-app.use(express.urlencoded({ extended: true }));
-
-// Health/ok
-app.get("/api/ok", (_req, res) => res.type("text").send("OK"));
-app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, env: app.get("env"), time: new Date().toISOString() });
-});
-
-// --- API Routes ---
-// Courses
-app.post("/api/courses", handleCreateCourse);
-app.get("/api/courses/:userId", handleGetCourses);
-app.delete("/api/courses/:courseId", handleDeleteCourse);
-
-// Tasks
-app.post("/api/tasks", handleCreateTask);
-app.get("/api/tasks/:userId/today", handleGetTasksForToday);
-app.get("/api/tasks/:userId/week/:week_start/:week_end", handleGetTasksForWeek);
-app.patch("/api/tasks/:taskId/status", handleUpdateTaskStatus);
-app.delete("/api/tasks/:taskId", handleDeleteTask);
-
-// Schedule
-app.post("/api/schedule", handleCreateScheduleItem);
-app.get("/api/schedule/:userId", handleGetSchedule);
-app.delete("/api/schedule/:itemId", handleDeleteScheduleItem);
-app.patch("/api/schedule/:itemId/cancel", handleCancelScheduleItem);
-
-// AI & Voice
-app.post("/api/chat", handleChatRequest);
-app.post("/api/explain", explain);
-app.use("/api/voice-test", voiceTestRouter);
-
-// ----------------------------------------------------------------------------
-// Voice ingest setup
-// ----------------------------------------------------------------------------
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
-
-// Voice ingest endpoint
-app.post("/api/ingest", upload.single("audio"), async (req: Request, res: Response) => {
-  try {
-    console.log("Voice ingest request received");
-
-    if (!req.file) {
-      return res.status(400).json({ error: "No audio file provided" });
-    }
-
-    console.log("Audio file received:", {
-      originalname: req.file.originalname,
-      mimetype: req.file.mimetype,
-      size: req.file.size
+  if (process.env.NODE_ENV !== "production") {
+    // DEV: Vite middleware (laad expliciet de Vite config uit de projectroot)
+    const { createServer: createViteServer } = await import("vite");
+    const vite = await createViteServer({
+      configFile: path.resolve(process.cwd(), "vite.config.ts"),
+      root: path.resolve(process.cwd(), "client"),
+      server: { 
+        middlewareMode: true,
+        hmr: { 
+          server, // Gebruik de bestaande HTTP server voor WebSocket
+          overlay: false,
+        },
+        // Override de config settings voor middleware mode
+        host: undefined,
+        port: undefined,
+      },
     });
 
-    // TODO: voeg echte audioverwerking toe
-    const response = {
-      text: "Audio ontvangen en verwerkt",
-      agentReply: "Bedankt voor je voice check-in! Ik heb je opname ontvangen en verwerkt."
-    };
-
-    res.json(response);
-  } catch (error: any) {
-    console.error("Voice ingest error:", error);
-    res.status(500).json({ error: "Audio processing failed", details: error.message });
-  }
-});
-
-// ----------------------------------------------------------------------------
-// Static file serving and SPA fallback
-// ----------------------------------------------------------------------------
-
-(async () => {
-  const server = await registerRoutes(app);
-
-  if (process.env.VERCEL) {
-    // Vercel serverless: géén listen(); wel statics + SPA fallback
-    app.use(express.static("client/dist"));
-
-    app.get("*", (req: Request, res: Response) => {
-      if (req.path.startsWith("/api/")) {
-        return res.status(404).json({ error: "API route not found" });
-      }
-      const indexPath = path.join(process.cwd(), "client", "dist", "index.html");
-      if (fs.existsSync(indexPath)) {
-        res.sendFile(indexPath);
-      } else {
-        res.status(404).json({
-          error: "Application not built",
-          message: "Run npm run build first"
-        });
-      }
-    });
-
-    // Belangrijk: geen server.listen() aanroepen op Vercel
-    return;
-  }
-
-  // Niet-Vercel (lokaal/andere hosting)
-  if (app.get("env") === "development") {
-    await setupVite(app, server);
+    app.use(vite.middlewares);
   } else {
-    app.use(express.static("client/dist"));
+    // PROD: serve build uit dist
+    const dist = path.resolve(process.cwd(), "dist");
+    app.use(express.static(dist));
+    app.get("*", (_req, res) => {
+      res.sendFile(path.join(dist, "index.html"));
+    });
   }
 
-  // SPA fallback
-  app.get("*", (req: Request, res: Response) => {
-    if (req.path.startsWith("/api/")) {
-      return res.status(404).json({ error: "API route not found" });
-    }
-
-    const indexPath = path.join(process.cwd(), "client", "dist", "index.html");
-    if (fs.existsSync(indexPath)) {
-      res.sendFile(indexPath);
-    } else {
-      res.status(404).json({
-        error: "Application not built",
-        message: "Run npm run build first"
-      });
-    }
+  const port = Number(process.env.PORT) || 8787;
+  server.listen(port, () => {
+    console.log(`[express] serving on port ${port}`);
   });
+}
 
-  const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
-    log(`serving on port ${port}`);
-  });
-})().catch((e) => {
-  console.error("Fatal bootstrap error:", e);
+createAppServer().catch((err) => {
+  console.error(err);
   process.exit(1);
 });
