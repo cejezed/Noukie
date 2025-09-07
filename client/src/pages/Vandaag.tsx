@@ -14,7 +14,7 @@ import { supabase } from "@/lib/supabase";
 import type { Schedule, Course, Task } from "@shared/schema";
 import CoachChat, { type CoachChatHandle } from "@/features/chat/CoachChat";
 import VoiceCheckinButton from "@/features/voice/VoiceCheckinButton";
-import AppIntroModal from "@/components/AppIntroModal";
+import AppIntroModal from "@/features/onboarding/AppIntroModal";
 
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
