@@ -255,7 +255,7 @@ const introSteps = [
             </p>
           </div>
           <div className="p-3 bg-green-50 rounded-lg">
-            <h4 className="font-semibold text-green-800 mb-2">👨‍👩‍👧‍👦 Betrek je ouders</h4>
+            <h4 className="font-semibold text-green-800 mb-2">👨 👩 👧 👦 Betrek je ouders</h4>
             <p className="text-sm text-green-700">
               Je ouders kunnen een eigen account maken om je voortgang te volgen. Vraag het ze!
             </p>

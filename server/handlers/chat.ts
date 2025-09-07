@@ -9,7 +9,7 @@ export async function handleChatRequest(req: Request, res: Response) {
     // ... bestaande auth code ...
 
     const { opgave, poging, course, imageUrl, history } = req.body;
-    
+
     console.log('Received chat request:', { opgave, course, historyLength: history?.length });
     console.log('History:', JSON.stringify(history, null, 2));
 
@@ -17,7 +17,7 @@ export async function handleChatRequest(req: Request, res: Response) {
 
     // Build conversation history
     let contents = [];
-    
+
     if (history && Array.isArray(history) && history.length > 0) {
       // Convert frontend history to Gemini format
       contents = history.map((item: any) => ({
@@ -58,10 +58,10 @@ export async function handleChatRequest(req: Request, res: Response) {
     console.log('Gemini response received:', aiResponseText.substring(0, 100) + '...');
 
     // Generate audio
-    const mp3 = await openai.audio.speech.create({ 
-      model: "tts-1", 
-      voice: "nova", 
-      input: aiResponseText 
+    const mp3 = await openai.audio.speech.create({
+      model: "tts-1",
+      voice: "nova",
+      input: aiResponseText
     });
     const buffer = Buffer.from(await mp3.arrayBuffer());
     const aiAudioUrl = `data:audio/mpeg;base64,${buffer.toString('base64')}`;

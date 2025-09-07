@@ -63,7 +63,7 @@ export default function Planning() {
     enabled: !!user?.id,
     queryFn: async () => {
       console.log('Fetching tasks for week:', { startOfWeek, endOfWeek, userId: user?.id });
-      
+
       const { data, error } = await supabase
         .from('tasks')
         .select('*')
@@ -71,14 +71,14 @@ export default function Planning() {
         .gte('due_at', startOfWeek.toISOString())
         .lte('due_at', endOfWeek.toISOString())
         .order('due_at', { ascending: true });
-        
+
       if (error) {
         console.error('Tasks query error:', error);
         throw error;
       }
-      
+
       console.log('Tasks fetched:', data?.length || 0);
-      
+
       // Convert from snake_case to camelCase
       const tasks = (data || []).map((row: any): TaskItem => ({
         id: row.id,
@@ -88,7 +88,7 @@ export default function Planning() {
         courseId: row.course_id,
         estMinutes: row.est_minutes,
       }));
-      
+
       return tasks;
     },
   });
@@ -103,18 +103,18 @@ export default function Planning() {
     enabled: !!user?.id,
     queryFn: async () => {
       console.log('Fetching courses for user:', user?.id);
-      
+
       const { data, error } = await supabase
         .from('courses')
         .select('*')
         .eq('user_id', user!.id)
         .order('name', { ascending: true });
-        
+
       if (error) {
         console.error('Courses query error:', error);
         throw error;
       }
-      
+
       console.log('Courses fetched:', data?.length || 0);
       return data || [];
     },
@@ -130,21 +130,21 @@ export default function Planning() {
     enabled: !!user?.id,
     queryFn: async () => {
       console.log('Fetching schedule for week:', { startOfWeek, endOfWeek, userId: user?.id });
-      
+
       // Get both recurring (day_of_week based) and one-time (date based) schedule items
       const { data, error } = await supabase
         .from('schedule')
         .select('*')
         .eq('user_id', user!.id)
         .or(`date.is.null,date.gte.${startOfWeek.toISOString().split('T')[0]},date.lte.${endOfWeek.toISOString().split('T')[0]}`);
-        
+
       if (error) {
         console.error('Schedule query error:', error);
         throw error;
       }
-      
+
       console.log('Schedule items fetched:', data?.length || 0);
-      
+
       // Convert from snake_case to camelCase
       const scheduleItems = (data || []).map((row: any): ScheduleItem => ({
         id: row.id,
@@ -156,7 +156,7 @@ export default function Planning() {
         kind: row.kind || row.type || 'les',
         title: row.title || row.note,
       }));
-      
+
       return scheduleItems;
     },
   });
@@ -191,14 +191,14 @@ export default function Planning() {
           const scheduleDate = new Date(item.date);
           return sameYMD(scheduleDate, date);
         }
-        
+
         // Check for recurring day of week match
         if (item.dayOfWeek) {
           const js = date.getDay(); // 0=Sunday, 1=Monday, etc.
           const dow = js === 0 ? 7 : js; // Convert to 1=Monday, 7=Sunday
           return item.dayOfWeek === dow;
         }
-        
+
         return false;
       });
 
@@ -385,9 +385,9 @@ export default function Planning() {
                                   .from('tasks')
                                   .update({ status: newStatus })
                                   .eq('id', task.id);
-                                
+
                                 if (error) throw error;
-                                
+
                                 // Refetch data to update UI
                                 window.location.reload();
                               } catch (error) {
@@ -410,9 +410,9 @@ export default function Planning() {
                                     .from('tasks')
                                     .delete()
                                     .eq('id', task.id);
-                                  
+
                                   if (error) throw error;
-                                  
+
                                   // Refetch data to update UI
                                   window.location.reload();
                                 } catch (error) {

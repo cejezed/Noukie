@@ -77,7 +77,7 @@ export default function ChatGeschiedenis() {
         </div>
       );
     }
-    
+
     if (!selectedSession) {
       return (
         <div className="p-6 space-y-4">
