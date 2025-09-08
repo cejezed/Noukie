@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "cd client && npm run build:client || cd .. && npm run build",
   "outputDirectory": "dist",
   "rewrites": [
     { "source": "/manifest.webmanifest", "destination": "/manifest.webmanifest" },
