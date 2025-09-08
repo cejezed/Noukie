@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 
@@ -7,11 +7,11 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Initialize Supabase client
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-export default async function handler(req: Request, res: Response) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Only allow POST requests
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
@@ -21,7 +21,9 @@ export default async function handler(req: Request, res: Response) {
     console.log('🤖 Coach chat request received');
     
     // Step 1: Authenticate user
-    const token = req.headers.authorization?.split(' ')[1];
+    const authHeader = req.headers.authorization as string;
+    const token = authHeader?.split(' ')[1];
+    
     if (!token) {
       return res.status(401).json({ error: 'Geen autorisatie token' });
     }
@@ -108,7 +110,7 @@ HUIDIG BERICHT VAN LEERLING: "${message}"
 
 GEDRAG ALS COACH:
 - Onthoud wat je weet over deze leerling uit eerdere gesprekken
-- Gebruik informatie over hun recente stemming en welzijn uit check-ins
+- Gebruik check-in informatie ALLEEN als het relevant is voor het onderwerp
 - Stel relevante vervolgvragen en toon oprechte interesse
 - Moedig aan en vier kleine successen
 - Bied concrete, haalbare stappen en planning
@@ -116,21 +118,17 @@ GEDRAG ALS COACH:
 - Spreek Nederlands in een vriendelijke, toegankelijke toon
 - Als iemand worstelt met een vak, verwijs naar eerdere problemen of successen
 - Stel proactief hulp voor met planning, studie-aanpak of welzijn
-- Houd rekening met hun mentale toestand uit recente check-ins
+- Vermijd het constant benoemen van slaap/stemming tenzij relevant
 
-Reageer als een coach die deze leerling echt kent en begrijpt. Maak het persoonlijk.`;
+Reageer als een coach die deze leerling echt kent en begrijpt. Maak het persoonlijk maar niet opdringerig.`;
 
-   const result = await model.generateContent(prompt);
-let response = await result.response.text();
+    const result = await model.generateContent(prompt);
+    let response = await result.response.text();
 
-// Clean up debug signals
-response = response.replace(/\s*\{"signals":\s*\{[^}]*\}\}\s*/g, '').trim();
-
-res.status(200).json({
-  reply: response,
-  message: response,
-  timestamp: new Date().toISOString()
-});
+    // Clean up debug signals
+    response = response.replace(/\s*\{"signals":\s*\{[^}]*\}\}\s*/g, '').trim();
+    
+    console.log('✅ Coach response generated');
     
     // Step 5: Update coach memory with new information
     await updateCoachMemory(userId, message, response);
@@ -142,7 +140,7 @@ res.status(200).json({
     console.log('📤 Sending coach response...');
     res.status(200).json({
       reply: response,
-      message: response, // Backwards compatibility
+      message: response,
       timestamp: new Date().toISOString()
     });
     
@@ -168,14 +166,20 @@ function buildCoachContext(memory: any[], checkins: any[], tasks: any[], current
     });
   }
   
-  // Recent mental health check-ins
-  if (checkins && checkins.length > 0) {
-    context += "\nRecente mentale check-ins:\n";
-    checkins.forEach(c => {
-      const mood = ['😰 slecht', '😟 niet zo', '😐 oké', '🙂 goed', '😊 super'][c.mood_color - 1] || '😐 neutraal';
-      context += `- ${c.date}: Humeur ${mood}, Slaap: ${c.sleep}/5, Energie: ${c.eating}/5, Spanning: ${c.tension}/5\n`;
-      if (c.medication) context += `  (extra medicatie genomen)\n`;
-    });
+  // Check-ins ONLY when relevant
+  const lowerMessage = currentMessage.toLowerCase();
+  const isWellbeingRelated = lowerMessage.includes('moe') || lowerMessage.includes('slaap') || 
+                            lowerMessage.includes('stress') || lowerMessage.includes('energie') ||
+                            lowerMessage.includes('humeur') || lowerMessage.includes('voelen');
+  
+  if (isWellbeingRelated && checkins && checkins.length > 0) {
+    const recentCheckin = checkins[0];
+    const daysAgo = Math.floor((Date.now() - new Date(recentCheckin.date).getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (daysAgo <= 2) { // Only recent check-ins
+      const mood = ['😰 slecht', '😟 niet zo', '😐 oké', '🙂 goed', '😊 super'][recentCheckin.mood_color - 1] || '😐 neutraal';
+      context += `\nRecente check-in (${recentCheckin.date}): Humeur ${mood}, Slaap: ${recentCheckin.sleep}/5, Energie: ${recentCheckin.eating}/5\n`;
+    }
   }
   
   // Recent tasks/planning (if available)
@@ -187,8 +191,8 @@ function buildCoachContext(memory: any[], checkins: any[], tasks: any[], current
     });
   }
   
-  if (!memory?.length && !checkins?.length && !tasks?.length) {
-    context += "Dit is een nieuwe leerling - nog geen eerdere gegevens beschikbaar.\n";
+  if (!memory?.length && !tasks?.length) {
+    context += "Dit is een nieuwe leerling of er zijn nog weinig eerdere gegevens beschikbaar.\n";
   }
   
   return context;

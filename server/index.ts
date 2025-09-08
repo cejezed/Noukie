@@ -11,23 +11,23 @@ async function createAppServer() {
   // JSON middleware voor alle API routes
   app.use(express.json());
 
-  // API Routes - VOOR Vite middleware
+  // API Routes - Compatible with Vercel serverless functions
   
-  // Tutoring API (LeerChat - Socratic learning met audio)
-  app.post('/api/tutoring', async (req, res) => {
+  // LeerChat API (Socratic learning met audio)
+  app.post('/api/chat', async (req, res) => {
     try {
       const handler = await import('../api/chat.js');
       return handler.default(req, res);
     } catch (error) {
-      console.error('Tutoring handler error:', error);
-      res.status(500).json({ error: 'Tutoring service unavailable' });
+      console.error('Chat handler error:', error);
+      res.status(500).json({ error: 'Chat service unavailable' });
     }
   });
 
   // Coach API (Persoonlijke begeleiding met geheugen)
-  app.post('/api/coach/chat', async (req, res) => {
+  app.post('/api/coach', async (req, res) => {
     try {
-      const handler = await import('../api/coach/chat.js');
+      const handler = await import('../api/coach.js');
       return handler.default(req, res);
     } catch (error) {
       console.error('Coach handler error:', error);
@@ -40,7 +40,7 @@ async function createAppServer() {
     res.json({ 
       status: 'ok', 
       timestamp: new Date().toISOString(),
-      services: ['tutoring', 'coach']
+      services: ['chat', 'coach']
     });
   });
 
@@ -115,8 +115,8 @@ async function createAppServer() {
   const port = Number(process.env.PORT) || 8787;
   server.listen(port, () => {
     console.log(`[express] serving on port ${port}`);
-    console.log(`[api] tutoring available at /api/tutoring`);
-    console.log(`[api] coach available at /api/coach/chat`);
+    console.log(`[api] chat available at /api/chat`);
+    console.log(`[api] coach available at /api/coach`);
   });
 }
 

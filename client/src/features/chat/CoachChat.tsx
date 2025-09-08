@@ -110,7 +110,7 @@ const CoachChat = memo(
           throw new Error("Geen autorisatie token beschikbaar");
         }
         
-        const resp = await fetch("/api/coach/chat", {
+        const resp = await fetch("/api/coach", {
           method: "POST",
           headers: { 
             "Content-Type": "application/json",
