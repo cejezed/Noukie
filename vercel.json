@@ -1,10 +1,15 @@
 {
-  "buildCommand": "npm run build",
+  "buildCommand": "cd client && vite build --outDir ../dist",
+  "functions": {
+    "api/chat.ts": {
+      "runtime": "@vercel/node"
+    },
+    "api/coach.ts": {
+      "runtime": "@vercel/node"
+    }
+  },
   "rewrites": [
     { "source": "/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "functions": {
-    "api/**/*.ts": { "runtime": "nodejs18.x" }
-  }
+  ]
 }
