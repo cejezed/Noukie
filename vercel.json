@@ -1,9 +1,6 @@
 {
-  "buildCommand": "cd client && npm run build:client || cd .. && npm run build",
-  "outputDirectory": "dist",
+  "buildCommand": "npm run build",
   "rewrites": [
-    { "source": "/manifest.webmanifest", "destination": "/manifest.webmanifest" },
-    { "source": "/sw.js", "destination": "/sw.js" },
     { "source": "/assets/(.*)", "destination": "/assets/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
