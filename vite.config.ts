@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: "../dist",
+    outDir: "../dist",  // Dit moet naar root dist
     assetsDir: "assets",
     emptyOutDir: true,
   },
@@ -22,7 +22,7 @@ export default defineConfig({
     fs: { strict: true, deny: ["**/.*"] },
     hmr: { 
       overlay: false,
-      clientPort: 443, // Voor HTTPS in Codespaces
+      clientPort: 443,
     },
     host: "0.0.0.0",
     port: 5173,
