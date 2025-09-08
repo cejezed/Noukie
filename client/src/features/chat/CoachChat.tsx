@@ -9,6 +9,8 @@ import React, {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Info } from "lucide-react";
+import { useAuth } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 export type CoachChatHandle = {
   /** Laat van buitenaf een user-bericht versturen (Voor unified composer op Vandaag) */
@@ -42,7 +44,7 @@ Ik help je plannen, prioriteren en bijhouden wat lastig was of juist goed ging.
 **Zo werk ik:**
 - Ik kijk mee naar je **rooster**, **taken** en eerdere **coach-notities**.
 - Ik stel **korte, haalbare stappen** voor (met tijden en duur).
-- Ik volg op bij vakken die eerder **“moeilijk”** waren.
+- Ik volg op bij vakken die eerder **"moeilijk"** waren.
 - Jij kunt **typen** of **insprekken** (via de opnameknop op de pagina).
 
 **Tips:**
@@ -55,6 +57,7 @@ const CoachChat = memo(
     { systemHint, context, size = "large", hideComposer, initialAssistantMessage }: CoachChatProps,
     ref
   ) {
+    const { user } = useAuth();
     const [showInfo, setShowInfo] = useState(false);
     const [messages, setMessages] = useState<ChatMessage[]>(() => {
       const seed: ChatMessage[] = [];
@@ -93,11 +96,28 @@ const CoachChat = memo(
 
       try {
         setBusy(true);
-        // Minimalistische backend call — gebruik jouw bestaande endpoint
-        const resp = await fetch("/api/explain", {
+        
+        // Check if user is authenticated
+        if (!user?.id) {
+          throw new Error("Geen gebruiker ingelogd");
+        }
+        
+        // Get auth token for API call
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token;
+        
+        if (!token) {
+          throw new Error("Geen autorisatie token beschikbaar");
+        }
+        
+        const resp = await fetch("/api/coach/chat", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { 
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
           body: JSON.stringify({
+            userId: user.id,
             systemHint,
             context,
             message: text,
@@ -106,6 +126,10 @@ const CoachChat = memo(
               .map((m) => ({ role: m.role, content: m.content })),
           }),
         });
+
+        if (!resp.ok) {
+          throw new Error(`API error: ${resp.status} ${resp.statusText}`);
+        }
 
         const data = await resp.json().catch(() => ({}));
         const reply: string =
@@ -120,12 +144,13 @@ const CoachChat = memo(
           content: String(reply),
         };
         setMessages((prev) => [...prev, assistantMsg]);
-      } catch (e) {
+      } catch (e: any) {
+        console.error('Coach chat error:', e);
+        const errorMessage = e.message || "Er ging iets mis met het ophalen van mijn antwoord.";
         const assistantMsg: ChatMessage = {
           id: uid(),
           role: "assistant",
-          content:
-            "Er ging iets mis met het ophalen van mijn antwoord. Probeer het zo nog eens, of formuleer je vraag opnieuw.",
+          content: `${errorMessage} Probeer het zo nog eens, of formuleer je vraag opnieuw.`,
         };
         setMessages((prev) => [...prev, assistantMsg]);
       } finally {
@@ -202,7 +227,7 @@ const CoachChat = memo(
               rows={3}
             />
             <div className="flex gap-2 justify-end">
-              <Button type="submit" disabled={busy}>
+              <Button type="submit" disabled={busy || !user?.id}>
                 Stuur
               </Button>
             </div>

@@ -173,27 +173,7 @@ export default function LeerChat() {
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
-  // Client-side AI call functie
-  const callGeminiAI = async (prompt: string, imageUrl?: string): Promise<string> => {
-    // Voor nu een placeholder - dit zou een directe call naar Google AI zijn
-    // Je hebt de GEMINI_API_KEY nodig in je environment variables
-
-    // Placeholder response
-    const responses = [
-      "Dat is een interessante vraag! Kun je me vertellen wat je al hebt geprobeerd?",
-      "Laten we dit stap voor stap aanpakken. Wat is het eerste wat je moet doen?",
-      "Goed bezig! Dit onderwerp kan lastig zijn. Welk deel vind je het moeilijkst?",
-      "Ik zie dat je hier moeite mee hebt. Laten we beginnen met de basis.",
-      "Prima vraag! Heb je de formule al gevonden die je nodig hebt?"
-    ];
-
-    // Simuleer AI thinking tijd
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 2000));
-
-    return responses[Math.floor(Math.random() * responses.length)];
-  };
-
-  // Vraag versturen naar de AI - Client-side
+  // Vraag versturen naar de AI - Updated to use real API
   const handleSendMessage = async (imageUrl?: string) => {
     if ((!opgave.trim() && !imageUrl) || isGenerating || !user || !selectedCourse) return;
 
@@ -211,37 +191,53 @@ export default function LeerChat() {
     setIsGenerating(true);
 
     try {
-      // Build prompt voor AI
-      const historyContext = messages.length > 0
-        ? messages.slice(-6).map(msg => `${msg.sender}: ${msg.text}`).join('\n')
-        : '';
+      // Get auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      const fullPrompt = `
-Je bent een vriendelijke AI-tutor voor een havo 5-leerling. Het vak is: ${selectedCourse}.
-De vraag is: "${userMessage.text}". De eigen poging is: "${userMessage.poging || 'Niet ingevuld.'}"
+      if (!token) {
+        throw new Error("Geen autorisatie token beschikbaar");
+      }
 
-${historyContext ? `Vorige conversatie:\n${historyContext}\n` : ''}
+      // Call the real API
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          opgave: userMessage.text,
+          poging: userMessage.poging || '',
+          course: selectedCourse,
+          imageUrl,
+          history: messages.slice(-6).map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'assistant',
+            text: msg.text
+          }))
+        })
+      });
 
-Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socratic-stijl hint en een wedervraag. Antwoord in het Nederlands.
-      `.trim();
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `API error: ${response.status}`);
+      }
 
-      console.log('Calling client-side AI with prompt length:', fullPrompt.length);
-
-      // Call AI (placeholder for now)
-      const aiResponseText = await callGeminiAI(fullPrompt, imageUrl);
-
-      console.log('AI response received:', aiResponseText.substring(0, 100) + '...');
+      const data = await response.json();
+      
+      console.log('AI response received:', data.aiResponseText?.substring(0, 100) + '...');
 
       const aiMessage: Message = {
         id: Date.now() + 1,
         sender: "ai",
-        text: aiResponseText,
-        // Audio generation weggelaten voor nu - kan later toegevoegd worden
+        text: data.aiResponseText || "Sorry, ik kon geen antwoord genereren.",
+        audioUrl: data.aiAudioUrl  // Now we get audio too!
       };
+
       const finalMessagesList = [...newMessagesList, aiMessage];
       setMessages(finalMessagesList);
 
-      // Opslaan in Supabase
+      // Save to Supabase
       try {
         if (currentSessionId) {
           await supabase.from("chatsessies").update({
@@ -302,7 +298,7 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
     }
   };
 
-  // Audio-playback (disabled for now since we don't generate audio)
+  // Audio-playback (now works with real audio from API)
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.sender === "ai" && lastMessage.audioUrl) {
@@ -324,8 +320,6 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
   };
 
   return (
-    // VERANDERING 1: h-[calc(100vh-80px)] kan conflicteren met andere stijlen. Gebruik 'flex-1' om de container te laten groeien
-    // We laten de scroll-area de ruimte opvullen in de flex-kolom.
     <div className="flex flex-col h-screen p-4 bg-slate-50">
       <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
         <div className="space-y-4">
@@ -334,8 +328,8 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
             <div className="text-center text-muted-foreground pt-12">
               <p className="font-medium text-lg">Welkom bij de AI Tutor!</p>
               <p className="text-sm">Kies een vak en stel je vraag.</p>
-              <p className="text-xs mt-2 text-amber-600">
-                Let op: Dit gebruikt een vereenvoudigde AI - voor complexe vragen check altijd je antwoorden.
+              <p className="text-xs mt-2 text-blue-600">
+                Nu met echte AI-begeleiding en audio-antwoorden!
               </p>
             </div>
           )}
@@ -377,12 +371,12 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
         </div>
       </ScrollArea>
 
-      {/* VERANDERING 2: Voeg mt-4 toe en flex-shrink-0 om deze kaart vast te zetten */}
+      {/* Input card */}
       <Card className="mt-4 flex-shrink-0">
         <CardHeader className="flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg">Stel je vraag</CardTitle>
           <div className="flex items-center gap-2">
-            {/* NIEUWE KNOP OM CHAT TE STARTEN */}
+            {/* Nieuwe chat knop */}
             <Button
               variant="ghost"
               size="icon"
@@ -391,7 +385,6 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
             >
               <Repeat className="w-5 h-5 text-muted-foreground" />
             </Button>
-            {/* EINDE NIEUWE KNOP */}
 
             <Dialog>
               <DialogTrigger asChild>
@@ -401,14 +394,14 @@ Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socr
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
-                  <DialogTitle>💡 Tips voor Goede Hulp</DialogTitle>
+                  <DialogTitle>Tips voor Goede Hulp</DialogTitle>
                 </DialogHeader>
                 <ul className="space-y-3 pt-2 text-sm">
                   <li><strong>1. Wees Specifiek:</strong> Vraag "Hoe bereken je de omtrek?" i.p.v. "Ik snap het niet".</li>
                   <li><strong>2. Laat je Werk Zien:</strong> Vul in wat je zelf al hebt geprobeerd.</li>
                   <li><strong>3. Gebruik een Foto:</strong> Maak een duidelijke foto van je opgave.</li>
-                  <li className="text-xs text-amber-800 p-2 bg-amber-50 rounded-md">
-                    <strong>Let op:</strong> Dit is een vereenvoudigde AI tutor. Controleer belangrijke antwoorden altijd met je docent of studieboek.
+                  <li className="text-xs text-blue-800 p-2 bg-blue-50 rounded-md">
+                    <strong>Nieuw:</strong> Je krijgt nu ook audio-antwoorden die automatisch afspelen!
                   </li>
                 </ul>
               </DialogContent>
