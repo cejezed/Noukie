@@ -96,23 +96,23 @@ const CoachChat = memo(
 
       try {
         setBusy(true);
-        
+
         // Check if user is authenticated
         if (!user?.id) {
           throw new Error("Geen gebruiker ingelogd");
         }
-        
+
         // Get auth token for API call
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
-        
+
         if (!token) {
           throw new Error("Geen autorisatie token beschikbaar");
         }
-        
+
         const resp = await fetch("/api/coach", {
           method: "POST",
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
           },

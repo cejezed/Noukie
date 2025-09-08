@@ -224,7 +224,7 @@ export default function LeerChat() {
       }
 
       const data = await response.json();
-      
+
       console.log('AI response received:', data.aiResponseText?.substring(0, 100) + '...');
 
       const aiMessage: Message = {

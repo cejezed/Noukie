@@ -1,11 +1,11 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "client/dist",
+  "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/manifest.webmanifest", "destination": "/client/dist/manifest.webmanifest" },
-    { "source": "/sw.js", "destination": "/client/dist/sw.js" },
-    { "source": "/assets/(.*)", "destination": "/client/dist/assets/$1" },
-    { "source": "/(.*)", "destination": "/client/dist/index.html" }
+    { "source": "/manifest.webmanifest", "destination": "/manifest.webmanifest" },
+    { "source": "/sw.js", "destination": "/sw.js" },
+    { "source": "/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/**/*.ts": { "runtime": "nodejs18.x" }

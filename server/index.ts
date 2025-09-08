@@ -12,7 +12,7 @@ async function createAppServer() {
   app.use(express.json());
 
   // API Routes - Compatible with Vercel serverless functions
-  
+
   // LeerChat API (Socratic learning met audio)
   app.post('/api/chat', async (req, res) => {
     try {
@@ -37,8 +37,8 @@ async function createAppServer() {
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
-    res.json({ 
-      status: 'ok', 
+    res.json({
+      status: 'ok',
       timestamp: new Date().toISOString(),
       services: ['chat', 'coach']
     });
@@ -68,12 +68,12 @@ async function createAppServer() {
     app.get('*', async (req, res, next) => {
       try {
         const url = req.originalUrl;
-        
+
         // Skip API routes
         if (url.startsWith('/api/')) {
           return next();
         }
-        
+
         const template = await vite.transformIndexHtml(url, `
           <!DOCTYPE html>
           <html lang="en">
@@ -107,7 +107,7 @@ async function createAppServer() {
       if (req.originalUrl.startsWith('/api/')) {
         return res.status(404).json({ error: 'API endpoint not found' });
       }
-      
+
       res.sendFile(path.join(dist, "index.html"));
     });
   }
