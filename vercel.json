@@ -1,15 +1,16 @@
 {
+  "version": 2,
   "buildCommand": "vite build",
+  "outputDirectory": "dist",
   "functions": {
-    "api/chat.ts": {
-      "runtime": "@vercel/node"
-    },
-    "api/coach.ts": {
-      "runtime": "@vercel/node"
+    "api/**": {
+      "runtime": "nodejs20.x",
+      "memory": 1024,
+      "maxDuration": 10
     }
   },
-  "rewrites": [
-    { "source": "/assets/(.*)", "destination": "/assets/$1" },
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
