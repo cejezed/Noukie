@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd client && vite build --outDir ../dist",
+  "buildCommand": "vite build",
   "functions": {
     "api/chat.ts": {
       "runtime": "@vercel/node"
