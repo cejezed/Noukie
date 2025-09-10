@@ -4,9 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/**": {
-      "runtime": "nodejs20.x",
-      "memory": 1024,
-      "maxDuration": 10
+      "runtime": "@vercel/node@5.3.21"
     }
   },
   "routes": [
