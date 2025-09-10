@@ -7,13 +7,13 @@ export default defineConfig({
   root: "client",
   resolve: {
     alias: {
-      "@": path.resolve(process.cwd(), "client/src"),
-      "@shared": path.resolve(process.cwd(), "shared"),
-      "@assets": path.resolve(process.cwd(), "attached_assets"),
+      "@": path.resolve(import.meta.dirname, "client/src"),
+      "@shared": path.resolve(import.meta.dirname, "shared"),
+      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
     },
   },
   build: {
-    outDir: "../dist",  // Dit moet naar root dist
+    outDir: "../dist",
     assetsDir: "assets",
     emptyOutDir: true,
   },
