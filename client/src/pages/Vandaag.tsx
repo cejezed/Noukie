@@ -409,7 +409,7 @@ Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <Label htmlFor="t-course">Vak (optioneel)</Label>
+              <Label htmlFor="t-course">Vak (optie)</Label>
               <Select value={courseId ?? "none"} onValueChange={(v) => setCourseId(v === "none" ? null : v)}>
                 <SelectTrigger id="t-course">
                   <SelectValue placeholder="Kies vak" />
