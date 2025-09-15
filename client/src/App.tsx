@@ -2,21 +2,21 @@ import * as React from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { Toaster } from "@/components/ui/toaster";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import Layout from "@/components/Layout";
-import { useAuth } from "@/lib/auth";
-import Login from "@/pages/Login";
-import Vandaag from "@/pages/Vandaag";
-import Rooster from "@/pages/Rooster";
-import Planning from "@/pages/Planning";
-import LeerChat from "@/pages/LeerChat";
-import Instellingen from "@/pages/Instellingen";
-import ParentDashboard from "@/pages/ParentDashboard";
-import NotFound from "@/pages/not-found";
-import MentalPage from "@/pages/Mental";
-import ChatGeschiedenis from "@/pages/ChatGeschiedenis";
-import { supabase } from "@/lib/supabase";
+import { Toaster } from "./components/ui/toaster";           // ← Gewijzigd
+import { TooltipProvider } from "./components/ui/tooltip";   // ← Gewijzigd
+import Layout from "./components/Layout";                    // ← Gewijzigd
+import { useAuth } from "./lib/auth";                        // ← Gewijzigd
+import Login from "./pages/Login";                           // ← Gewijzigd
+import Vandaag from "./pages/Vandaag";                       // ← Gewijzigd
+import Rooster from "./pages/Rooster";                       // ← Gewijzigd
+import Planning from "./pages/Planning";                     // ← Gewijzigd
+import LeerChat from "./pages/LeerChat";                     // ← Gewijzigd
+import Instellingen from "./pages/Instellingen";             // ← Gewijzigd
+import ParentDashboard from "./pages/ParentDashboard";       // ← Gewijzigd
+import NotFound from "./pages/not-found";                    // ← Gewijzigd
+import MentalPage from "./pages/Mental";                     // ← Gewijzigd
+import ChatGeschiedenis from "./pages/ChatGeschiedenis";     // ← Gewijzigd
+import { supabase } from "./lib/supabase";                   // ← Gewijzigd
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
