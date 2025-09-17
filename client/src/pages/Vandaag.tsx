@@ -202,7 +202,8 @@ export default function Vandaag() {
     }
     try {
       setSending(true);
-      const maybePromise = coachRef.current.sendMessage(text);
+      // ENIGE WIJZIGING: forceer PLAN-modus als de CoachChat dit ondersteunt
+      const maybePromise = coachRef.current.sendMessage(text, { forceMode: "plan" } as any);
       if (maybePromise && typeof (maybePromise as any).then === "function") {
         await (maybePromise as Promise<any>);
       }

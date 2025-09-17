@@ -44,7 +44,7 @@ export default function LeerChat() {
   // Staat voor het beheren van sessies
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string>('new');
+  const [selectedSessionId, setSelectedSessionId] = useState<string>("new");
 
   const [courseOptions, setCourseOptions] = useState<string[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
@@ -57,10 +57,10 @@ export default function LeerChat() {
   // START NIEUWE FUNCTIE
   const startNewChat = () => {
     setMessages([]);
-    setSelectedSessionId('new');
+    setSelectedSessionId("new");
     setCurrentSessionId(null);
-    setOgave('');
-    setPoging('');
+    setOgave("");
+    setPoging("");
     toast({
       title: "Nieuwe chat gestart",
       description: "Je kunt nu een nieuwe vraag stellen.",
@@ -85,7 +85,7 @@ export default function LeerChat() {
 
         if (error) throw error;
 
-        const courseNames = (courses ?? []).map(c => c.name).filter(Boolean);
+        const courseNames = (courses ?? []).map((c) => c.name).filter(Boolean);
         setCourseOptions(courseNames);
 
         if (selectedCourse && !courseNames.includes(selectedCourse)) {
@@ -112,7 +112,7 @@ export default function LeerChat() {
     const loadChatSessions = async () => {
       if (!user || !selectedCourse) {
         setChatSessions([]);
-        setSelectedSessionId('new');
+        setSelectedSessionId("new");
         setMessages([]);
         return;
       }
@@ -136,7 +136,7 @@ export default function LeerChat() {
           setCurrentSessionId(mostRecentSession.id);
           setMessages(mostRecentSession.berichten || []);
         } else {
-          setSelectedSessionId('new');
+          setSelectedSessionId("new");
           setMessages([]);
           setCurrentSessionId(null);
         }
@@ -155,11 +155,11 @@ export default function LeerChat() {
 
   // Luister naar geselecteerde sessie en update berichten
   useEffect(() => {
-    if (selectedSessionId === 'new') {
+    if (selectedSessionId === "new") {
       setMessages([]);
       setCurrentSessionId(null);
     } else {
-      const session = chatSessions.find(s => s.id === selectedSessionId);
+      const session = chatSessions.find((s) => s.id === selectedSessionId);
       if (session) {
         setMessages(session.berichten || []);
         setCurrentSessionId(session.id);
@@ -173,7 +173,29 @@ export default function LeerChat() {
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
-  // Vraag versturen naar de AI - Updated to use real API
+  // === Unified endpoint helper ===
+  async function callUnifiedExplain(messageText: string) {
+    // Dit endpoint verwacht userId in de body; EXPLAIN-modus wordt geforceerd
+    const response = await fetch("/api/vite_coach_chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user?.id,
+        message: messageText,
+        forceMode: "explain",
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.detail || errorData.error || `API error: ${response.status}`);
+    }
+
+    const data = await response.json(); // { mode, answer }
+    return data;
+  }
+
+  // Vraag versturen naar de AI - gebruikt unified endpoint in EXPLAIN-modus
   const handleSendMessage = async (imageUrl?: string) => {
     if ((!opgave.trim() && !imageUrl) || isGenerating || !user || !selectedCourse) return;
 
@@ -182,7 +204,7 @@ export default function LeerChat() {
       sender: "user",
       text: opgave || "Kun je helpen met deze afbeelding?",
       poging,
-      imageUrl
+      imageUrl,
     };
     const newMessagesList = [...messages, userMessage];
     setMessages(newMessagesList);
@@ -191,47 +213,14 @@ export default function LeerChat() {
     setIsGenerating(true);
 
     try {
-      // Get auth token
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      if (!token) {
-        throw new Error("Geen autorisatie token beschikbaar");
-      }
-
-      // Call the real API
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          opgave: userMessage.text,
-          poging: userMessage.poging || '',
-          course: selectedCourse,
-          imageUrl,
-          history: messages.slice(-6).map(msg => ({
-            role: msg.sender === 'user' ? 'user' : 'assistant',
-            text: msg.text
-          }))
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      console.log('AI response received:', data.aiResponseText?.substring(0, 100) + '...');
+      const { answer } = await callUnifiedExplain(userMessage.text);
 
       const aiMessage: Message = {
         id: Date.now() + 1,
         sender: "ai",
-        text: data.aiResponseText || "Sorry, ik kon geen antwoord genereren.",
-        audioUrl: data.aiAudioUrl  // Now we get audio too!
+        text: answer || "Sorry, ik kon geen antwoord genereren.",
+        // unified endpoint levert standaard geen audioUrl terug
+        audioUrl: undefined,
       };
 
       const finalMessagesList = [...newMessagesList, aiMessage];
@@ -240,38 +229,45 @@ export default function LeerChat() {
       // Save to Supabase
       try {
         if (currentSessionId) {
-          await supabase.from("chatsessies").update({
-            berichten: finalMessagesList,
-            updated_at: new Date().toISOString()
-          }).eq("id", currentSessionId);
+          await supabase
+            .from("chatsessies")
+            .update({
+              berichten: finalMessagesList,
+              updated_at: new Date().toISOString(),
+              vak: selectedCourse,
+            })
+            .eq("id", currentSessionId);
         } else {
-          const { data: ins, error: insertError } = await supabase.from("chatsessies").insert({
-            user_id: user.id,
-            vak: selectedCourse,
-            berichten: finalMessagesList
-          }).select("id").single();
+          const { data: ins, error: insertError } = await supabase
+            .from("chatsessies")
+            .insert({
+              user_id: user.id,
+              vak: selectedCourse,
+              berichten: finalMessagesList,
+            })
+            .select("id")
+            .single();
 
           if (insertError) throw insertError;
           if (ins) setCurrentSessionId(ins.id);
         }
       } catch (dbError) {
-        console.error('Error saving to database:', dbError);
+        console.error("Error saving to database:", dbError);
         toast({
           title: "Opslaan mislukt",
           description: "Je bericht is verstuurd maar niet opgeslagen.",
           variant: "destructive",
         });
       }
-
     } catch (error: any) {
-      console.error('Chat error:', error);
+      console.error("Chat error:", error);
       toast({
         variant: "destructive",
         title: "AI fout",
-        description: error.message || "Er ging iets mis met de AI response."
+        description: error.message || "Er ging iets mis met de AI response.",
       });
 
-      // Remove the user message if AI failed
+      // herstel UI naar vorige staat
       setMessages(messages);
     } finally {
       setIsGenerating(false);
@@ -289,6 +285,7 @@ export default function LeerChat() {
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
+      // Stuur meteen bericht met de afbeelding (opgave mag leeg zijn)
       await handleSendMessage(data.publicUrl);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
@@ -298,24 +295,29 @@ export default function LeerChat() {
     }
   };
 
-  // Audio-playback (now works with real audio from API)
+  // Audio-playback (blijft werken als er later audioUrl komt)
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.sender === "ai" && lastMessage.audioUrl) {
       if (audioRef.current) audioRef.current.pause();
       const audio = new Audio(lastMessage.audioUrl);
       audioRef.current = audio;
-      audio.play().catch(e => console.warn("Audio kon niet automatisch afspelen:", e));
+      audio.play().catch((e) => console.warn("Audio kon niet automatisch afspelen:", e));
       setAudioStatus("playing");
       audio.onended = () => setAudioStatus("idle");
-      audio.onpause = () => { if (!audio.ended) setAudioStatus("paused"); };
+      audio.onpause = () => {
+        if (!audio.ended) setAudioStatus("paused");
+      };
     }
   }, [messages]);
 
   const handleAudioControl = () => {
     if (audioRef.current) {
       if (audioStatus === "playing") audioRef.current.pause();
-      else { audioRef.current.play(); setAudioStatus("playing"); }
+      else {
+        audioRef.current.play();
+        setAudioStatus("playing");
+      }
     }
   };
 
@@ -328,16 +330,19 @@ export default function LeerChat() {
             <div className="text-center text-muted-foreground pt-12">
               <p className="font-medium text-lg">Welkom bij de AI Tutor!</p>
               <p className="text-sm">Kies een vak en stel je vraag.</p>
-              <p className="text-xs mt-2 text-blue-600">
-                Nu met echte AI-begeleiding en audio-antwoorden!
-              </p>
+              <p className="text-xs mt-2 text-blue-600">Nu met unified coach (uitlegmodus) 🎓</p>
             </div>
           )}
 
           {/* Berichten */}
-          {messages.map(msg => (
+          {messages.map((msg) => (
             <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
-              <div className={cn("max-w-xl p-3 rounded-lg shadow-sm", msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-background border")}>
+              <div
+                className={cn(
+                  "max-w-xl p-3 rounded-lg shadow-sm",
+                  msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-background border"
+                )}
+              >
                 <p className="font-bold text-sm mb-1">{msg.sender === "user" ? "Jij" : "AI Tutor"}</p>
                 {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-xs" />}
                 <p className="whitespace-pre-wrap">{msg.text}</p>
@@ -345,9 +350,9 @@ export default function LeerChat() {
                 {msg.sender === "ai" && msg.audioUrl && (
                   <div className="mt-3">
                     <Button onClick={handleAudioControl} size="icon" variant="outline" className="h-8 w-8">
-                      {audioStatus === 'playing' && <Pause className="w-4 h-4" />}
-                      {audioStatus === 'paused' && <Play className="w-4 h-4" />}
-                      {audioStatus === 'idle' && <Repeat className="w-4 h-4" />}
+                      {audioStatus === "playing" && <Pause className="w-4 h-4" />}
+                      {audioStatus === "paused" && <Play className="w-4 h-4" />}
+                      {audioStatus === "idle" && <Repeat className="w-4 h-4" />}
                     </Button>
                   </div>
                 )}
@@ -377,12 +382,7 @@ export default function LeerChat() {
           <CardTitle className="text-lg">Stel je vraag</CardTitle>
           <div className="flex items-center gap-2">
             {/* Nieuwe chat knop */}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={startNewChat}
-              title="Start een nieuwe chat"
-            >
+            <Button variant="ghost" size="icon" onClick={startNewChat} title="Start een nieuwe chat">
               <Repeat className="w-5 h-5 text-muted-foreground" />
             </Button>
 
@@ -397,11 +397,17 @@ export default function LeerChat() {
                   <DialogTitle>Tips voor Goede Hulp</DialogTitle>
                 </DialogHeader>
                 <ul className="space-y-3 pt-2 text-sm">
-                  <li><strong>1. Wees Specifiek:</strong> Vraag "Hoe bereken je de omtrek?" i.p.v. "Ik snap het niet".</li>
-                  <li><strong>2. Laat je Werk Zien:</strong> Vul in wat je zelf al hebt geprobeerd.</li>
-                  <li><strong>3. Gebruik een Foto:</strong> Maak een duidelijke foto van je opgave.</li>
+                  <li>
+                    <strong>1. Wees Specifiek:</strong> Vraag "Hoe bereken je de omtrek?" i.p.v. "Ik snap het niet".
+                  </li>
+                  <li>
+                    <strong>2. Laat je Werk Zien:</strong> Vul in wat je zelf al hebt geprobeerd.
+                  </li>
+                  <li>
+                    <strong>3. Gebruik een Foto:</strong> Maak een duidelijke foto van je opgave.
+                  </li>
                   <li className="text-xs text-blue-800 p-2 bg-blue-50 rounded-md">
-                    <strong>Nieuw:</strong> Je krijgt nu ook audio-antwoorden die automatisch afspelen!
+                    <strong>Nieuw:</strong> Unified coach met uitlegmodus actief.
                   </li>
                 </ul>
               </DialogContent>
@@ -416,7 +422,7 @@ export default function LeerChat() {
               <Textarea
                 id="opgave-text"
                 value={opgave}
-                onChange={e => setOgave(e.target.value)}
+                onChange={(e) => setOgave(e.target.value)}
                 placeholder="Typ of plak hier de opgave..."
                 rows={3}
               />
@@ -426,7 +432,7 @@ export default function LeerChat() {
               <Textarea
                 id="poging-text"
                 value={poging}
-                onChange={e => setPoging(e.target.value)}
+                onChange={(e) => setPoging(e.target.value)}
                 placeholder="Wat heb je zelf al geprobeerd?"
                 rows={3}
               />
@@ -447,6 +453,7 @@ export default function LeerChat() {
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading || isGenerating}
+                title="Afbeelding uploaden"
               >
                 {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
               </Button>
@@ -461,13 +468,9 @@ export default function LeerChat() {
                 </SelectTrigger>
                 <SelectContent>
                   {courseOptions.length > 0 ? (
-                    courseOptions.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))
+                    courseOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)
                   ) : (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">
-                      Geen vakken gevonden
-                    </div>
+                    <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken gevonden</div>
                   )}
                 </SelectContent>
               </Select>
@@ -477,6 +480,7 @@ export default function LeerChat() {
               onClick={() => handleSendMessage()}
               disabled={!opgave.trim() || isGenerating || !selectedCourse}
               size="lg"
+              title={!selectedCourse ? "Kies eerst een vak" : "Verstuur je vraag"}
             >
               <Send className="w-5 h-5 mr-2" />
               Verstuur
