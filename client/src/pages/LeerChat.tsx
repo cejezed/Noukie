@@ -41,7 +41,6 @@ export default function LeerChat() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
-  // Staat voor het beheren van sessies
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string>("new");
@@ -54,7 +53,6 @@ export default function LeerChat() {
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // START NIEUWE FUNCTIE
   const startNewChat = () => {
     setMessages([]);
     setSelectedSessionId("new");
@@ -66,9 +64,8 @@ export default function LeerChat() {
       description: "Je kunt nu een nieuwe vraag stellen.",
     });
   };
-  // EINDE NIEUWE FUNCTIE
 
-  // Vakken laden - Direct Supabase
+  // === Vakken laden uit Supabase ===
   useEffect(() => {
     const loadCourseOptions = async () => {
       if (!user) {
@@ -107,7 +104,7 @@ export default function LeerChat() {
     loadCourseOptions();
   }, [user, toast, selectedCourse]);
 
-  // Chatsessies laden - Direct Supabase
+  // === Chatsessies laden ===
   useEffect(() => {
     const loadChatSessions = async () => {
       if (!user || !selectedCourse) {
@@ -153,7 +150,6 @@ export default function LeerChat() {
     loadChatSessions();
   }, [selectedCourse, user, toast]);
 
-  // Luister naar geselecteerde sessie en update berichten
   useEffect(() => {
     if (selectedSessionId === "new") {
       setMessages([]);
@@ -167,35 +163,14 @@ export default function LeerChat() {
     }
   }, [selectedSessionId, chatSessions]);
 
-  // Altijd naar onderen scrollen bij nieuwe berichten
   useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector('div[data-radix-scroll-area-viewport]');
+    const viewport = scrollAreaRef.current?.querySelector(
+      'div[data-radix-scroll-area-viewport]'
+    );
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
-  // === Unified endpoint helper ===
-  async function callUnifiedExplain(messageText: string) {
-    // Dit endpoint verwacht userId in de body; EXPLAIN-modus wordt geforceerd
-    const response = await fetch("/api/vite_coach_chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        userId: user?.id,
-        message: messageText,
-        forceMode: "explain",
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || errorData.error || `API error: ${response.status}`);
-    }
-
-    const data = await response.json(); // { mode, answer }
-    return data;
-  }
-
-  // Vraag versturen naar de AI - gebruikt unified endpoint in EXPLAIN-modus
+  // === Chat sturen via unified endpoint ===
   const handleSendMessage = async (imageUrl?: string) => {
     if ((!opgave.trim() && !imageUrl) || isGenerating || !user || !selectedCourse) return;
 
@@ -213,20 +188,31 @@ export default function LeerChat() {
     setIsGenerating(true);
 
     try {
-      const { answer } = await callUnifiedExplain(userMessage.text);
+      const response = await fetch("/api/vite_coach_chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          message: userMessage.text,
+          forceMode: "explain",
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        console.error("vite_coach_chat error:", data);
+        throw new Error(data.detail || data.error || `API error: ${response.status}`);
+      }
 
       const aiMessage: Message = {
         id: Date.now() + 1,
         sender: "ai",
-        text: answer || "Sorry, ik kon geen antwoord genereren.",
-        // unified endpoint levert standaard geen audioUrl terug
-        audioUrl: undefined,
+        text: data.answer || "Sorry, ik kon geen antwoord genereren.",
       };
 
       const finalMessagesList = [...newMessagesList, aiMessage];
       setMessages(finalMessagesList);
 
-      // Save to Supabase
       try {
         if (currentSessionId) {
           await supabase
@@ -234,7 +220,6 @@ export default function LeerChat() {
             .update({
               berichten: finalMessagesList,
               updated_at: new Date().toISOString(),
-              vak: selectedCourse,
             })
             .eq("id", currentSessionId);
         } else {
@@ -266,36 +251,38 @@ export default function LeerChat() {
         title: "AI fout",
         description: error.message || "Er ging iets mis met de AI response.",
       });
-
-      // herstel UI naar vorige staat
       setMessages(messages);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // Afbeelding uploaden
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
     setIsUploading(true);
     const fileName = `${user.id}/${Date.now()}-${file.name}`;
     try {
-      const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(fileName, file);
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from("uploads").getPublicUrl(fileName);
-      // Stuur meteen bericht met de afbeelding (opgave mag leeg zijn)
       await handleSendMessage(data.publicUrl);
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
+      toast({
+        variant: "destructive",
+        title: "Upload mislukt",
+        description: error.message,
+      });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  // Audio-playback (blijft werken als er later audioUrl komt)
+  // === Audio playback (optioneel, als je later audio toevoegt) ===
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
     if (lastMessage?.sender === "ai" && lastMessage.audioUrl) {
@@ -323,33 +310,58 @@ export default function LeerChat() {
 
   return (
     <div className="flex flex-col h-screen p-4 bg-slate-50">
-      <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
+      <ScrollArea
+        className="flex-1 mb-4 p-4 border rounded-lg bg-white"
+        ref={scrollAreaRef}
+      >
         <div className="space-y-4">
-          {/* Welkomstbericht */}
           {messages.length === 0 && !isGenerating && (
             <div className="text-center text-muted-foreground pt-12">
               <p className="font-medium text-lg">Welkom bij de AI Tutor!</p>
               <p className="text-sm">Kies een vak en stel je vraag.</p>
-              <p className="text-xs mt-2 text-blue-600">Nu met unified coach (uitlegmodus) 🎓</p>
+              <p className="text-xs mt-2 text-blue-600">
+                Nu met unified uitlegmodus 🎓
+              </p>
             </div>
           )}
 
-          {/* Berichten */}
           {messages.map((msg) => (
-            <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
+            <div
+              key={msg.id}
+              className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}
+            >
               <div
                 className={cn(
                   "max-w-xl p-3 rounded-lg shadow-sm",
-                  msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-background border"
+                  msg.sender === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background border"
                 )}
               >
-                <p className="font-bold text-sm mb-1">{msg.sender === "user" ? "Jij" : "AI Tutor"}</p>
-                {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-xs" />}
+                <p className="font-bold text-sm mb-1">
+                  {msg.sender === "user" ? "Jij" : "AI Tutor"}
+                </p>
+                {msg.imageUrl && (
+                  <img
+                    src={msg.imageUrl}
+                    alt="Opgave"
+                    className="rounded-md my-2 max-w-xs"
+                  />
+                )}
                 <p className="whitespace-pre-wrap">{msg.text}</p>
-                {msg.poging && <p className="text-xs italic mt-2 border-t pt-2">Mijn poging: "{msg.poging}"</p>}
+                {msg.poging && (
+                  <p className="text-xs italic mt-2 border-t pt-2">
+                    Mijn poging: "{msg.poging}"
+                  </p>
+                )}
                 {msg.sender === "ai" && msg.audioUrl && (
                   <div className="mt-3">
-                    <Button onClick={handleAudioControl} size="icon" variant="outline" className="h-8 w-8">
+                    <Button
+                      onClick={handleAudioControl}
+                      size="icon"
+                      variant="outline"
+                      className="h-8 w-8"
+                    >
                       {audioStatus === "playing" && <Pause className="w-4 h-4" />}
                       {audioStatus === "paused" && <Play className="w-4 h-4" />}
                       {audioStatus === "idle" && <Repeat className="w-4 h-4" />}
@@ -360,7 +372,6 @@ export default function LeerChat() {
             </div>
           ))}
 
-          {/* Laad-indicator */}
           {isGenerating && (
             <div className="flex justify-start">
               <div className="p-3 rounded-lg bg-background border shadow-sm">
@@ -376,16 +387,13 @@ export default function LeerChat() {
         </div>
       </ScrollArea>
 
-      {/* Input card */}
       <Card className="mt-4 flex-shrink-0">
         <CardHeader className="flex-row items-center justify-between pb-2">
           <CardTitle className="text-lg">Stel je vraag</CardTitle>
           <div className="flex items-center gap-2">
-            {/* Nieuwe chat knop */}
             <Button variant="ghost" size="icon" onClick={startNewChat} title="Start een nieuwe chat">
               <Repeat className="w-5 h-5 text-muted-foreground" />
             </Button>
-
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -397,17 +405,11 @@ export default function LeerChat() {
                   <DialogTitle>Tips voor Goede Hulp</DialogTitle>
                 </DialogHeader>
                 <ul className="space-y-3 pt-2 text-sm">
-                  <li>
-                    <strong>1. Wees Specifiek:</strong> Vraag "Hoe bereken je de omtrek?" i.p.v. "Ik snap het niet".
-                  </li>
-                  <li>
-                    <strong>2. Laat je Werk Zien:</strong> Vul in wat je zelf al hebt geprobeerd.
-                  </li>
-                  <li>
-                    <strong>3. Gebruik een Foto:</strong> Maak een duidelijke foto van je opgave.
-                  </li>
+                  <li><strong>1. Wees Specifiek:</strong> Vraag "Hoe bereken je de omtrek?" i.p.v. "Ik snap het niet".</li>
+                  <li><strong>2. Laat je Werk Zien:</strong> Vul in wat je zelf al hebt geprobeerd.</li>
+                  <li><strong>3. Gebruik een Foto:</strong> Maak een duidelijke foto van je opgave.</li>
                   <li className="text-xs text-blue-800 p-2 bg-blue-50 rounded-md">
-                    <strong>Nieuw:</strong> Unified coach met uitlegmodus actief.
+                    <strong>Nieuw:</strong> Unified uitlegmodus actief.
                   </li>
                 </ul>
               </DialogContent>
@@ -453,7 +455,6 @@ export default function LeerChat() {
                 size="icon"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading || isGenerating}
-                title="Afbeelding uploaden"
               >
                 {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
               </Button>
@@ -468,7 +469,9 @@ export default function LeerChat() {
                 </SelectTrigger>
                 <SelectContent>
                   {courseOptions.length > 0 ? (
-                    courseOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)
+                    courseOptions.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))
                   ) : (
                     <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken gevonden</div>
                   )}
@@ -478,9 +481,12 @@ export default function LeerChat() {
 
             <Button
               onClick={() => handleSendMessage()}
-              disabled={!opgave.trim() || isGenerating || !selectedCourse}
+              disabled={
+                (!opgave.trim() && !fileInputRef.current?.files?.length) ||
+                isGenerating ||
+                !selectedCourse
+              }
               size="lg"
-              title={!selectedCourse ? "Kies eerst een vak" : "Verstuur je vraag"}
             >
               <Send className="w-5 h-5 mr-2" />
               Verstuur
