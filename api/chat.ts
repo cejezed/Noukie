@@ -1,143 +1,93 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenerativeAI, Part } from '@google/generative-ai';
-import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
+// api/chat.ts
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import OpenAI from "openai";
+import { createClient } from "@supabase/supabase-js";
 
-// Initialize AI clients
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Init OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
 
-// Initialize Supabase client
+// Init Supabase (server-side met service role key)
 const supabase = createClient(
   process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  { auth: { autoRefreshToken: false, persistSession: false } }
 );
 
-// Helper function to convert image URL to Gemini format
-async function urlToGoogleGenerativePart(url: string): Promise<Part> {
-  const response = await fetch(url);
-  const contentType = response.headers.get("content-type") || 'image/jpeg';
-  const buffer = await response.arrayBuffer();
-  return {
-    inlineData: {
-      data: Buffer.from(buffer).toString("base64"),
-      mimeType: contentType,
-    },
-  };
+// Kleine CORS helper
+function cors(res: VercelResponse) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+  cors(res);
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    console.log('🔥 Chat request received');
-
-    // Step 1: Validate user
-    const authHeader = req.headers.authorization as string;
-    const token = authHeader?.split(' ')[1];
-    
+    // 1. Auth check
+    const auth = req.headers.authorization || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!token) {
-      return res.status(401).json({ error: 'Geen autorisatie-token.' });
+      return res.status(401).json({ error: "Geen autorisatie-token." });
     }
-    
+
     const { data: { user }, error: userError } = await supabase.auth.getUser(token);
     if (userError || !user) {
-      console.error('❌ User authentication failed:', userError);
-      return res.status(401).json({ error: 'Niet geautoriseerd.' });
+      return res.status(401).json({ error: "Niet geautoriseerd." });
     }
 
-    console.log('✅ User authenticated:', user.id);
+    // 2. Body uitlezen
+    const body = (req.body ?? {}) as any;
+    const message = (body.message ?? "").toString().trim();
+    const history = Array.isArray(body.history) ? body.history : [];
+    const systemHint = (body.systemHint ?? "").toString();
+    const context = body.context ?? {};
 
-    const { opgave, poging, course, imageUrl, history } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: "message ontbreekt of is ongeldig" });
+    }
 
-    console.log('📝 Request data:', {
-      opgave: opgave?.substring(0, 50) + '...',
-      course,
-      hasImage: !!imageUrl,
-      historyLength: history?.length || 0
+    // 3. Prompt opbouwen
+    const systemPrompt =
+      (systemHint?.trim() ||
+        `Je bent "Noukie", een vriendelijke studie-buddy. 
+Reageer kort, natuurlijk en in het Nederlands (max 2–3 zinnen).
+Bied géén standaard blokken of schema's aan, tenzij de gebruiker dat expliciet vraagt.`) +
+      (context ? `\n[Context JSON]\n${JSON.stringify(context).slice(0, 4000)}` : "");
+
+    // 4. OpenAI call
+    const resp = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.5,
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...history.map((h: any) => ({
+          role: h.role,
+          content: String(h.content),
+        })),
+        { role: "user", content: message },
+      ],
     });
 
-    // Validation
-    if (!opgave && !imageUrl) {
-      return res.status(400).json({ error: 'Geen opgave of afbeelding opgegeven.' });
-    }
+    const reply =
+      resp.choices?.[0]?.message?.content?.trim() ||
+      "Oké—vertel nog iets meer, dan denk ik mee.";
 
-    if (!course) {
-      return res.status(400).json({ error: 'Geen vak geselecteerd.' });
-    }
-
-    // Step 2: Generate AI response with Gemini
-    console.log('🤖 Generating AI response...');
-    
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro-latest' });
-    
-    let promptText = `Je bent een vriendelijke AI-tutor voor een havo 5-leerling. Het vak is: ${course}.
-De vraag is: "${opgave}". De eigen poging is: "${poging || 'Niet ingevuld.'}"
-
-Analyseer de vraag en de eventuele afbeelding. Begeleid de leerling met een Socratic-stijl hint en een wedervraag. Antwoord in het Nederlands.`;
-
-    // Add conversation history if available
-    if (history && history.length > 0) {
-      promptText += `\n\nVorige conversatie:\n`;
-      history.forEach((msg: any, index: number) => {
-        promptText += `${msg.role === 'user' ? 'Leerling' : 'Tutor'}: ${msg.text}\n`;
-      });
-      promptText += `\nGeef nu je volgende antwoord rekening houdend met deze context.`;
-    }
-    
-    const contentParts: (string | Part)[] = [promptText];
-    
-    if (imageUrl) {
-      console.log('🖼️ Processing image...');
-      try {
-        const imagePart = await urlToGoogleGenerativePart(imageUrl);
-        contentParts.push(imagePart);
-      } catch (imageError: any) {
-        console.error('❌ Image processing failed:', imageError);
-        return res.status(400).json({ error: 'Afbeelding kon niet worden verwerkt.', details: imageError.message });
-      }
-    }
-    
-    const result = await model.generateContent({ 
-      contents: [{ role: "user", parts: contentParts }] 
-    });
-    
-    const aiResponseText = result.response.text();
-    console.log('✅ AI response generated:', aiResponseText.substring(0, 100) + '...');
-
-    // Step 3: Generate audio with OpenAI
-    console.log('🔊 Generating audio...');
-    
-    let aiAudioUrl = null;
-    try {
-      const mp3 = await openai.audio.speech.create({ 
-        model: "tts-1", 
-        voice: "nova", 
-        input: aiResponseText.substring(0, 4000) // Limit length for TTS
-      });
-      const audioBuffer = Buffer.from(await mp3.arrayBuffer());
-      aiAudioUrl = `data:audio/mpeg;base64,${audioBuffer.toString('base64')}`;
-      console.log('✅ Audio generated successfully');
-    } catch (audioError: any) {
-      console.error('⚠️ Audio generation failed (continuing without audio):', audioError);
-      // Continue without audio - don't fail the whole request
-    }
-
-    // Step 4: Send response
-    console.log('📤 Sending response...');
-    res.status(200).json({ 
-      aiResponseText, 
-      aiAudioUrl 
-    });
-
-  } catch (error: any) {
-    console.error("❌ Error in chat function:", error);
-    res.status(500).json({ 
-      error: 'Interne serverfout.', 
-      details: error.message 
-    });
+    // 5. Terugsturen
+    return res.status(200).json({ reply });
+  } catch (e: any) {
+    console.error("chat error", e);
+    return res
+      .status(500)
+      .json({ error: "Interne serverfout.", details: e?.message });
   }
 }

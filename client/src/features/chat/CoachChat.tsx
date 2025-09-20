@@ -1,29 +1,24 @@
 import React, {
   useState,
-  useEffect,
   useRef,
-  forwardRef,
   useImperativeHandle,
+  forwardRef,
   memo,
+  useEffect,
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Info } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { useChatStore, type ChatMessage } from "./chatStore";
 
 export type CoachChatHandle = {
   /** Laat van buitenaf een user-bericht versturen (Voor unified composer op Vandaag) */
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string) => Promise<void>;
 };
 
-type ChatMessage = {
-  id: string;
-  role: "assistant" | "user" | "system";
-  content: string;
-};
-
-type CoachChatProps = {
+type Props = {
   systemHint?: string;
   context?: any;
   size?: "small" | "large";
@@ -31,141 +26,133 @@ type CoachChatProps = {
   hideComposer?: boolean;
   /** Eenmalige openingsboodschap van de coach, vóór de eerste user input */
   initialAssistantMessage?: string;
+  /** Unieke sleutel per chat-venster; bv. "today:<userId>" */
+  threadKey?: string;
 };
 
 function uid() {
   return Math.random().toString(36).slice(2);
 }
 
-const INFO_TEXT = `
-**Welkom bij Noukie!** 😊
-Ik help je plannen, prioriteren en bijhouden wat lastig was of juist goed ging.
+const DEFAULT_THREAD = "default";
 
-**Zo werk ik:**
-- Ik kijk mee naar je **rooster**, **taken** en eerdere **coach-notities**.
-- Ik stel **korte, haalbare stappen** voor (met tijden en duur).
-- Ik volg op bij vakken die eerder **"moeilijk"** waren.
-- Jij kunt **typen** of **insprekken** (via de opnameknop op de pagina).
-
-**Tips:**
-- Schrijf wat je vandaag wilt doen, of wat lastig voelt.
-- Na een les of oefensessie: noteer kort hoe het ging; dan pas ik je plan aan.
+const INFO_TEXT_MINI = `
+<b>Noukie</b> reageert kort en natuurlijk. Jij typt of spreekt in; ik denk mee met je rooster en taken als dat helpt.
 `;
 
 const CoachChat = memo(
-  forwardRef<CoachChatHandle, CoachChatProps>(function CoachChat(
-    { systemHint, context, size = "large", hideComposer, initialAssistantMessage }: CoachChatProps,
+  forwardRef<CoachChatHandle, Props>(function CoachChat(
+    {
+      systemHint,
+      context,
+      size = "large",
+      hideComposer,
+      initialAssistantMessage,
+      threadKey = DEFAULT_THREAD,
+    }: Props,
     ref
   ) {
     const { user } = useAuth();
     const [showInfo, setShowInfo] = useState(false);
-    const [messages, setMessages] = useState<ChatMessage[]>(() => {
-      const seed: ChatMessage[] = [];
-      if (initialAssistantMessage?.trim()) {
-        seed.push({
-          id: uid(),
-          role: "assistant",
-          content: initialAssistantMessage.trim(),
-        });
-      } else {
-        // Zachte intro (kort), echte uitgebreide info zit achter ℹ️
-        seed.push({
+    const [busy, setBusy] = useState(false);
+    const [draft, setDraft] = useState("");
+    const localInputRef = useRef<HTMLTextAreaElement | null>(null);
+
+    // Zustand store
+    const { byThread, setThreadMessages, appendToThread } = useChatStore();
+    const messages = byThread[threadKey] ?? [];
+
+    // Seed één opener als de thread leeg is
+    useEffect(() => {
+      if (messages.length === 0) {
+        const opener: ChatMessage = {
           id: uid(),
           role: "assistant",
           content:
-            "Hoi! Ik ben **Noukie**. Vertel wat je wilt oefenen of plannen. Ik kijk mee naar je rooster en stel korte, haalbare stappen voor.",
-        });
+            (initialAssistantMessage?.trim() ||
+              "Hoi! Ik ben Noukie. Waar wil je mee beginnen?")!,
+        };
+        setThreadMessages(threadKey, [opener]);
       }
-      return seed;
-    });
-    const [busy, setBusy] = useState(false);
-    const localInputRef = useRef<HTMLTextAreaElement | null>(null);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [threadKey]);
 
-    // Exporteer een imperative handle zodat de pagina van buiten berichten kan sturen
-    useImperativeHandle(ref, () => ({
-      sendMessage: (text: string) => {
-        const content = (text || "").trim();
-        if (!content) return;
-        pushUserAndAsk(content);
-      },
-    }));
+    async function pushUserAndAsk(text: string): Promise<void> {
+      const content = (text || "").trim();
+      if (!content) return;
 
-    async function pushUserAndAsk(text: string) {
-      const userMsg: ChatMessage = { id: uid(), role: "user", content: text };
-      setMessages((prev) => [...prev, userMsg]);
+      if (!user?.id) {
+        appendToThread(threadKey, {
+          id: uid(),
+          role: "assistant",
+          content: "Je bent niet ingelogd. Log eerst in om verder te chatten.",
+        });
+        return;
+      }
+
+      // Optimistic UI
+      const userMsg: ChatMessage = { id: uid(), role: "user", content };
+      appendToThread(threadKey, userMsg);
 
       try {
         setBusy(true);
 
-        // Check if user is authenticated
-        if (!user?.id) {
-          throw new Error("Geen gebruiker ingelogd");
-        }
-
-        // Get auth token for API call
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token;
+        if (!token) throw new Error("Geen autorisatie token beschikbaar");
 
-        if (!token) {
-          throw new Error("Geen autorisatie token beschikbaar");
-        }
+        // History op basis van huidige thread + net bericht
+        const history = [...(byThread[threadKey] ?? []), userMsg]
+          .filter((m) => m.role !== "system")
+          .map((m) => ({ role: m.role, content: m.content }));
 
-        const resp = await fetch("/api/coach", {
+        const resp = await fetch("/api/chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
             userId: user.id,
             systemHint,
             context,
-            message: text,
-            history: messages
-              .filter((m) => m.role !== "system")
-              .map((m) => ({ role: m.role, content: m.content })),
+            message: content,
+            history,
           }),
         });
 
-        if (!resp.ok) {
-          throw new Error(`API error: ${resp.status} ${resp.statusText}`);
-        }
+        if (!resp.ok) throw new Error(`API error: ${resp.status} ${resp.statusText}`);
 
-        const data = await resp.json().catch(() => ({}));
+        const data = await resp.json().catch(() => ({} as any));
         const reply: string =
-          data?.reply ??
-          data?.message ??
-          data?.content ??
-          "Oké! Laten we dit opsplitsen in 2–3 haalbare stappen. Wat is het eerste mini-doel?";
+          data?.reply ?? data?.message ?? data?.content ?? "Oké. Vertel nog iets meer, dan kijk ik mee.";
 
-        const assistantMsg: ChatMessage = {
+        appendToThread(threadKey, {
           id: uid(),
           role: "assistant",
           content: String(reply),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+        });
       } catch (e: any) {
-        console.error('Coach chat error:', e);
-        const errorMessage = e.message || "Er ging iets mis met het ophalen van mijn antwoord.";
-        const assistantMsg: ChatMessage = {
+        appendToThread(threadKey, {
           id: uid(),
           role: "assistant",
-          content: `${errorMessage} Probeer het zo nog eens, of formuleer je vraag opnieuw.`,
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+          content: (e?.message || "Er ging iets mis") + " — probeer het zo nog eens.",
+        });
       } finally {
         setBusy(false);
       }
     }
 
-    // Interne composer (wordt meestal verborgen op Vandaag)
-    const [draft, setDraft] = useState("");
+    useImperativeHandle(ref, () => ({
+      sendMessage: (t: string) => pushUserAndAsk(t),
+    }));
+
     function onSubmitInternal(e: React.FormEvent) {
       e.preventDefault();
       const t = draft.trim();
       if (!t) return;
       setDraft("");
-      pushUserAndAsk(t);
+      void pushUserAndAsk(t);
     }
 
     return (
@@ -190,7 +177,7 @@ const CoachChat = memo(
 
         {showInfo && (
           <div className="rounded-md border bg-muted/30 p-3 text-sm leading-6">
-            <div dangerouslySetInnerHTML={{ __html: INFO_TEXT.replace(/\n/g, "<br/>") }} />
+            <div dangerouslySetInnerHTML={{ __html: INFO_TEXT_MINI.replace(/\n/g, "<br/>") }} />
           </div>
         )}
 
@@ -216,7 +203,7 @@ const CoachChat = memo(
           )}
         </div>
 
-        {/* Interne composer (meestal uit) */}
+        {/* Interne composer (optioneel) */}
         {!hideComposer && (
           <form onSubmit={onSubmitInternal} className="space-y-2">
             <Textarea

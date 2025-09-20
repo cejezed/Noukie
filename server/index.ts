@@ -2,112 +2,112 @@
 import "dotenv/config";
 import express from "express";
 import path from "node:path";
+import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
 
 async function createAppServer() {
   const app = express();
   const server = createServer(app);
 
-  // JSON middleware voor alle API routes
-  app.use(express.json());
+  // ------- Basics -------
+  app.use(express.json({ limit: "2mb" }));
 
-  // API Routes - Compatible with Vercel serverless functions
+  // CORS (simpel & overal)
+  app.use((req, res, next) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    if (req.method === "OPTIONS") return res.status(200).end();
+    next();
+  });
 
-  // LeerChat API (Socratic learning met audio)
-  app.post('/api/chat', async (req, res) => {
+  // Kies juiste extensie voor dynamische imports
+  const apiExt = process.env.NODE_ENV !== "production" ? ".ts" : ".js";
+  const apiDir = path.resolve(process.cwd(), "api");
+
+  // ------- API routes (compatibel met Vercel handlers) -------
+  // Chat (generieke coach-chat)
+  app.post("/api/chat", async (req, res) => {
     try {
-      const handler = await import('../api/chat.js');
-      return handler.default(req, res);
-    } catch (error) {
-      console.error('Chat handler error:', error);
-      res.status(500).json({ error: 'Chat service unavailable' });
+      const mod = await import(path.join(apiDir, `chat${apiExt}`));
+      return mod.default(req as any, res as any);
+    } catch (err) {
+      console.error("Chat handler error:", err);
+      return res.status(500).json({ error: "Chat service unavailable" });
     }
   });
 
-  // Coach API (Persoonlijke begeleiding met geheugen)
-  app.post('/api/coach', async (req, res) => {
+  // Coach (indien je deze nog gebruikt — anders deprecaten)
+  app.post("/api/coach", async (req, res) => {
     try {
-      const handler = await import('../api/coach.js');
-      return handler.default(req, res);
-    } catch (error) {
-      console.error('Coach handler error:', error);
-      res.status(500).json({ error: 'Coach service unavailable' });
+      const mod = await import(path.join(apiDir, `coach${apiExt}`));
+      return mod.default(req as any, res as any);
+    } catch (err) {
+      console.error("Coach handler error:", err);
+      return res.status(500).json({ error: "Coach service unavailable" });
     }
   });
 
-  // Health check endpoint
-  app.get('/api/health', (req, res) => {
+  // Explain (opgave/poging + Gemini + TTS)
+  app.post("/api/explain", async (req, res) => {
+    try {
+      const mod = await import(path.join(apiDir, `explain${apiExt}`));
+      return mod.default(req as any, res as any);
+    } catch (err) {
+      console.error("Explain handler error:", err);
+      return res.status(500).json({ error: "Explain service unavailable" });
+    }
+  });
+
+  // Health
+  app.get("/api/health", (_req, res) => {
     res.json({
-      status: 'ok',
+      status: "ok",
       timestamp: new Date().toISOString(),
-      services: ['chat', 'coach']
+      services: ["chat", "coach", "explain"],
+      env: process.env.NODE_ENV,
     });
   });
 
-  // Development vs Production setup
+  // ------- Frontend -------
   if (process.env.NODE_ENV !== "production") {
-    // DEV: Vite middleware
+    // DEV: Vite middleware + serve echte client/index.html
     const { createServer: createViteServer } = await import("vite");
+    const clientRoot = path.resolve(process.cwd(), "client");
     const vite = await createViteServer({
       configFile: path.resolve(process.cwd(), "vite.config.ts"),
-      root: path.resolve(process.cwd(), "client"),
+      root: clientRoot,
       server: {
         middlewareMode: true,
-        hmr: {
-          server,
-          overlay: false,
-        },
-        host: undefined,
-        port: undefined,
+        hmr: { server, overlay: false },
       },
     });
 
     app.use(vite.middlewares);
 
-    // SPA fallback voor development - ALTIJD als laatste
-    app.get('*', async (req, res, next) => {
+    // SPA fallback: lees de ECHTE index.html zodat manifest/icons kloppen
+    app.get("*", async (req, res, next) => {
       try {
-        const url = req.originalUrl;
-
-        // Skip API routes
-        if (url.startsWith('/api/')) {
-          return next();
-        }
-
-        const template = await vite.transformIndexHtml(url, `
-          <!DOCTYPE html>
-          <html lang="en">
-            <head>
-              <meta charset="UTF-8" />
-              <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-              <title>Noukie</title>
-            </head>
-            <body>
-              <div id="root"></div>
-              <script type="module" src="/src/main.tsx"></script>
-            </body>
-          </html>
-        `);
-        res.status(200).set({ 'Content-Type': 'text/html' }).end(template);
-      } catch (e) {
-        vite.ssrFixStacktrace(e);
+        if (req.originalUrl.startsWith("/api/")) return next();
+        const indexPath = path.join(clientRoot, "index.html");
+        let html = await fs.readFile(indexPath, "utf-8");     // <- echte index
+        html = await vite.transformIndexHtml(req.originalUrl, html);
+        res.status(200).setHeader("Content-Type", "text/html").end(html);
+      } catch (e: any) {
+        vite.ssrFixStacktrace?.(e);
         next(e);
       }
     });
   } else {
-    // PROD: serve static files
+    // PROD: statisch uit dist (zorg dat build daarheen schrijft)
     const dist = path.resolve(process.cwd(), "dist");
-
-    // Serve static assets
     app.use(express.static(dist));
 
-    // SPA fallback voor production - ALTIJD als laatste
+    // SPA fallback (icons/manifest moeten in dist staan)
     app.get("*", (req, res) => {
-      // Skip API routes
-      if (req.originalUrl.startsWith('/api/')) {
-        return res.status(404).json({ error: 'API endpoint not found' });
+      if (req.originalUrl.startsWith("/api/")) {
+        return res.status(404).json({ error: "API endpoint not found" });
       }
-
       res.sendFile(path.join(dist, "index.html"));
     });
   }
@@ -115,8 +115,9 @@ async function createAppServer() {
   const port = Number(process.env.PORT) || 8787;
   server.listen(port, () => {
     console.log(`[express] serving on port ${port}`);
-    console.log(`[api] chat available at /api/chat`);
-    console.log(`[api] coach available at /api/coach`);
+    console.log(`[api] chat     -> /api/chat  (${apiExt})`);
+    console.log(`[api] coach    -> /api/coach (${apiExt})`);
+    console.log(`[api] explain  -> /api/explain (${apiExt})`);
   });
 }
 

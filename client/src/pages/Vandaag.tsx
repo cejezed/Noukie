@@ -202,8 +202,8 @@ export default function Vandaag() {
     }
     try {
       setSending(true);
-      // ENIGE WIJZIGING: forceer PLAN-modus als de CoachChat dit ondersteunt
-      const maybePromise = coachRef.current.sendMessage(text, { forceMode: "plan" } as any);
+      // Belangrijk: geen extra args; signatuur is (text: string) => void|Promise
+      const maybePromise = coachRef.current.sendMessage(text);
       if (maybePromise && typeof (maybePromise as any).then === "function") {
         await (maybePromise as Promise<any>);
       }
@@ -233,7 +233,7 @@ export default function Vandaag() {
     })),
   };
 
-  // === Proactieve openingsvraag ===
+  // === Proactieve openingsvraag (natuurlijker, geen vaste blokken) ===
   const difficultSet = new Set(
     coachMemory
       .filter((m) => (m.status ?? "").toLowerCase() === "moeilijk")
@@ -243,11 +243,12 @@ export default function Vandaag() {
     .map((i) => (getCourseById(i.course_id)?.name ?? i.title ?? "").trim())
     .filter(Boolean);
   const flaggedToday = todayCourseNames.filter((n) => difficultSet.has(n.toLowerCase()));
+
   const initialCoachMsg = flaggedToday.length
-    ? `Ik zie vandaag ${flaggedToday.join(" en ")} op je rooster — dat was eerder “moeilijk”. Hoe ging het vandaag? Zullen we 2–3 korte acties plannen?`
+    ? `Ik zie vandaag ${flaggedToday.join(" en ")} op je rooster — dat voelde eerder lastig. Wat zou nu het meest helpen?`
     : tasksToday.length
-    ? `Zullen we je dag opdelen in 2–3 blokken en de belangrijkste taak eerst doen? Wat voelt nu het lastigst?`
-    : `Wat wil je vandaag oefenen of afronden? Ik kijk mee naar je rooster en stel concrete, haalbare blokken voor.`;
+    ? `Wat wil je als eerste oppakken? Ik denk even mee als je wilt.`
+    : `Waar heb je vandaag zin in of juist tegenzin? Beginnen we klein.`;
 
   const coachingSystemHintSafe = (s: string | undefined) => {
     const t = (s || "").trim();
@@ -255,12 +256,11 @@ export default function Vandaag() {
   };
 
   const coachSystemHint = `
-Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
-- Gebruik context (rooster/taken/memory).
-- Zie je vandaag een les voor een vak dat eerder “moeilijk” was? Vraag daar naar.
-- Stel max. 3 concrete acties met tijden (HH:MM) en duur in minuten.
-- Vier kleine successen en stel 1 verduidelijkingsvraag als info ontbreekt.
-- Komen blijvende inzichten naar voren, geef die terug als 'signals' JSON.
+Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het Nederlands.
+- Gebruik context (rooster/taken/memory) alleen als het helpt; noem het niet expliciet tenzij relevant.
+- Bied GEEN vaste blokken of schema's aan, tenzij de gebruiker daar duidelijk om vraagt.
+- Max 2-3 zinnen. Hoogstens 1 vraag terug als dat nodig is.
+- Vier kleine successen. Als de gebruiker planning vraagt: doe 1- of 2 concrete vervolgstappen (geen “3 blokken”-sjabloon).
 `.trim();
 
   return (
@@ -284,6 +284,7 @@ Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
           size="large"
           hideComposer
           initialAssistantMessage={initialCoachMsg}
+          threadKey={`today:${userId || 'anon'}`}
         />
 
         {/* Externe composer met Voice + Stuur */}
@@ -378,7 +379,7 @@ Je bent Noukie, een vriendelijke studiecoach. Wees proactief, positief en kort.
                       variant="outline"
                       size="icon"
                       title="Verwijderen"
-                      onClick={() => deleteTaskMutation.mutate(task)}
+                      onClick={() => delTask.mutate(task.id)}
                       className="text-destructive"
                     >
                       <Trash2 className="w-4 h-4" />
