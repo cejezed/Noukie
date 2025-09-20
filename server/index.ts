@@ -49,15 +49,15 @@ async function createAppServer() {
   });
 
   // Explain (opgave/poging + Gemini + TTS)
-  app.post("/api/explain", async (req, res) => {
-    try {
-      const mod = await import(path.join(apiDir, `explain${apiExt}`));
-      return mod.default(req as any, res as any);
-    } catch (err) {
-      console.error("Explain handler error:", err);
-      return res.status(500).json({ error: "Explain service unavailable" });
-    }
-  });
+app.post("/api/explain", async (req, res) => {
+  try {
+    const mod = await import(path.join(apiDir, `explain${apiExt}`));
+    return mod.default(req as any, res as any);
+  } catch (err) {
+    console.error("Explain handler error:", err);
+    return res.status(500).json({ error: "Explain service unavailable" });
+  }
+});
 
   // Health
   app.get("/api/health", (_req, res) => {
