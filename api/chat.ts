@@ -22,6 +22,50 @@ function cors(res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 }
 
+type Mode = "chat" | "studeren";
+
+const BASE_SYSTEM = `Je bent "Noukie", een vriendelijke studie-buddy in een huiswerk-app. Antwoord altijd in het Nederlands, kort en duidelijk.`;
+
+const STUDY_SYSTEM = `Rol: leercoach (studeren en leren).
+Doel: Begrip vergroten en stof verankeren.
+
+Werkwijze:
+1) Leg de kern uit in eenvoudige stappen (max. 5 korte alinea's) met 1 concreet voorbeeld.
+2) Geef 3–5 kernpunten samenvatting (bulletpoints).
+3) Maak 3 oefenvragen met korte hints (geen volledige uitwerkingen).
+4) Sluit af met 1 check-vraag (om te testen of het begrepen is).
+
+Stijl: vriendelijk, compact, activerend. Vraag niet om onnodige info, maar stel waar nodig 1 gerichte vervolgvraag. Gebruik waar passend ezelsbruggetjes of analogieën.`;
+
+const CHAT_SYSTEM = `Rol: coach voor vrij gesprek.
+Stijl: vriendelijk, to-the-point (max. 2–3 zinnen), geen standaard schema's tenzij expliciet gevraagd.`;
+
+function buildSystemPrompt(mode: Mode, systemHint?: string, context?: unknown) {
+  const safeContext =
+    context ? `\n[Context JSON]\n${JSON.stringify(context).slice(0, 4000)}` : "";
+
+  if (mode === "studeren") {
+    return [
+      BASE_SYSTEM,
+      STUDY_SYSTEM,
+      systemHint?.trim() || "",
+      safeContext,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
+
+  // default = chat
+  return [
+    BASE_SYSTEM,
+    CHAT_SYSTEM,
+    systemHint?.trim() || "",
+    safeContext,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   cors(res);
 
@@ -33,41 +77,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // 1. Auth check
+    // 1) Auth check
     const auth = req.headers.authorization || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
     if (!token) {
       return res.status(401).json({ error: "Geen autorisatie-token." });
     }
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser(token);
     if (userError || !user) {
       return res.status(401).json({ error: "Niet geautoriseerd." });
     }
 
-    // 2. Body uitlezen
+    // 2) Body
     const body = (req.body ?? {}) as any;
     const message = (body.message ?? "").toString().trim();
     const history = Array.isArray(body.history) ? body.history : [];
     const systemHint = (body.systemHint ?? "").toString();
     const context = body.context ?? {};
+    const mode: Mode =
+      body.mode === "studeren" || body.mode === "chat" ? body.mode : "chat";
 
     if (!message) {
       return res.status(400).json({ error: "message ontbreekt of is ongeldig" });
     }
 
-    // 3. Prompt opbouwen
-    const systemPrompt =
-      (systemHint?.trim() ||
-        `Je bent "Noukie", een vriendelijke studie-buddy. 
-Reageer kort, natuurlijk en in het Nederlands (max 2–3 zinnen).
-Bied géén standaard blokken of schema's aan, tenzij de gebruiker dat expliciet vraagt.`) +
-      (context ? `\n[Context JSON]\n${JSON.stringify(context).slice(0, 4000)}` : "");
+    // 3) System prompt
+    const systemPrompt = buildSystemPrompt(mode, systemHint, context);
 
-    // 4. OpenAI call
+    // 4) OpenAI call
     const resp = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      temperature: 0.5,
+      temperature: mode === "studeren" ? 0.3 : 0.6,
       messages: [
         { role: "system", content: systemPrompt },
         ...history.map((h: any) => ({
@@ -80,10 +124,12 @@ Bied géén standaard blokken of schema's aan, tenzij de gebruiker dat expliciet
 
     const reply =
       resp.choices?.[0]?.message?.content?.trim() ||
-      "Oké—vertel nog iets meer, dan denk ik mee.";
+      (mode === "studeren"
+        ? "Kun je aangeven welk stuk van de stof je lastig vindt? Dan leg ik het stap-voor-stap uit."
+        : "Oké—vertel nog iets meer, dan denk ik mee.");
 
-    // 5. Terugsturen
-    return res.status(200).json({ reply });
+    // 5) Response
+    return res.status(200).json({ reply, mode });
   } catch (e: any) {
     console.error("chat error", e);
     return res
