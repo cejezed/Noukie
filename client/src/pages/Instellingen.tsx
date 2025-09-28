@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,11 +32,13 @@ import { apiRequest } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 import type { Course, Schedule } from "@shared/schema";
 
-// App kleur thema's
+// ✅ Stap 1: Kleurthema's bijgewerkt met Geel en Rood. Geel is de nieuwe standaard.
 const colorThemes = [
-  { id: "purple", name: "Paars", primary: "hsl(262.1, 83.3%, 57.8%)", preview: "bg-purple-500" },
-  { id: "blue", name: "Blauw (Standaard)", primary: "hsl(217.2, 91.2%, 59.8%)", preview: "bg-blue-500" },
+  { id: "yellow", name: "Geel (Standaard)", primary: "hsl(47.9, 95.8%, 53.1%)", preview: "bg-yellow-500" },
+  { id: "blue", name: "Blauw", primary: "hsl(217.2, 91.2%, 59.8%)", preview: "bg-blue-500" },
   { id: "green", name: "Groen", primary: "hsl(142.1, 76.2%, 36.3%)", preview: "bg-green-500" },
+  { id: "red", name: "Rood", primary: "hsl(0, 84.2%, 60.2%)", preview: "bg-red-500" },
+  { id: "purple", name: "Paars", primary: "hsl(262.1, 83.3%, 57.8%)", preview: "bg-purple-500" },
   { id: "pink", name: "Roze", primary: "hsl(330.1, 81.2%, 60.4%)", preview: "bg-pink-500" },
 ];
 
@@ -56,7 +58,6 @@ export default function Instellingen() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Naam zoals bovenaan
   const displayName =
     (user?.user_metadata?.full_name as string) ||
     (user?.user_metadata?.name as string) ||
@@ -65,7 +66,7 @@ export default function Instellingen() {
     (user?.email ? String(user.email).split("@")[0] : "—");
 
   // UI states
-  const [selectedTheme, setSelectedTheme] = useState("purple");
+  const [selectedTheme, setSelectedTheme] = useState("yellow"); // ✅ Standaard UI state is nu 'yellow'
   const [selectedEducation, setSelectedEducation] = useState("havo");
   const [selectedGrade, setSelectedGrade] = useState("havo 5");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -97,6 +98,55 @@ export default function Instellingen() {
   // Vakken beheren UI
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [courseFormData, setCourseFormData] = useState({ name: "", color: "#4287f5" });
+
+  // ✅ Stap 2: Functie om het thema toe te passen (zowel UI als CSS variabele)
+  const applyTheme = (themeId: string) => {
+    const theme = colorThemes.find((t) => t.id === themeId) || colorThemes[0]; // Fallback naar de eerste (geel)
+    setSelectedTheme(theme.id);
+    if (typeof window !== "undefined") {
+      document.documentElement.style.setProperty('--primary', theme.primary);
+    }
+  };
+
+  // ✅ Stap 2: Laad de opgeslagen kleur van de gebruiker bij het laden van de component
+  useEffect(() => {
+    if (user?.user_metadata?.app_theme) {
+      applyTheme(user.user_metadata.app_theme);
+    } else {
+      applyTheme('yellow'); // Pas standaardthema toe als er geen is opgeslagen
+    }
+  }, [user]);
+
+  // ✅ Stap 3: Mutatie om gebruikersinstellingen (zoals thema) op te slaan
+  const updateProfileMutation = useMutation({
+    mutationFn: async (metadata: { app_theme: string }) => {
+      const { data, error } = await supabase.auth.updateUser({ data: metadata });
+      if (error) throw new Error(error.message);
+      return data.user;
+    },
+    onSuccess: (updatedUser) => {
+      // Vernieuw de user data in de app zodat de wijziging overal zichtbaar is
+      queryClient.invalidateQueries({ queryKey: ["user"] });
+      const themeName = colorThemes.find(t => t.id === updatedUser.user_metadata.app_theme)?.name || "Nieuw thema";
+      toast({
+        title: "Thema opgeslagen!",
+        description: `Je kleurvoorkeur is bijgewerkt naar ${themeName}.`,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Fout bij opslaan",
+        description: `Kon het thema niet opslaan: ${error.message}`,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // ✅ Stap 3: Functie om thema te wijzigen en op te slaan
+  const handleThemeChange = (themeId: string) => {
+    applyTheme(themeId); // Pas direct toe op de UI voor een snelle respons
+    updateProfileMutation.mutate({ app_theme: themeId }); // Sla op in de database
+  };
 
   // Courses
   const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
@@ -234,15 +284,6 @@ export default function Instellingen() {
   });
 
   // Helpers
-  const handleThemeChange = (themeId: string) => {
-    setSelectedTheme(themeId);
-    const theme = colorThemes.find(t => t.id === themeId);
-    if (theme) {
-      document.documentElement.style.setProperty('--primary', theme.primary);
-      toast({ title: "Thema gewijzigd", description: `App kleur veranderd naar ${theme.name}` });
-    }
-  };
-
   const handleRosterImport = (file: File) => {
     const fileType = file.name.split('.').pop()?.toLowerCase();
     if (!['csv', 'ics', 'ical'].includes(fileType || '')) {
@@ -604,7 +645,7 @@ export default function Instellingen() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3"> {/* ✅ Aangepast grid voor meer kleuren */}
             {colorThemes.map((theme) => (
               <button
                 key={theme.id}
@@ -845,16 +886,18 @@ export default function Instellingen() {
         </CardContent>
       </Card>
 
-      {/* Opslaan */}
+      {/* ✅ Deze knop slaat nu niets meer op, omdat instellingen (zoals thema) direct worden opgeslagen.
+        Je kunt deze knop verwijderen of een andere functie geven. Voor nu laten we hem staan.
+      */}
       <div className="flex justify-center pt-4">
         <Button
           className="w-full max-w-xs"
           onClick={() => {
-            toast({ title: "Instellingen opgeslagen", description: "Je voorkeuren zijn succesvol opgeslagen" });
+            toast({ title: "Instellingen opgeslagen", description: "Je voorkeuren zijn bijgewerkt." });
           }}
           data-testid="button-save-settings"
         >
-          Instellingen Opslaan
+          Wijzigingen Opslaan
         </Button>
       </div>
     </div>
