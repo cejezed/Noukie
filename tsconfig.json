@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "include": ["client/src/**/*", "shared/**/*", "server/**/*"],
   "exclude": ["node_modules", "build", "dist", "**/*.test.ts"],
@@ -19,5 +20,15 @@
       "@/*": ["./client/src/*"],
       "@shared/*": ["./shared/*"]
     }
+=======
+// E:\Noukie\tsconfig.json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["client/src/*"]   // ← laat TS dezelfde alias snappen
+    },
+    // ... de rest blijft zoals het was
+>>>>>>> voice-chat
   }
 }

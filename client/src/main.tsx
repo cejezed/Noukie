@@ -1,3 +1,7 @@
+<<<<<<< HEAD
+=======
+;(window as any).__ENV = import.meta.env
+>>>>>>> voice-chat
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
