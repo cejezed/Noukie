@@ -582,8 +582,4 @@ function RewardsPanel({
       </div>
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> voice-chat

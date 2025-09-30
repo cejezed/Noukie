@@ -902,8 +902,4 @@ export default function Instellingen() {
       </div>
     </div>
   );
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> voice-chat
