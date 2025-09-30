@@ -1,0 +1,10 @@
+// E:\Noukie\tsconfig.json
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["client/src/*"]   // ← laat TS dezelfde alias snappen
+    },
+    // ... de rest blijft zoals het was
+  }
+}

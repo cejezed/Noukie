@@ -1,0 +1,116 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(210, 40%, 98%);
+  --foreground: hsl(222.2, 84%, 4.9%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(222.2, 84%, 4.9%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(222.2, 84%, 4.9%);
+  --primary: hsl(217.2, 91.2%, 59.8%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --secondary: hsl(210, 40%, 96%);
+  --secondary-foreground: hsl(222.2, 84%, 4.9%);
+  --muted: hsl(210, 40%, 96%);
+  --muted-foreground: hsl(215.4, 16.3%, 46.9%);
+  --accent: hsl(45.4, 93.4%, 47.5%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(214.3, 31.8%, 91.4%);
+  --input: hsl(214.3, 31.8%, 91.4%);
+  --ring: hsl(217.2, 91.2%, 59.8%);
+  --radius: 0.75rem;
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --shadow-2xs: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --shadow-xs: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --shadow-sm: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00), 0px 1px 2px -1px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --shadow: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00), 0px 1px 2px -1px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --shadow-md: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00), 0px 2px 4px -1px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --shadow-lg: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00), 0px 4px 6px -1px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --shadow-xl: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00), 0px 8px 10px -1px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --shadow-2xl: 0px 2px 0px 0px hsl(217.2, 91.2%, 59.8%, 0.00);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+}
+
+.dark {
+  --background: hsl(0, 0%, 0%);
+  --foreground: hsl(200, 6.6667%, 91.1765%);
+  --card: hsl(228, 9.8039%, 10%);
+  --card-foreground: hsl(0, 0%, 85.0980%);
+  --popover: hsl(0, 0%, 0%);
+  --popover-foreground: hsl(200, 6.6667%, 91.1765%);
+  --primary: hsl(217.2, 91.2%, 59.8%);
+  --primary-foreground: hsl(210, 40%, 98%);
+  --secondary: hsl(195, 15.3846%, 94.9020%);
+  --secondary-foreground: hsl(222.2, 84%, 4.9%);
+  --muted: hsl(0, 0%, 9.4118%);
+  --muted-foreground: hsl(215.4, 16.3%, 46.9%);
+  --accent: hsl(45.4, 93.4%, 47.5%);
+  --accent-foreground: hsl(210, 40%, 98%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(210, 40%, 98%);
+  --border: hsl(214.3, 31.8%, 91.4%);
+  --input: hsl(214.3, 31.8%, 91.4%);
+  --ring: hsl(217.2, 91.2%, 59.8%);
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  .voice-button {
+    background: linear-gradient(135deg, var(--primary) 0%, hsl(217.2, 91.2%, 45%) 100%);
+    box-shadow: 0 4px 20px hsla(217.2, 91.2%, 59.8%, 0.3);
+  }
+
+  .voice-button:active {
+    transform: scale(0.95);
+    box-shadow: 0 2px 10px hsla(217.2, 91.2%, 59.8%, 0.4);
+  }
+
+  .task-card {
+    transition: all 0.2s ease;
+  }
+
+  .task-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px hsla(0, 0%, 0%, 0.1);
+  }
+
+  .recording-pulse {
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .tab-indicator {
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--primary);
+    border-radius: 2px 2px 0 0;
+  }
+}
