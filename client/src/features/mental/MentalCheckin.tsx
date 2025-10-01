@@ -225,10 +225,10 @@ export default function MentalCheckin({
 
         // Check if we need to sync points with checkins (one-time migration)
         const needsSync = localStorage.getItem(`pointsSynced:${userId}`) !== 'true';
-        
+
         if (needsSync) {
           console.log('🔄 Syncing points with existing checkins...');
-          
+
           // Tel alle check-ins in de database
           const { data: checkins, error: checkinsError } = await supabase
             .from('checkins')
@@ -238,14 +238,14 @@ export default function MentalCheckin({
           if (!checkinsError && checkins) {
             const totalCheckins = checkins.length;
             console.log(`📊 Found ${totalCheckins} existing check-ins`);
-            
+
             // Update punten naar aantal check-ins
             await savePointsToDatabase(userId, totalCheckins);
             setPoints(totalCheckins);
-            
+
             // Markeer als gesynchroniseerd
             localStorage.setItem(`pointsSynced:${userId}`, 'true');
-            
+
             console.log(`✅ Points synced: ${totalCheckins} points`);
           }
         } else {
@@ -276,7 +276,7 @@ export default function MentalCheckin({
       const today = startOfLocalDay(new Date());
       const lastReconStr = localStorage.getItem(reconKey);
       const lastRecon = parseYyyyMmDd(lastReconStr) || addDays(today, -7); // Maximaal 7 dagen terug kijken
-      
+
       let cur = startOfLocalDay(addDays(lastRecon, 1));
       let missedDays = 0;
 
@@ -299,18 +299,18 @@ export default function MentalCheckin({
       // Trek punten af voor gemiste dagen
       if (missedDays > 0) {
         console.log(`${missedDays} gemiste dag(en) gedetecteerd, punten aftrekken...`);
-        
+
         const currentPoints = await loadPointsFromDatabase(userId);
-        const newPoints = allowNegative 
-          ? currentPoints - missedDays 
+        const newPoints = allowNegative
+          ? currentPoints - missedDays
           : Math.max(0, currentPoints - missedDays);
-        
+
         await savePointsToDatabase(userId, newPoints);
         setPoints(newPoints);
-        
+
         // Toon melding aan gebruiker
         setOkMsg(`Let op: ${missedDays} punt(en) afgetrokken voor gemiste dag(en). Vul dagelijks in om punten te blijven verdienen! 📅`);
-        
+
         // Verwijder melding na 5 seconden
         setTimeout(() => setOkMsg(null), 5000);
       }
@@ -357,7 +357,7 @@ export default function MentalCheckin({
         const newPoints = currentPoints + 1;
         await savePointsToDatabase(userId, newPoints);
         setPoints(newPoints); // Update UI direct
-        
+
         setOkMsg("Bedankt! Je check-in is opgeslagen en je hebt een punt verdiend! ✨");
       } else {
         setOkMsg("Je check-in is bijgewerkt. Je hebt vandaag al een punt verdiend. 🌟");

@@ -29,3 +29,4 @@ client/.env.*
 uploads/
 dist/
 >>>>>>> voice-chat
+.vercel
