@@ -103,6 +103,7 @@
     "ws": "^8.18.0",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0",
+    "@radix-ui/react-tooltip": "^1.1.6",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
