@@ -313,7 +313,7 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
               {sending ? "Versturen…" : "Stuur"}
             </Button>
           </div><div className="text-sm text-muted-foreground mt-2">
-  Zoek je hulp bij leren of studeren?  
+  Zoek je hulp bij leren of studeren?
   <a
     href="/LeerChat"
     className="text-blue-600 hover:underline ml-1"

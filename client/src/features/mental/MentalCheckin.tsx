@@ -219,7 +219,7 @@ export default function MentalCheckin({
         // De nieuwe, correcte functies worden hier aangeroepen.
         const dbPoints = await loadPointsFromDatabase(userId);
         setPoints(dbPoints);
-        
+
         const dbRewards = await loadRewardsFromDatabase(userId);
         setRedeemed(dbRewards);
       } catch (error) {
@@ -287,7 +287,7 @@ export default function MentalCheckin({
         medication,
         positives: pText ? [{ category: POSITIVE_PROMPTS[pIdx].category, text: pText }] : [],
       };
-      
+
       await saveToSupabase(payload, userId);
 
       if (!hasAlreadyCheckedIn) {
@@ -361,7 +361,7 @@ export default function MentalCheckin({
 
   const nextTier = rewardTiers.find(t => points < t.points) || null;
   const progressToNext = nextTier ? Math.min(1, points / nextTier.points) : 1;
-  
+
   // De rest van het bestand (de JSX voor de UI) is ongewijzigd en kan hieronder.
   // ... (de volledige return (...) met JSX blijft hier hetzelfde als in jouw originele code)
   if (submitted) {
