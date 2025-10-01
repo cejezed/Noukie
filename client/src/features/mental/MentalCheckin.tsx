@@ -55,7 +55,6 @@ function parseYyyyMmDd(s?: string | null): Date | null {
 
 // ---- Database helpers --------------------------------------------------------
 
-// Deze functie was al correct.
 async function saveToSupabase(payload: any, userId: string) {
   const { error } = await supabase
     .from("checkins")
@@ -87,7 +86,6 @@ async function saveToSupabase(payload: any, userId: string) {
   }
 }
 
-// Deze functies voor punten waren al correct.
 async function savePointsToDatabase(userId: string, points: number) {
   const { error } = await supabase
     .from('user_points')
@@ -106,20 +104,16 @@ async function loadPointsFromDatabase(userId: string): Promise<number> {
     .eq('user_id', userId)
     .single();
 
-  if (error && error.code !== 'PGRST116') { // 'PGRST116' = no rows found, which is not an error here.
+  if (error && error.code !== 'PGRST116') {
     console.error('Error loading points:', error);
     return 0;
   }
   return data?.points || 0;
 }
 
-
-// ---- ✅ VERNIEUWDE FUNCTIES VOOR BELONINGEN ----
-
-// Sla een ENKELE geclaimde beloning op in de nieuwe tabel.
 async function saveClaimedRewardToDatabase(userId: string, reward: { label: string; points: number }) {
   const { error } = await supabase
-    .from('claimed_rewards') // <-- Gebruikt de nieuwe tabel
+    .from('claimed_rewards')
     .insert({
       user_id: userId,
       reward_label: reward.label,
@@ -132,10 +126,9 @@ async function saveClaimedRewardToDatabase(userId: string, reward: { label: stri
   }
 }
 
-// Laad alle geclaimde beloningen voor een gebruiker uit de nieuwe tabel.
 async function loadRewardsFromDatabase(userId: string): Promise<{ label: string; points: number; dateIso: string }[]> {
   const { data, error } = await supabase
-    .from('claimed_rewards') // <-- Gebruikt de nieuwe tabel
+    .from('claimed_rewards')
     .select('reward_label, points_cost, claimed_at')
     .eq('user_id', userId)
     .order('claimed_at', { ascending: false });
@@ -145,7 +138,6 @@ async function loadRewardsFromDatabase(userId: string): Promise<{ label: string;
     return [];
   }
 
-  // Zet de database resultaten om naar het formaat dat de component verwacht.
   return data.map(r => ({
     label: r.reward_label,
     points: r.points_cost,
@@ -153,7 +145,6 @@ async function loadRewardsFromDatabase(userId: string): Promise<{ label: string;
   }));
 }
 
-// Deze functie was al correct.
 async function checkinExistsToday(userId: string): Promise<boolean> {
   const todayStr = yyyyMmDd(new Date());
   const { data, error } = await supabase
@@ -168,6 +159,22 @@ async function checkinExistsToday(userId: string): Promise<boolean> {
     return false;
   }
   return data && data.length > 0;
+}
+
+async function getCheckinDates(userId: string, startDate: string, endDate: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('checkins')
+    .select('date')
+    .eq('user_id', userId)
+    .gte('date', startDate)
+    .lt('date', endDate);
+
+  if (error) {
+    console.error('Error fetching checkin dates:', error);
+    return new Set();
+  }
+
+  return new Set(data.map(row => row.date));
 }
 
 // -----------------------------------------------------------------------------
@@ -216,15 +223,41 @@ export default function MentalCheckin({
         const hasSubmittedToday = await checkinExistsToday(userId);
         setSubmitted(hasSubmittedToday);
 
-        // De nieuwe, correcte functies worden hier aangeroepen.
-        const dbPoints = await loadPointsFromDatabase(userId);
-        setPoints(dbPoints);
+        // Check if we need to sync points with checkins (one-time migration)
+        const needsSync = localStorage.getItem(`pointsSynced:${userId}`) !== 'true';
+        
+        if (needsSync) {
+          console.log('🔄 Syncing points with existing checkins...');
+          
+          // Tel alle check-ins in de database
+          const { data: checkins, error: checkinsError } = await supabase
+            .from('checkins')
+            .select('date')
+            .eq('user_id', userId);
+
+          if (!checkinsError && checkins) {
+            const totalCheckins = checkins.length;
+            console.log(`📊 Found ${totalCheckins} existing check-ins`);
+            
+            // Update punten naar aantal check-ins
+            await savePointsToDatabase(userId, totalCheckins);
+            setPoints(totalCheckins);
+            
+            // Markeer als gesynchroniseerd
+            localStorage.setItem(`pointsSynced:${userId}`, 'true');
+            
+            console.log(`✅ Points synced: ${totalCheckins} points`);
+          }
+        } else {
+          // Normale flow: laad punten uit database
+          const dbPoints = await loadPointsFromDatabase(userId);
+          setPoints(dbPoints);
+        }
 
         const dbRewards = await loadRewardsFromDatabase(userId);
         setRedeemed(dbRewards);
       } catch (error) {
         console.error('Error loading user data from DB, falling back to localStorage:', error);
-        // Fallback naar localStorage als DB faalt
         const localPoints = parseInt(localStorage.getItem(pointsKey) || '0');
         const localRewards = JSON.parse(localStorage.getItem(rewardsKey) || '[]');
         setPoints(localPoints);
@@ -237,29 +270,57 @@ export default function MentalCheckin({
 
   // Reconcile missed days -> decrement points per dag zonder checkin
   useEffect(() => {
-    const today = startOfLocalDay(new Date());
-    const lastRecon = parseYyyyMmDd(localStorage.getItem(reconKey)) || today;
-    let cur = startOfLocalDay(addDays(lastRecon, 1));
-    let decrements = 0;
+    const reconcileMissedDays = async () => {
+      if (!userId) return;
 
-    while (cur < today) {
-      const key = `mentalCheckin:${userId}:${yyyyMmDd(cur)}`;
-      const had = !!localStorage.getItem(key);
-      if (!had) decrements += 1;
-      cur = addDays(cur, 1);
-    }
+      const today = startOfLocalDay(new Date());
+      const lastReconStr = localStorage.getItem(reconKey);
+      const lastRecon = parseYyyyMmDd(lastReconStr) || addDays(today, -7); // Maximaal 7 dagen terug kijken
+      
+      let cur = startOfLocalDay(addDays(lastRecon, 1));
+      let missedDays = 0;
 
-    if (decrements > 0) {
-      setPoints((prev) => {
-        const next = allowNegative ? prev - decrements : Math.max(0, prev - decrements);
-        savePointsToDatabase(userId, next).catch((error) => {
-          console.error('Failed to save decremented points to database:', error);
-        });
-        return next;
-      });
-    }
-    localStorage.setItem(reconKey, yyyyMmDd(today));
-  }, [userId, reconKey, pointsKey, allowNegative]);
+      // Haal alle check-in datums op tussen lastRecon en vandaag
+      const checkinDates = await getCheckinDates(
+        userId,
+        yyyyMmDd(cur),
+        yyyyMmDd(today)
+      );
+
+      // Tel gemiste dagen
+      while (cur < today) {
+        const dateStr = yyyyMmDd(cur);
+        if (!checkinDates.has(dateStr)) {
+          missedDays += 1;
+        }
+        cur = addDays(cur, 1);
+      }
+
+      // Trek punten af voor gemiste dagen
+      if (missedDays > 0) {
+        console.log(`${missedDays} gemiste dag(en) gedetecteerd, punten aftrekken...`);
+        
+        const currentPoints = await loadPointsFromDatabase(userId);
+        const newPoints = allowNegative 
+          ? currentPoints - missedDays 
+          : Math.max(0, currentPoints - missedDays);
+        
+        await savePointsToDatabase(userId, newPoints);
+        setPoints(newPoints);
+        
+        // Toon melding aan gebruiker
+        setOkMsg(`Let op: ${missedDays} punt(en) afgetrokken voor gemiste dag(en). Vul dagelijks in om punten te blijven verdienen! 📅`);
+        
+        // Verwijder melding na 5 seconden
+        setTimeout(() => setOkMsg(null), 5000);
+      }
+
+      // Update laatste reconciliation datum
+      localStorage.setItem(reconKey, yyyyMmDd(today));
+    };
+
+    reconcileMissedDays();
+  }, [userId, reconKey, allowNegative]);
 
   const isComplete =
     mood !== null &&
@@ -291,14 +352,12 @@ export default function MentalCheckin({
       await saveToSupabase(payload, userId);
 
       if (!hasAlreadyCheckedIn) {
-        setPoints(prev => {
-          const next = prev + 1;
-          savePointsToDatabase(userId, next).catch((e) => {
-            console.error('Failed to save points after checkin:', e);
-            setError('Checkin opgeslagen, maar punten konden niet worden bijgewerkt.');
-          });
-          return next;
-        });
+        // Laad huidige punten uit database, voeg 1 toe, en sla op
+        const currentPoints = await loadPointsFromDatabase(userId);
+        const newPoints = currentPoints + 1;
+        await savePointsToDatabase(userId, newPoints);
+        setPoints(newPoints); // Update UI direct
+        
         setOkMsg("Bedankt! Je check-in is opgeslagen en je hebt een punt verdiend! ✨");
       } else {
         setOkMsg("Je check-in is bijgewerkt. Je hebt vandaag al een punt verdiend. 🌟");
@@ -320,12 +379,10 @@ export default function MentalCheckin({
       if (helpErr) throw helpErr;
       alert("We hebben je melding opgeslagen.");
     } catch (e) {
-      // Fallback naar webhook...
       alert("Melding opslaan mislukte.");
     }
   }
 
-  // ---- ✅ VERNIEUWDE `claim` FUNCTIE ----
   async function claim(tier: RewardTier) {
     if (!canClaim(tier)) return;
     if (!confirm(`Beloning claimen: ${tier.label} voor ${tier.points} punten?`)) return;
@@ -339,14 +396,10 @@ export default function MentalCheckin({
       setRedeemed(prev => [...prev, newRecord]);
 
       // Stap 3: Werk de punten van de gebruiker bij.
-      setPoints(prev => {
-        const next = allowNegative ? prev - tier.points : Math.max(0, prev - tier.points);
-        savePointsToDatabase(userId, next).catch(error => {
-          console.error('Failed to save points after reward claim:', error);
-          // Optioneel: implementeer logica om de transactie terug te draaien.
-        });
-        return next;
-      });
+      const currentPoints = await loadPointsFromDatabase(userId);
+      const newPoints = allowNegative ? currentPoints - tier.points : Math.max(0, currentPoints - tier.points);
+      await savePointsToDatabase(userId, newPoints);
+      setPoints(newPoints);
 
       alert(`Gefeliciteerd! Je hebt '${tier.label}' geclaimd.`);
     } catch (error) {
@@ -362,8 +415,6 @@ export default function MentalCheckin({
   const nextTier = rewardTiers.find(t => points < t.points) || null;
   const progressToNext = nextTier ? Math.min(1, points / nextTier.points) : 1;
 
-  // De rest van het bestand (de JSX voor de UI) is ongewijzigd en kan hieronder.
-  // ... (de volledige return (...) met JSX blijft hier hetzelfde als in jouw originele code)
   if (submitted) {
     return (
       <div className="rounded-2xl shadow p-4 bg-white space-y-4">
