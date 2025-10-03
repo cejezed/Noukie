@@ -16,7 +16,6 @@ export default function VoiceButton({ onTranscript, lang = "nl" }: Props) {
   const chunks = useRef<BlobPart[]>([]);
 
   useEffect(() => {
-    // Check browser capabilities
     const hasGetUserMedia = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const hasMediaRecorder = typeof MediaRecorder !== 'undefined';
     
@@ -38,19 +37,29 @@ export default function VoiceButton({ onTranscript, lang = "nl" }: Props) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('✅ Mic access granted');
       
-      // Check supported MIME types
       const mimeTypes = [
-        'audio/webm',
         'audio/webm;codecs=opus',
-        'audio/ogg;codecs=opus',
+        'audio/ogg;codecs=opus', 
+        'audio/webm',
         'audio/mp4',
+        'audio/wav',
+        'audio/mpeg',
       ];
       
       let selectedMime = 'audio/webm';
+      let filename = 'voice.webm';
+      
       for (const mime of mimeTypes) {
         if (MediaRecorder.isTypeSupported(mime)) {
           selectedMime = mime;
           console.log(`✅ Using MIME type: ${mime}`);
+          
+          if (selectedMime.includes('ogg')) filename = 'voice.ogg';
+          else if (selectedMime.includes('mp4')) filename = 'voice.mp4';
+          else if (selectedMime.includes('wav')) filename = 'voice.wav';
+          else if (selectedMime.includes('mpeg')) filename = 'voice.mp3';
+          else filename = 'voice.webm';
+          
           break;
         }
       }
@@ -71,14 +80,14 @@ export default function VoiceButton({ onTranscript, lang = "nl" }: Props) {
         try {
           setBusy(true);
           const blob = new Blob(chunks.current, { type: selectedMime });
-          console.log(`📤 Blob size: ${blob.size} bytes`);
+          console.log(`📤 Blob size: ${blob.size} bytes, filename: ${filename}`);
           
           if (blob.size === 0) {
             throw new Error('Geen audio opgenomen');
           }
           
           const fd = new FormData();
-          fd.append("audio", blob, "voice.webm");
+          fd.append("audio", blob, filename);
           fd.append("lang", lang);
 
           const base = (import.meta.env.VITE_API_BASE as string) || "/api";
