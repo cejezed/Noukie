@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import OpenAI from 'openai';
 import { createServer, type Server } from "http";
 import multer from "multer";
 import fs from "fs";
@@ -43,6 +44,10 @@ function parseRelativeDateTimeNL(inputRaw: string, now = new Date()) {
       date = startOfDay(addDays(now, diff)); break;
     }
   }
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
 
   const dmLong = input.match(/(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?/);
   const dmShort = input.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
@@ -123,7 +128,10 @@ async function listChatMessages(userId: string, limit = 50): Promise<ChatMsg[]> 
 }
 
 
-const upload = multer({ dest: "uploads/" });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 } 
+});
 
 /** ===== Helpers for schedule responses ===== */
 function camelSchedule(s: any) {
@@ -318,17 +326,81 @@ Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange se
   });
 
   /** ========= ASR / OCR / EXPLAIN ========= */
-  app.post("/api/asr", upload.single("audio"), async (req, res) => {
-    try {
-      if (!req.file) return res.status(400).json({ error: "No audio file provided" });
-      const { text } = await transcribeAudio(req.file.path);
-      fs.unlinkSync(req.file.path);
-      res.json({ transcript: text });
-    } catch (error) {
-      console.error("ASR error:", error);
-      res.status(500).json({ error: "Failed to transcribe audio" });
+// Vervang in server/routes.ts de bestaande app.post("/api/asr", ...) met dit:
+
+import OpenAI from 'openai';
+
+// Voeg dit toe bovenaan je routes.ts (bij je andere imports)
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+// Vervang je bestaande /api/asr endpoint met deze versie:
+app.post("/api/asr", upload.single("audio"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "No audio file provided" });
     }
-  });
+    
+    const lang = req.body.lang || 'nl';
+    console.log(`🎤 Transcribing audio (${lang}), size: ${req.file.size} bytes`);
+    
+    let transcription;
+    
+    // Vercel/serverless: gebruik buffer
+    if (req.file.buffer) {
+      const file = new File(
+        [req.file.buffer], 
+        'audio.webm',
+        { type: req.file.mimetype || 'audio/webm' }
+      );
+      
+      transcription = await openai.audio.transcriptions.create({
+        file: file,
+        model: 'whisper-1',
+        language: lang,
+        response_format: 'json'
+      });
+    } 
+    // Local development: gebruik file path
+    else if (req.file.path) {
+      const fileStream = fs.createReadStream(req.file.path);
+      
+      transcription = await openai.audio.transcriptions.create({
+        file: fileStream,
+        model: 'whisper-1',
+        language: lang,
+        response_format: 'json'
+      });
+      
+      // Cleanup temp file
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (cleanupError) {
+        console.warn('Could not delete temp file:', cleanupError);
+      }
+    } 
+    else {
+      return res.status(400).json({ error: 'Invalid file upload' });
+    }
+
+    console.log(`✅ Transcription: "${transcription.text}"`);
+
+    // Return in beide formaten voor backwards compatibility
+    res.json({ 
+      transcript: transcription.text,
+      text: transcription.text,
+      lang: lang 
+    });
+
+  } catch (error: any) {
+    console.error('❌ ASR error:', error);
+    res.status(500).json({ 
+      error: 'Transcriptie mislukt',
+      details: error?.message 
+    });
+  }
+});
 
   app.post("/api/plan", async (req, res) => {
     try {
