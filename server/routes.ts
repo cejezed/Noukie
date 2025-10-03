@@ -16,12 +16,17 @@ import {
   signIn as supabaseSignIn,
   signOut as supabaseSignOut,
 } from "./services/supabase";
-// DISABLED: Google Calendar imports
-// import { GoogleCalendarService } from "./googleCalendar";
-// import { calendarImporter } from "./calendarImport";
-// import { cronManager } from "./cronJobs";
 
-// === Coach helpers (NL datum/duur parsing + simpele message store fallback) ===
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+});
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 25 * 1024 * 1024 } 
+});
+
+// === Coach helpers ===
 const WD = ["zondag","maandag","dinsdag","woensdag","donderdag","vrijdag","zaterdag"];
 const MONTHS = ["januari","februari","maart","april","mei","juni","juli","augustus","september","oktober","november","december"];
 
@@ -44,10 +49,6 @@ function parseRelativeDateTimeNL(inputRaw: string, now = new Date()) {
       date = startOfDay(addDays(now, diff)); break;
     }
   }
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
 
   const dmLong = input.match(/(\d{1,2})\s+([a-z]+)(?:\s+(\d{4}))?/);
   const dmShort = input.match(/(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?/);
@@ -101,8 +102,6 @@ function extractTaskCandidates(text: string): string[] {
   return picked.length ? picked : [text];
 }
 
-// In-memory fallback voor chat als storage nog geen chat-methodes heeft.
-// (wordt geleegd bij server-restart; prima voor nu)
 type ChatMsg = { role: "user"|"assistant"; content: string; created_at: string };
 const chatMem = new Map<string, ChatMsg[]>();
 
@@ -116,24 +115,17 @@ async function saveChatMessage(userId: string, role: "user"|"assistant", content
   arr.push({ role, content, created_at: new Date().toISOString() });
   chatMem.set(userId, arr);
 }
+
 async function listChatMessages(userId: string, limit = 50): Promise<ChatMsg[]> {
   const s = (storage as any);
   if (s.getChatMessagesByUserId) {
     const rows = await s.getChatMessagesByUserId(userId, limit);
-    // verwacht shape: {role, content, created_at}
     return rows;
   }
   const arr = chatMem.get(userId) ?? [];
   return arr.slice(-limit);
 }
 
-
-const upload = multer({ 
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } 
-});
-
-/** ===== Helpers for schedule responses ===== */
 function camelSchedule(s: any) {
   if (!s) return s;
   return {
@@ -147,18 +139,14 @@ function camelSchedule(s: any) {
   };
 }
 
-/**
- * Returns true if the [startISO, endISO] window contains at least one occurrence
- * of the given weekday (1=Mon..7=Sun). Caps at 35 iterations for safety.
- */
 function datesHaveWeekdayInRange(startISO: string, endISO: string, weekday1to7: number) {
   const start = new Date(startISO);
   const end = new Date(endISO);
   let iter = new Date(start);
 
   for (let i = 0; i < 35 && iter <= end; i++) {
-    let jsDow = iter.getDay(); // 0..6 (0=Sun)
-    if (jsDow === 0) jsDow = 7; // 7=Sun
+    let jsDow = iter.getDay();
+    if (jsDow === 0) jsDow = 7;
     if (jsDow === weekday1to7) return true;
     iter.setDate(iter.getDate() + 1);
   }
@@ -166,13 +154,17 @@ function datesHaveWeekdayInRange(startISO: string, endISO: string, weekday1to7: 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-    /** ========= COACH CHAT ========= */
-  // Ophalen van geschiedenis
+  
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "OK", timestamp: new Date().toISOString() });
+  });
+
+  /** ========= COACH CHAT ========= */
   app.get("/api/chat/history", async (req, res) => {
     try {
       const userId = (req.query.userId as string) || (req.query.userid as string);
       if (!userId) return res.status(400).json({ error: "Missing userId" });
-
       const msgs = await listChatMessages(userId, 50);
       res.json({ messages: msgs });
     } catch (error) {
@@ -181,24 +173,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Bericht sturen + (optioneel) taken aanmaken
   app.post("/api/chat/coach", async (req, res) => {
     try {
       const { userId, message } = req.body || {};
       if (!userId || !message) return res.status(400).json({ error: "Missing userId or message" });
 
-      // 1) sla user-bericht op
       await saveChatMessage(userId, "user", message);
 
-      // 2) heuristiek: maak taken aan als tekst daar op duidt
       const shouldPlan = /\b(taak|taken|huiswerk|paragraaf|toets|leren|inplannen|plan|maken)\b/i.test(message);
       const created: any[] = [];
 
       if (shouldPlan) {
         const now = new Date();
         const candidates = extractTaskCandidates(message);
-
-        // (optioneel) eenvoudige course-match
         const courses = await storage.getCoursesByUserId(userId);
 
         for (const c of candidates) {
@@ -212,14 +199,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (hit) course_id = hit.id;
           }
 
-          // ruwe titel (simpel houden)
           const title = c.replace(/\s+/g, " ").trim();
 
           const task = await storage.createTask({
             user_id: userId,
             title: title || "Taak",
             status: "todo",
-            due_at: date,                 // Date object is ok; jouw storage accepteert Date bij createTask
+            due_at: date,
             course_id,
             est_minutes: est ?? 30,
             priority: 1,
@@ -230,19 +216,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      // 3) coach-antwoord
       const did = created.length;
-      const tail =
-        did > 0
-          ? `Ik heb ${did} ${did===1?"taak":"taken"} ingepland. Wil je ook een korte herhaaltaak toevoegen voor morgenavond?`
-          : `Zal ik dit vertalen naar concrete taken (met tijd en duur)? Bijvoorbeeld: “Morgen 19:00 wiskunde 3.2 oefenen (30 min)”.`;
+      const tail = did > 0
+        ? `Ik heb ${did} ${did===1?"taak":"taken"} ingepland. Wil je ook een korte herhaaltaak toevoegen voor morgenavond?`
+        : `Zal ik dit vertalen naar concrete taken (met tijd en duur)? Bijvoorbeeld: "Morgen 19:00 wiskunde 3.2 oefenen (30 min)".`;
 
-      const reply =
-`Fijn dat je dit deelt. Wat ging vandaag het lastigst?
-${tail}
-Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange sessies.`;
+      const reply = `Fijn dat je dit deelt. Wat ging vandaag het lastigst?\n${tail}\nTip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange sessies.`;
 
-      // 4) sla coach-bericht op
       await saveChatMessage(userId, "assistant", reply);
 
       res.json({ reply, created_count: did, created_tasks: created });
@@ -250,10 +230,6 @@ Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange se
       console.error("Chat coach error:", error);
       res.status(500).json({ error: "Failed to handle coach chat" });
     }
-  });
-// Health check
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "OK", timestamp: new Date().toISOString() });
   });
 
   /** ========= AUTH ========= */
@@ -266,14 +242,11 @@ Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange se
       }
 
       if (role === "student" && (!educationLevel || !grade)) {
-        return res
-          .status(400)
-          .json({ error: "Students must provide education level and grade" });
+        return res.status(400).json({ error: "Students must provide education level and grade" });
       }
 
       const supabaseResult = await supabaseSignUp(email, password, name, role);
 
-      // Create user in our database (best-effort)
       try {
         const userData = {
           id: supabaseResult.user?.id || `user-${Date.now()}`,
@@ -291,9 +264,7 @@ Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange se
       res.json(supabaseResult);
     } catch (error) {
       console.error("Signup error:", error);
-      res
-        .status(500)
-        .json({ error: (error as Error).message || "Failed to create account" });
+      res.status(500).json({ error: (error as Error).message || "Failed to create account" });
     }
   });
 
@@ -307,9 +278,7 @@ Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange se
       res.json(result);
     } catch (error) {
       console.error("Signin error:", error);
-      res
-        .status(500)
-        .json({ error: (error as Error).message || "Failed to sign in" });
+      res.status(500).json({ error: (error as Error).message || "Failed to sign in" });
     }
   });
 
@@ -319,88 +288,74 @@ Tip: blokken van 25–30 minuten met korte pauzes werken vaak beter dan lange se
       res.json({ success: true });
     } catch (error) {
       console.error("Signout error:", error);
-      res
-        .status(500)
-        .json({ error: (error as Error).message || "Failed to sign out" });
+      res.status(500).json({ error: (error as Error).message || "Failed to sign out" });
     }
   });
 
-  /** ========= ASR / OCR / EXPLAIN ========= */
-// Vervang in server/routes.ts de bestaande app.post("/api/asr", ...) met dit:
-
-import OpenAI from 'openai';
-
-// Voeg dit toe bovenaan je routes.ts (bij je andere imports)
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
-
-// Vervang je bestaande /api/asr endpoint met deze versie:
-app.post("/api/asr", upload.single("audio"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "No audio file provided" });
-    }
-    
-    const lang = req.body.lang || 'nl';
-    console.log(`🎤 Transcribing audio (${lang}), size: ${req.file.size} bytes`);
-    
-    let transcription;
-    
-    // Vercel/serverless: gebruik buffer
-    if (req.file.buffer) {
-      const file = new File(
-        [req.file.buffer], 
-        'audio.webm',
-        { type: req.file.mimetype || 'audio/webm' }
-      );
-      
-      transcription = await openai.audio.transcriptions.create({
-        file: file,
-        model: 'whisper-1',
-        language: lang,
-        response_format: 'json'
-      });
-    } 
-    // Local development: gebruik file path
-    else if (req.file.path) {
-      const fileStream = fs.createReadStream(req.file.path);
-      
-      transcription = await openai.audio.transcriptions.create({
-        file: fileStream,
-        model: 'whisper-1',
-        language: lang,
-        response_format: 'json'
-      });
-      
-      // Cleanup temp file
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (cleanupError) {
-        console.warn('Could not delete temp file:', cleanupError);
+  /** ========= ASR ========= */
+  app.post("/api/asr", upload.single("audio"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No audio file provided" });
       }
-    } 
-    else {
-      return res.status(400).json({ error: 'Invalid file upload' });
+      
+      const lang = req.body.lang || 'nl';
+      console.log(`🎤 Transcribing audio (${lang}), size: ${req.file.size} bytes`);
+      
+      let transcription;
+      
+      if (req.file.buffer) {
+        const file = new File(
+          [req.file.buffer], 
+          'audio.webm',
+          { type: req.file.mimetype || 'audio/webm' }
+        );
+        
+        transcription = await openai.audio.transcriptions.create({
+          file: file,
+          model: 'whisper-1',
+          language: lang,
+          response_format: 'json'
+        });
+      } 
+      else if (req.file.path) {
+        const fileStream = fs.createReadStream(req.file.path);
+        
+        transcription = await openai.audio.transcriptions.create({
+          file: fileStream,
+          model: 'whisper-1',
+          language: lang,
+          response_format: 'json'
+        });
+        
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (cleanupError) {
+          console.warn('Could not delete temp file:', cleanupError);
+        }
+      } 
+      else {
+        return res.status(400).json({ error: 'Invalid file upload' });
+      }
+
+      console.log(`✅ Transcription: "${transcription.text}"`);
+
+      res.json({ 
+        transcript: transcription.text,
+        text: transcription.text,
+        lang: lang 
+      });
+
+    } catch (error: any) {
+      console.error('❌ ASR error:', error);
+      res.status(500).json({ 
+        error: 'Transcriptie mislukt',
+        details: error?.message 
+      });
     }
+  });
 
-    console.log(`✅ Transcription: "${transcription.text}"`);
 
-    // Return in beide formaten voor backwards compatibility
-    res.json({ 
-      transcript: transcription.text,
-      text: transcription.text,
-      lang: lang 
-    });
-
-  } catch (error: any) {
-    console.error('❌ ASR error:', error);
-    res.status(500).json({ 
-      error: 'Transcriptie mislukt',
-      details: error?.message 
-    });
-  }
-});
 
   app.post("/api/plan", async (req, res) => {
     try {
