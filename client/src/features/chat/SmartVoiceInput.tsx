@@ -8,9 +8,7 @@ function isMobile() {
 }
 
 function supportsWebSpeech() {
-  if (isMobile()) return false;
-  return typeof (window as any).webkitSpeechRecognition !== "undefined" ||
-         typeof (window as any).SpeechRecognition !== "undefined";
+  return false; // Forceer server transcription voor alles
 }
 
 type Props = {
