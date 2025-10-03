@@ -37,14 +37,14 @@ export default function VoiceButton({ onTranscript, lang = "nl" }: Props) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       console.log('✅ Mic access granted');
       
-      const mimeTypes = [
-        'audio/webm;codecs=opus',
-        'audio/ogg;codecs=opus', 
-        'audio/webm',
-        'audio/mp4',
-        'audio/wav',
-        'audio/mpeg',
-      ];
+    const mimeTypes = [
+  'audio/mp4',           // Probeer eerst MP4 (beste compatibiliteit)
+  'audio/mpeg',          // MP3
+  'audio/webm;codecs=opus',
+  'audio/ogg;codecs=opus',
+  'audio/webm',
+  'audio/wav',
+];
       
       let selectedMime = 'audio/webm';
       let filename = 'voice.webm';
