@@ -1,15 +1,6 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
-/**
- * MentalCheckin with Rewards (Supabase variant)
- * ---------------------------------------------
- * - +1 punt bij invullen (max 1 per dag)
- * - −1 punt per overgeslagen dag (bij eerstvolgend bezoek verrekend)
- * - Beloningen claimen uit database punten
- * - Slaat check-ins/positives/punten op in Supabase (RLS: eigen data)
- */
-
 export type PositiveCategory =
   | "FUN_WITH_SOMEONE"
   | "PROUD"
@@ -84,6 +75,19 @@ async function saveToSupabase(payload: any, userId: string) {
     const { error: ep } = await supabase.from("positives").insert(rows);
     if (ep) throw ep;
   }
+}
+
+async function getCheckinCount(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('checkins')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error counting checkins:', error);
+    return 0;
+  }
+  return count || 0;
 }
 
 async function savePointsToDatabase(userId: string, points: number) {
@@ -177,6 +181,21 @@ async function getCheckinDates(userId: string, startDate: string, endDate: strin
   return new Set(data.map(row => row.date));
 }
 
+// Synchroniseer punten met aantal check-ins in database
+async function syncPointsWithCheckins(userId: string): Promise<number> {
+  const totalCheckins = await getCheckinCount(userId);
+  const dbRewards = await loadRewardsFromDatabase(userId);
+  
+  // Trek totaal geclaimde punten af
+  const totalClaimedPoints = dbRewards.reduce((sum, r) => sum + r.points, 0);
+  const actualPoints = Math.max(0, totalCheckins - totalClaimedPoints);
+  
+  console.log(`📊 Sync: ${totalCheckins} check-ins, ${totalClaimedPoints} claimed → ${actualPoints} punten`);
+  
+  await savePointsToDatabase(userId, actualPoints);
+  return actualPoints;
+}
+
 // -----------------------------------------------------------------------------
 
 export default function MentalCheckin({
@@ -210,84 +229,56 @@ export default function MentalCheckin({
   const [redeemed, setRedeemed] = useState<{ label: string; points: number; dateIso: string }[]>([]);
 
   // Keys
-  const pointsKey = useMemo(() => `mentalPoints:${userId}`, [userId]);
   const reconKey = useMemo(() => `mentalLastRecon:${userId}`, [userId]);
-  const rewardsKey = useMemo(() => `mentalRewards:${userId}`, [userId]);
 
-  // Load data from database and check for daily submission on mount
+  // Load data from database on mount
   useEffect(() => {
     const loadUserData = async () => {
       if (!userId) return;
 
       try {
+        console.log('🔄 Loading user data...');
+        
+        // Check of vandaag al ingevuld is
         const hasSubmittedToday = await checkinExistsToday(userId);
         setSubmitted(hasSubmittedToday);
 
-        // Check if we need to sync points with checkins (one-time migration)
-        const needsSync = localStorage.getItem(`pointsSynced:${userId}`) !== 'true';
+        // Synchroniseer punten met check-ins
+        const syncedPoints = await syncPointsWithCheckins(userId);
+        setPoints(syncedPoints);
 
-        if (needsSync) {
-          console.log('🔄 Syncing points with existing checkins...');
-
-          // Tel alle check-ins in de database
-          const { data: checkins, error: checkinsError } = await supabase
-            .from('checkins')
-            .select('date')
-            .eq('user_id', userId);
-
-          if (!checkinsError && checkins) {
-            const totalCheckins = checkins.length;
-            console.log(`📊 Found ${totalCheckins} existing check-ins`);
-
-            // Update punten naar aantal check-ins
-            await savePointsToDatabase(userId, totalCheckins);
-            setPoints(totalCheckins);
-
-            // Markeer als gesynchroniseerd
-            localStorage.setItem(`pointsSynced:${userId}`, 'true');
-
-            console.log(`✅ Points synced: ${totalCheckins} points`);
-          }
-        } else {
-          // Normale flow: laad punten uit database
-          const dbPoints = await loadPointsFromDatabase(userId);
-          setPoints(dbPoints);
-        }
-
+        // Laad geclaimde rewards
         const dbRewards = await loadRewardsFromDatabase(userId);
         setRedeemed(dbRewards);
+
+        console.log('✅ Data loaded:', { points: syncedPoints, rewards: dbRewards.length });
       } catch (error) {
-        console.error('Error loading user data from DB, falling back to localStorage:', error);
-        const localPoints = parseInt(localStorage.getItem(pointsKey) || '0');
-        const localRewards = JSON.parse(localStorage.getItem(rewardsKey) || '[]');
-        setPoints(localPoints);
-        setRedeemed(localRewards);
+        console.error('❌ Error loading user data:', error);
+        setError('Kon gegevens niet laden. Probeer de pagina te vernieuwen.');
       }
     };
 
     loadUserData();
-  }, [userId, pointsKey, rewardsKey]);
+  }, [userId]);
 
-  // Reconcile missed days -> decrement points per dag zonder checkin
+  // Reconcile missed days (optioneel - alleen als je strafpunten wilt)
   useEffect(() => {
     const reconcileMissedDays = async () => {
-      if (!userId) return;
+      if (!userId || !allowNegative) return; // Skip als strafpunten uit staan
 
       const today = startOfLocalDay(new Date());
       const lastReconStr = localStorage.getItem(reconKey);
-      const lastRecon = parseYyyyMmDd(lastReconStr) || addDays(today, -7); // Maximaal 7 dagen terug kijken
+      const lastRecon = parseYyyyMmDd(lastReconStr) || addDays(today, -7);
 
       let cur = startOfLocalDay(addDays(lastRecon, 1));
       let missedDays = 0;
 
-      // Haal alle check-in datums op tussen lastRecon en vandaag
       const checkinDates = await getCheckinDates(
         userId,
         yyyyMmDd(cur),
         yyyyMmDd(today)
       );
 
-      // Tel gemiste dagen
       while (cur < today) {
         const dateStr = yyyyMmDd(cur);
         if (!checkinDates.has(dateStr)) {
@@ -296,26 +287,19 @@ export default function MentalCheckin({
         cur = addDays(cur, 1);
       }
 
-      // Trek punten af voor gemiste dagen
       if (missedDays > 0) {
-        console.log(`${missedDays} gemiste dag(en) gedetecteerd, punten aftrekken...`);
-
+        console.log(`⚠️ ${missedDays} gemiste dag(en) gedetecteerd`);
+        
         const currentPoints = await loadPointsFromDatabase(userId);
-        const newPoints = allowNegative
-          ? currentPoints - missedDays
-          : Math.max(0, currentPoints - missedDays);
+        const newPoints = Math.max(0, currentPoints - missedDays);
 
         await savePointsToDatabase(userId, newPoints);
         setPoints(newPoints);
 
-        // Toon melding aan gebruiker
-        setOkMsg(`Let op: ${missedDays} punt(en) afgetrokken voor gemiste dag(en). Vul dagelijks in om punten te blijven verdienen! 📅`);
-
-        // Verwijder melding na 5 seconden
+        setOkMsg(`Let op: ${missedDays} punt(en) afgetrokken voor gemiste dag(en).`);
         setTimeout(() => setOkMsg(null), 5000);
       }
 
-      // Update laatste reconciliation datum
       localStorage.setItem(reconKey, yyyyMmDd(today));
     };
 
@@ -349,19 +333,19 @@ export default function MentalCheckin({
         positives: pText ? [{ category: POSITIVE_PROMPTS[pIdx].category, text: pText }] : [],
       };
 
+      // Sla check-in op
       await saveToSupabase(payload, userId);
 
-      if (!hasAlreadyCheckedIn) {
-        // Laad huidige punten uit database, voeg 1 toe, en sla op
-        const currentPoints = await loadPointsFromDatabase(userId);
-        const newPoints = currentPoints + 1;
-        await savePointsToDatabase(userId, newPoints);
-        setPoints(newPoints); // Update UI direct
+      // Synchroniseer punten opnieuw (tel alle check-ins)
+      const newPoints = await syncPointsWithCheckins(userId);
+      setPoints(newPoints);
 
+      if (!hasAlreadyCheckedIn) {
         setOkMsg("Bedankt! Je check-in is opgeslagen en je hebt een punt verdiend! ✨");
       } else {
         setOkMsg("Je check-in is bijgewerkt. Je hebt vandaag al een punt verdiend. 🌟");
       }
+      
       setSubmitted(true);
     } catch (e: any) {
       console.error('Error saving checkin:', e);
@@ -388,17 +372,15 @@ export default function MentalCheckin({
     if (!confirm(`Beloning claimen: ${tier.label} voor ${tier.points} punten?`)) return;
 
     try {
-      // Stap 1: Sla de zojuist geclaimde beloning op in de database.
+      // Sla geclaimde beloning op
       await saveClaimedRewardToDatabase(userId, { label: tier.label, points: tier.points });
 
-      // Stap 2: Werk de lokale state bij voor een directe UI update.
+      // Update lokale state
       const newRecord = { ...tier, dateIso: new Date().toISOString() };
       setRedeemed(prev => [...prev, newRecord]);
 
-      // Stap 3: Werk de punten van de gebruiker bij.
-      const currentPoints = await loadPointsFromDatabase(userId);
-      const newPoints = allowNegative ? currentPoints - tier.points : Math.max(0, currentPoints - tier.points);
-      await savePointsToDatabase(userId, newPoints);
+      // Synchroniseer punten opnieuw (automatisch trekt claimed points af)
+      const newPoints = await syncPointsWithCheckins(userId);
       setPoints(newPoints);
 
       alert(`Gefeliciteerd! Je hebt '${tier.label}' geclaimd.`);
@@ -442,6 +424,7 @@ export default function MentalCheckin({
           redeemed={redeemed}
         />
         {okMsg && <div className="text-sm text-green-700">{okMsg}</div>}
+        {error && <div className="text-sm text-red-700">{error}</div>}
       </div>
     );
   }
@@ -631,6 +614,19 @@ function RewardsPanel({
           );
         })}
       </div>
+
+      {redeemed.length > 0 && (
+        <div className="mt-3 pt-3 border-t">
+          <div className="text-sm font-medium mb-2">Geclaimde beloningen:</div>
+          <div className="space-y-1">
+            {redeemed.map((r, i) => (
+              <div key={i} className="text-xs text-gray-600">
+                ✓ {r.label} ({r.points} punten) - {new Date(r.dateIso).toLocaleDateString('nl-NL')}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
