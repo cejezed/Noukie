@@ -8,7 +8,9 @@ function isMobile() {
 }
 
 function supportsWebSpeech() {
-  return false; // Forceer server transcription voor alles
+  // Check of Web Speech API beschikbaar is
+  return typeof (window as any).webkitSpeechRecognition !== "undefined" ||
+         typeof (window as any).SpeechRecognition !== "undefined";
 }
 
 type Props = {
@@ -29,9 +31,11 @@ export default function SmartVoiceInput({
     setMethod(canUseHandsfree ? "handsfree" : "button");
     
     console.log('🎤 Voice input method:', canUseHandsfree ? 'Web Speech API (handsfree)' : 'Server transcription (button)');
+    console.log('📱 Is mobile:', isMobile());
+    console.log('🔊 Web Speech available:', supportsWebSpeech());
   }, []);
 
-  // Desktop: gebruik Web Speech API (handsfree, continuous)
+  // Gebruik Web Speech API (handsfree, continuous) als beschikbaar
   if (method === "handsfree") {
     return (
       <HandsfreeVoice 
@@ -42,7 +46,7 @@ export default function SmartVoiceInput({
     );
   }
 
-  // Mobile/fallback: gebruik server-side transcriptie (push-to-talk)
+  // Fallback: gebruik server-side transcriptie (push-to-talk)
   return (
     <VoiceButton 
       onTranscript={onTranscript}

@@ -29,7 +29,7 @@ export default function Rooster() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const userId = user?.id ?? "";
+  const userId = user?.id;
 
   const [formData, setFormData] = useState<ScheduleFormData>({
     course_id: null,
@@ -156,6 +156,12 @@ export default function Rooster() {
   // === HANDLERS ===
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!userId) {
+      toast({ title: "Niet ingelogd", description: "Je moet ingelogd zijn om een roosteritem toe te voegen.", variant: "destructive" });
+      return;
+    }
+    
     if (!formData.start_time || !formData.end_time) {
       toast({ title: "Incomplete gegevens", description: "Vul een start- en eindtijd in.", variant: "destructive" });
       return;
@@ -197,6 +203,12 @@ export default function Rooster() {
 
   const handleCourseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!userId) {
+      toast({ title: "Niet ingelogd", description: "Je moet ingelogd zijn om een vak toe te voegen.", variant: "destructive" });
+      return;
+    }
+    
     if (!courseFormData.name.trim()) {
       toast({ title: "Vak naam vereist", description: "Vul een vaknaam in.", variant: "destructive" });
       return;
@@ -234,6 +246,17 @@ export default function Rooster() {
   }, [schedule]);
 
   // === RENDER ===
+  if (!userId) {
+    return (
+      <div className="p-6" data-testid="page-rooster">
+        <Alert>
+          <HelpCircle className="h-4 w-4" />
+          <AlertDescription>Je moet ingelogd zijn om je rooster te beheren.</AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6" data-testid="page-rooster">
       <h2 className="text-xl font-semibold mb-6">Activiteit toevoegen</h2>
