@@ -30,3 +30,15 @@ uploads/
 dist/
 >>>>>>> voice-chat
 .vercel
+
+# Nooit committen
+.env
+.env.*
+!.env.example
+
+apps/web/.env
+apps/web/.env.*
+!apps/web/.env.example
+apps/api/.env
+apps/api/.env.*
+!apps/api/.env.example
