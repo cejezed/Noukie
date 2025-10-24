@@ -12,7 +12,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
-import UploadOcrExplain from "@/features/explain/UploadOcrExplain";
 
 interface Message {
   id: number;
@@ -29,14 +28,6 @@ interface ChatSession {
   updated_at: string;
   vak: string;
   berichten: Message[];
-}
-
-export default function UitlegTab() {
-  return (
-    <div className="space-y-4">
-      <UploadOcrExplain />
-    </div>
-  );
 }
 
 export default function LeerChat() {
@@ -123,6 +114,14 @@ export default function LeerChat() {
   }, [selectedCourse, user, toast]);
 
   useEffect(() => {
+    if (selectedSessionId === "new") { setMessages([]); setCurrentSessionId(null); }
+    else {
+      const session = chatSessions.find((s) => s.id === selectedSessionId);
+      if (session) { setMessages(session.berichten || []); setCurrentSessionId(session.id); }
+    }
+  }, [selectedSessionId, chatSessions]);
+
+  useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('div[data-radix-scroll-area-viewport]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
@@ -206,7 +205,7 @@ export default function LeerChat() {
     }
   };
 
-  // === Image upload (+ optionele OCR) ===
+  // === Image upload (public bucket) ===
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -214,41 +213,11 @@ export default function LeerChat() {
     const ext = file.name.split(".").pop()?.toLowerCase() || "png";
     const fileName = `${user.id}/${crypto.randomUUID()}.${ext}`;
     try {
-      // 1) Upload naar public bucket
       const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
       if (uploadError) throw uploadError;
       const res = supabase.storage.from("uploads").getPublicUrl(fileName) as any;
       const publicUrl: string = res?.data?.publicUrl ?? res?.publicURL;
       if (!publicUrl || !publicUrl.includes("/public/")) throw new Error("Bucket niet public of URL ongeldig.");
-
-      // 2) Probeer OCR (optioneel) – fallback: als /api/ocr ontbreekt of faalt, sturen we gewoon de foto mee
-      let recognized = "";
-      try {
-        const fd = new FormData();
-        fd.append("image", file);
-        const r = await fetch("/api/ocr", { method: "POST", body: fd });
-        if (r.ok) {
-          const j = await r.json();
-          if (j?.text?.trim()) recognized = j.text.trim();
-        }
-      } catch {
-        // OCR niet beschikbaar of faalt → negeren
-      }
-
-      if (recognized) {
-        setOpgave(recognized);
-        toast({
-          title: "Tekst herkend",
-          description: "De herkende tekst staat nu in het tekstvak. Controleer en druk op Verstuur.",
-        });
-      } else {
-        toast({
-          title: "Afbeelding geüpload",
-          description: "Geen tekst herkend (of OCR niet actief). Je kunt de foto zo versturen.",
-        });
-      }
-
-      // 3) Stuur bericht met image + (optioneel) herkende tekst
       await handleSendMessage(publicUrl);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
@@ -258,15 +227,14 @@ export default function LeerChat() {
     }
   };
 
-  // ================== UI ==================
+  // ============= UI =============
   return (
     <div
       className="
         flex flex-col min-h-[100dvh] p-4 bg-slate-50
-        pb-[calc(110px+env(safe-area-inset-bottom))]  /* ruimte voor sticky composer + mobiele tabbar */
+        pb-[calc(110px+env(safe-area-inset-bottom))] /* ruimte voor sticky composer + tabbar */
       "
     >
-      {/* responsieve breedte zoals Layout */}
       <div className="mx-auto w-full max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
         <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
           <div className="space-y-4">
@@ -306,7 +274,7 @@ export default function LeerChat() {
         </ScrollArea>
       </div>
 
-      {/* Sticky composer: altijd boven de mobiele tabbar en safe-area */}
+      {/* Sticky composer boven mobiele tabbar */}
       <div
         className="
           fixed bottom-[calc(72px+env(safe-area-inset-bottom))] left-0 right-0 z-40
@@ -334,30 +302,10 @@ export default function LeerChat() {
                       <DialogTitle>Tips voor Goede Hulp</DialogTitle>
                     </DialogHeader>
                     <ul className="space-y-3 pt-2 text-sm">
-                      <li>
-                        <strong>1. Stel een duidelijke vraag:</strong> Hoe specifieker je vraag, hoe beter de uitleg.
-                        Bijvoorbeeld: “Hoe bereken ik de omtrek van een cirkel?” i.p.v. “Ik snap het niet”.
-                      </li>
-                      <li>
-                        <strong>2. Laat zien wat je al hebt geprobeerd:</strong> Schrijf je eigen stappen of ideeën op.
-                        De AI kan dan gericht feedback geven en je verder helpen.
-                      </li>
-                      <li>
-                        <strong>3. Gebruik een foto:</strong> Upload een duidelijke foto van je opgave of aantekeningen.
-                        Handig bij lastige sommen of tekstvragen.
-                      </li>
-                      <li>
-                        <strong>4. Oefenvragen:</strong> Vraag na de uitleg om extra oefenvragen.
-                        De AI kan oefenopgaven bedenken om te checken of je het snapt.
-                      </li>
-                      <li>
-                        <strong>5. Ezelsbruggetjes & tips:</strong> De AI kan handige trucjes geven om iets te onthouden,
-                        of de stof in stappen uitleggen.
-                      </li>
-                      <li className="text-xs text-blue-800 p-2 bg-blue-50 rounded-md">
-                        <strong>Let op:</strong> De uitlegcoach werkt op basis van jouw vraag en foto. Hoe beter je input,
-                        hoe beter de hulp 🎓
-                      </li>
+                      <li><strong>1. Stel een duidelijke vraag:</strong> Hoe specifieker je vraag, hoe beter de uitleg.</li>
+                      <li><strong>2. Laat je poging zien:</strong> Dan kan de AI gericht feedback geven.</li>
+                      <li><strong>3. Foto helpt:</strong> Upload een duidelijke foto van de opgave.</li>
+                      <li><strong>4. Oefenvragen:</strong> Vraag om extra oefenopgaven.</li>
                     </ul>
                   </DialogContent>
                 </Dialog>
@@ -373,7 +321,7 @@ export default function LeerChat() {
                     value={opgave}
                     onChange={(e) => setOpgave(e.target.value)}
                     rows={4}
-                    placeholder="Typ of plak hier de opgave..."
+                    placeholder="Typ of plak hier de opgave…"
                   />
                 </div>
                 <div>
