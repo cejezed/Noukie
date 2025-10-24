@@ -46,18 +46,17 @@ export default function LeerChat() {
   const [courseOptions, setCourseOptions] = useState<string[]>([]);
   const [loadingCourses, setLoadingCourses] = useState(false);
 
-  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
-  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // 👇 dynamische offset voor tabbar-hoogte
+  // Measure bottom tabbar height to anchor composer above it
   const [tabbarH, setTabbarH] = useState<number>(64); // fallback
   const [composerH, setComposerH] = useState<number>(0);
   const composerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    // probeer een element te vinden dat je tabbar is (pas evt. selector aan)
     const tb = document.querySelector('[data-tabbar], nav[role="tablist"], footer[data-bottom-nav]');
     const update = () => setTabbarH(tb instanceof HTMLElement ? tb.offsetHeight : 64);
     update();
@@ -65,6 +64,7 @@ export default function LeerChat() {
     if (tb instanceof HTMLElement) ro.observe(tb);
     return () => ro.disconnect();
   }, []);
+
   useEffect(() => {
     const update = () => setComposerH(composerRef.current?.offsetHeight || 0);
     update();
@@ -82,7 +82,7 @@ export default function LeerChat() {
     toast({ title: "Nieuwe chat gestart" });
   };
 
-  // auto-resize textarea (1–6 regels)
+  // textarea auto-resize (1–6 lines)
   const autoResize = () => {
     const el = textRef.current;
     if (!el) return;
@@ -92,7 +92,7 @@ export default function LeerChat() {
   };
   useEffect(() => { autoResize(); }, [opgave]);
 
-  // vakken
+  // Load courses
   useEffect(() => {
     const loadCourseOptions = async () => {
       if (!user) { setCourseOptions([]); return; }
@@ -113,7 +113,7 @@ export default function LeerChat() {
     loadCourseOptions();
   }, [user, toast, selectedCourse]);
 
-  // sessies
+  // Load sessions per subject
   useEffect(() => {
     const loadChatSessions = async () => {
       if (!user || !selectedCourse) { setChatSessions([]); setSelectedSessionId("new"); setMessages([]); return; }
@@ -151,13 +151,13 @@ export default function LeerChat() {
     }
   }, [selectedSessionId, chatSessions]);
 
-  // scrol altijd naar onder
+  // Scroll to bottom when messages change
   useEffect(() => {
-    const viewport = scrollViewportRef.current;
+    const viewport = viewportRef.current;
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, composerH, tabbarH]);
 
-  // chat sturen
+  // Send message
   const handleSendMessage = async (imageUrl?: string) => {
     if (isGenerating) return;
     const hasText = opgave.trim().length > 0;
@@ -214,7 +214,7 @@ export default function LeerChat() {
     }
   };
 
-  // upload + OCR
+  // Upload + OCR
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -261,36 +261,41 @@ export default function LeerChat() {
     }
   };
 
-  // ============= UI =============
-  // bereken een veilige ondermarge voor de scroller, zodat bubbles niet onder de composer/tabbar vallen
-  const bottomSpacer = tabbarH + composerH + 16; // 16px extra lucht
+  // layout paddings so bubbles don't hide under composer/tabbar
+  const bottomSpacer = tabbarH + composerH + 16;
 
   return (
     <div className="relative min-h-[100dvh] bg-slate-50">
-      {/* SCROLLER (zoals WhatsApp): volledige hoogte, onderaan extra ruimte */}
-      <div
-        className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4"
-        style={{ paddingBottom: bottomSpacer }}
-      >
-        <ScrollArea className="h-[100dvh] pt-2 sm:pt-3 md:pt-4">
-          <div ref={(el) => { if (el) scrollViewportRef.current = el.querySelector('div[data-radix-scroll-area-viewport]') as HTMLDivElement; }}>
+      {/* SCROLLER (WhatsApp-like): full height area, bottom padding equals composer+tabbar */}
+      <div className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4" style={{ paddingBottom: bottomSpacer }}>
+        <ScrollArea className="h-[100dvh] pt-2 sm:pt-3 md:pt-4" ref={scrollerRef}>
+          {/* hook the internal viewport so we can auto-scroll to bottom */}
+          <div ref={(outer) => {
+            if (!outer) return;
+            const vp = outer.querySelector('div[data-radix-scroll-area-viewport]') as HTMLDivElement | null;
+            if (vp) viewportRef.current = vp;
+          }}>
             <div className="space-y-3 sm:space-y-4 px-1 pb-4">
               {messages.length === 0 && !isGenerating && (
                 <div className="text-center text-muted-foreground min-h-[220px] sm:min-h-[280px] flex flex-col items-center justify-center px-2">
-                  <p className="font-medium">Kies een vak, typ je vraag of upload een foto — de rest voelt als WhatsApp 🙂</p>
+                  <p className="font-medium">Kies een vak, typ je vraag of upload een foto — werkt als WhatsApp 🙂</p>
                 </div>
               )}
 
               {messages.map((msg) => (
                 <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
-                  <div className={cn(
-                    "max-w-[92%] sm:max-w-[80%] md:max-w-[70%] p-2 sm:p-3 rounded-2xl shadow-sm",
-                    msg.sender === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-sm"
-                      : "bg-white border rounded-bl-sm"
-                  )}>
+                  <div
+                    className={cn(
+                      "max-w-[92%] sm:max-w-[80%] md:max-w-[70%] p-2 sm:p-3 rounded-2xl shadow-sm",
+                      msg.sender === "user"
+                        ? "bg-primary text-primary-foreground rounded-br-sm"
+                        : "bg-white border rounded-bl-sm"
+                    )}
+                  >
                     <p className="sr-only">{msg.sender === "user" ? "Jij" : "AI"}</p>
-                    {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-full" />}
+                    {msg.imageUrl ? (
+                      <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-full" />
+                    ) : null}
                     <p className="whitespace-pre-wrap text-sm sm:text-base leading-6">{msg.text}</p>
                   </div>
                 </div>
@@ -306,22 +311,18 @@ export default function LeerChat() {
                     </div>
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </ScrollArea>
       </div>
 
-      {/* FIXED COMPOSER — boven de tabbar, 100% breed, knop ONDER het veld */}
-      <div
-        ref={composerRef}
-        className="fixed left-0 right-0 z-50"
-        style={{ bottom: `calc(${tabbarH}px + env(safe-area-inset-bottom))` }}
-      >
+      {/* FIXED COMPOSER: full width, sits above tabbar. Field 100%, Send button BELOW field. */}
+      <div ref={composerRef} className="fixed left-0 right-0 z-50" style={{ bottom: `calc(${tabbarH}px + env(safe-area-inset-bottom))` }}>
         <div className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4">
           <Card className="shadow-lg border-t border-slate-200 overflow-hidden">
             <CardContent className="p-2 sm:p-3">
-              {/* bovenste rij: foto + vak (klein) */}
+              {/* top row: photo + subject + tools */}
               <div className="flex items-center gap-2 mb-2">
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                 <Button
@@ -357,7 +358,7 @@ export default function LeerChat() {
                       <ul className="space-y-3 pt-2 text-sm">
                         <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
                         <li><strong>Vraag concreet</strong> (“Wat is suburbanisatie?”).</li>
-                        <li><strong>Oefenvragen</strong> na de uitleg helpen checken.</li>
+                        <li><strong>Oefenvragen</strong> helpen checken.</li>
                       </ul>
                     </DialogContent>
                   </Dialog>
@@ -368,7 +369,7 @@ export default function LeerChat() {
                 </div>
               </div>
 
-              {/* vraagveld: 100% breed */}
+              {/* the field: 100% width */}
               <Label htmlFor="opgave-text" className="sr-only">Vraag</Label>
               <Textarea
                 id="opgave-text"
@@ -402,7 +403,7 @@ export default function LeerChat() {
                 </div>
               )}
 
-              {/* knop ONDER het veld, volle breedte op mobiel */}
+              {/* the SEND button, BELOW the field (full width on mobile) */}
               <div className="mt-2">
                 <Button
                   onClick={() => handleSendMessage()}
