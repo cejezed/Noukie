@@ -47,8 +47,31 @@ export default function LeerChat() {
   const [loadingCourses, setLoadingCourses] = useState(false);
 
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const scrollViewportRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // 👇 dynamische offset voor tabbar-hoogte
+  const [tabbarH, setTabbarH] = useState<number>(64); // fallback
+  const [composerH, setComposerH] = useState<number>(0);
+  const composerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    // probeer een element te vinden dat je tabbar is (pas evt. selector aan)
+    const tb = document.querySelector('[data-tabbar], nav[role="tablist"], footer[data-bottom-nav]');
+    const update = () => setTabbarH(tb instanceof HTMLElement ? tb.offsetHeight : 64);
+    update();
+    const ro = new ResizeObserver(update);
+    if (tb instanceof HTMLElement) ro.observe(tb);
+    return () => ro.disconnect();
+  }, []);
+  useEffect(() => {
+    const update = () => setComposerH(composerRef.current?.offsetHeight || 0);
+    update();
+    const ro = new ResizeObserver(update);
+    if (composerRef.current) ro.observe(composerRef.current);
+    return () => ro.disconnect();
+  }, [opgave, selectedCourse, isUploading]);
 
   const startNewChat = () => {
     setMessages([]);
@@ -59,17 +82,17 @@ export default function LeerChat() {
     toast({ title: "Nieuwe chat gestart" });
   };
 
-  // Auto-resize textarea tot max 5 regels (22px line-height ~110px)
+  // auto-resize textarea (1–6 regels)
   const autoResize = () => {
     const el = textRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const max = 5 * 22;
+    const max = 6 * 22;
     el.style.height = Math.min(el.scrollHeight, max) + "px";
   };
   useEffect(() => { autoResize(); }, [opgave]);
 
-  // Vakken laden
+  // vakken
   useEffect(() => {
     const loadCourseOptions = async () => {
       if (!user) { setCourseOptions([]); return; }
@@ -84,14 +107,13 @@ export default function LeerChat() {
         setCourseOptions(names);
         if (selectedCourse && !names.includes(selectedCourse)) setSelectedCourse("");
       } catch (e: any) {
-        console.error(e);
         toast({ title: "Fout", description: "Kon vakken niet laden.", variant: "destructive" });
       } finally { setLoadingCourses(false); }
     };
     loadCourseOptions();
   }, [user, toast, selectedCourse]);
 
-  // Chatsessies laden per vak
+  // sessies
   useEffect(() => {
     const loadChatSessions = async () => {
       if (!user || !selectedCourse) { setChatSessions([]); setSelectedSessionId("new"); setMessages([]); return; }
@@ -115,7 +137,6 @@ export default function LeerChat() {
           setCurrentSessionId(null);
         }
       } catch (error) {
-        console.error(error);
         toast({ title: "Fout", description: "Kon chatgeschiedenis niet laden.", variant: "destructive" });
       }
     };
@@ -130,12 +151,13 @@ export default function LeerChat() {
     }
   }, [selectedSessionId, chatSessions]);
 
+  // scrol altijd naar onder
   useEffect(() => {
-    const viewport = scrollAreaRef.current?.querySelector('div[data-radix-scroll-area-viewport]');
+    const viewport = scrollViewportRef.current;
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }, [messages]);
+  }, [messages, composerH, tabbarH]);
 
-  // Chat sturen
+  // chat sturen
   const handleSendMessage = async (imageUrl?: string) => {
     if (isGenerating) return;
     const hasText = opgave.trim().length > 0;
@@ -144,14 +166,8 @@ export default function LeerChat() {
       toast({ title: "Leeg bericht", description: "Typ een vraag of upload een foto.", variant: "destructive" });
       return;
     }
-    if (!user) {
-      toast({ title: "Niet ingelogd", description: "Log in om de tutor te gebruiken.", variant: "destructive" });
-      return;
-    }
-    if (!selectedCourse) {
-      toast({ title: "Geen vak", description: "Kies eerst een vak.", variant: "destructive" });
-      return;
-    }
+    if (!user) { toast({ title: "Niet ingelogd", description: "Log in om de tutor te gebruiken.", variant: "destructive" }); return; }
+    if (!selectedCourse) { toast({ title: "Geen vak", description: "Kies eerst een vak.", variant: "destructive" }); return; }
 
     const visibleUserText = hasText ? opgave : "Kun je helpen met deze opgave/foto?";
     const userMessage: Message = { id: Date.now(), sender: "user", text: visibleUserText, imageUrl };
@@ -165,10 +181,7 @@ export default function LeerChat() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      const history = newMessages.map(m => ({
-        role: m.sender === "user" ? "user" : "assistant",
-        content: m.text,
-      }));
+      const history = newMessages.map(m => ({ role: m.sender === "user" ? "user" : "assistant", content: m.text }));
       const context = { vak: selectedCourse, image_url: imageUrl || undefined };
 
       const resp = await fetch("/api/chat", {
@@ -186,10 +199,7 @@ export default function LeerChat() {
       setMessages(finalMessages);
 
       if (currentSessionId) {
-        await supabase.from("chatsessies").update({
-          berichten: finalMessages,
-          updated_at: new Date().toISOString()
-        }).eq("id", currentSessionId);
+        await supabase.from("chatsessies").update({ berichten: finalMessages, updated_at: new Date().toISOString() }).eq("id", currentSessionId);
       } else {
         const { data: ins } = await supabase.from("chatsessies")
           .insert({ user_id: user.id, vak: selectedCourse, berichten: finalMessages })
@@ -204,7 +214,7 @@ export default function LeerChat() {
     }
   };
 
-  // Upload + OCR
+  // upload + OCR
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -221,7 +231,6 @@ export default function LeerChat() {
       const publicUrl: string = res?.data?.publicUrl ?? res?.publicURL;
       if (!publicUrl) throw new Error("Public URL niet gevonden. Check je 'uploads' bucket policy.");
 
-      // OCR proberen (optioneel)
       try {
         const fd = new FormData();
         fd.append("image", file);
@@ -235,7 +244,6 @@ export default function LeerChat() {
             toast({ title: "Tekst herkend", description: "Controleer de OCR-tekst en druk op Verstuur." });
           } else {
             setOcrState({ status: "none", msg: "Geen tekst herkend" });
-            toast({ title: "Afbeelding geüpload", description: "Geen tekst herkend (je kunt de foto wel versturen)." });
           }
         } else {
           setOcrState({ status: "error", msg: "OCR niet beschikbaar" });
@@ -254,61 +262,67 @@ export default function LeerChat() {
   };
 
   // ============= UI =============
+  // bereken een veilige ondermarge voor de scroller, zodat bubbles niet onder de composer/tabbar vallen
+  const bottomSpacer = tabbarH + composerH + 16; // 16px extra lucht
+
   return (
-    <div
-      className="
-        flex flex-col min-h-[100dvh] bg-slate-50
-        px-2 sm:px-3 md:px-4
-        pt-2 sm:pt-3 md:pt-4
-        pb-4                      /* composer staat in flow, dus gewone padding */
-      "
-    >
-      {/* Binnen jouw Layout is de content al gecentreerd/ingevangen; we minimaliseren extra randen.
-          We zetten max-breedte op 1600px indien je Layout dit toelaat. */}
-      <div className="mx-auto w-full max-w-[1600px]">
-        {/* CHAT */}
-        <ScrollArea className="flex-1 mb-3 md:mb-4 p-2 sm:p-3 md:p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
-          <div className="space-y-3 sm:space-y-4">
-            {messages.length === 0 && !isGenerating && (
-              <div className="text-center text-muted-foreground min-h-[220px] sm:min-h-[280px] flex flex-col items-center justify-center px-2">
-                <p className="font-medium">Kies een vak, stel je vraag of upload een foto (OCR).</p>
-              </div>
-            )}
-
-            {messages.map((msg) => (
-              <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
-                <div className={cn(
-                  "max-w-[95%] sm:max-w-[85%] md:max-w-[75%] p-2 sm:p-3 rounded-lg shadow-sm",
-                  msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-background border"
-                )}>
-                  <p className="font-bold text-xs mb-1">{msg.sender === "user" ? "Jij" : "AI Tutor"}</p>
-                  {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-full" />}
-                  <p className="whitespace-pre-wrap text-sm sm:text-base">{msg.text}</p>
+    <div className="relative min-h-[100dvh] bg-slate-50">
+      {/* SCROLLER (zoals WhatsApp): volledige hoogte, onderaan extra ruimte */}
+      <div
+        className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4"
+        style={{ paddingBottom: bottomSpacer }}
+      >
+        <ScrollArea className="h-[100dvh] pt-2 sm:pt-3 md:pt-4">
+          <div ref={(el) => { if (el) scrollViewportRef.current = el.querySelector('div[data-radix-scroll-area-viewport]') as HTMLDivElement; }}>
+            <div className="space-y-3 sm:space-y-4 px-1 pb-4">
+              {messages.length === 0 && !isGenerating && (
+                <div className="text-center text-muted-foreground min-h-[220px] sm:min-h-[280px] flex flex-col items-center justify-center px-2">
+                  <p className="font-medium">Kies een vak, typ je vraag of upload een foto — de rest voelt als WhatsApp 🙂</p>
                 </div>
-              </div>
-            ))}
+              )}
 
-            {isGenerating && (
-              <div className="flex justify-start">
-                <div className="p-2 sm:p-3 rounded-lg bg-background border shadow-sm">
-                  <p className="font-bold text-xs mb-1">AI Tutor</p>
-                  <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-primary animate-bounce" />
-                    <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-150" />
-                    <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-300" />
+              {messages.map((msg) => (
+                <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
+                  <div className={cn(
+                    "max-w-[92%] sm:max-w-[80%] md:max-w-[70%] p-2 sm:p-3 rounded-2xl shadow-sm",
+                    msg.sender === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-sm"
+                      : "bg-white border rounded-bl-sm"
+                  )}>
+                    <p className="sr-only">{msg.sender === "user" ? "Jij" : "AI"}</p>
+                    {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-full" />}
+                    <p className="whitespace-pre-wrap text-sm sm:text-base leading-6">{msg.text}</p>
                   </div>
                 </div>
-              </div>
-            )}
+              ))}
+
+              {isGenerating && (
+                <div className="flex justify-start">
+                  <div className="p-2 sm:p-3 rounded-2xl bg-white border shadow-sm rounded-bl-sm">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-2 h-2 rounded-full bg-primary animate-bounce" />
+                      <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-150" />
+                      <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-300" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </ScrollArea>
+      </div>
 
-        {/* COMPOSER (in flow, compact) */}
-        <Card className="flex-shrink-0 overflow-hidden">
-          <CardContent className="p-2 sm:p-3">
-            <div className="flex items-end gap-2">
-              {/* Foto + vak */}
-              <div className="flex items-center gap-2">
+      {/* FIXED COMPOSER — boven de tabbar, 100% breed, knop ONDER het veld */}
+      <div
+        ref={composerRef}
+        className="fixed left-0 right-0 z-50"
+        style={{ bottom: `calc(${tabbarH}px + env(safe-area-inset-bottom))` }}
+      >
+        <div className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4">
+          <Card className="shadow-lg border-t border-slate-200 overflow-hidden">
+            <CardContent className="p-2 sm:p-3">
+              {/* bovenste rij: foto + vak (klein) */}
+              <div className="flex items-center gap-2 mb-2">
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                 <Button
                   variant="outline"
@@ -321,7 +335,7 @@ export default function LeerChat() {
                 </Button>
 
                 <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-                  <SelectTrigger className="w-36 h-9">
+                  <SelectTrigger className="h-9 w-40">
                     <SelectValue placeholder={loadingCourses ? "Vakken…" : "Kies vak"} />
                   </SelectTrigger>
                   <SelectContent>
@@ -330,78 +344,80 @@ export default function LeerChat() {
                       : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken</div>}
                   </SelectContent>
                 </Select>
+
+                <div className="ml-auto flex items-center">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="ghost" size="icon" title="Tips">
+                        <Info className="w-5 h-5 text-muted-foreground" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
+                      <ul className="space-y-3 pt-2 text-sm">
+                        <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
+                        <li><strong>Vraag concreet</strong> (“Wat is suburbanisatie?”).</li>
+                        <li><strong>Oefenvragen</strong> na de uitleg helpen checken.</li>
+                      </ul>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Button variant="ghost" size="icon" onClick={startNewChat} title="Nieuwe chat">
+                    <Repeat className="w-5 h-5 text-muted-foreground" />
+                  </Button>
+                </div>
               </div>
 
-              {/* Tekstveld */}
-              <div className="flex-1 min-w-[160px]">
-                <Label htmlFor="opgave-text" className="sr-only">Vraag</Label>
-                <Textarea
-                  id="opgave-text"
-                  ref={textRef}
-                  value={opgave}
-                  onChange={(e) => setOpgave(e.target.value)}
-                  rows={1}
-                  onInput={autoResize}
-                  placeholder="Typ je vraag of plak OCR-tekst…"
-                  className="w-full h-auto min-h-[40px] max-h-[110px] overflow-auto resize-none text-sm sm:text-base"
-                />
-                {ocrState.status !== "idle" && (
-                  <div className="mt-1 text-[11px] flex items-center gap-2">
-                    {ocrState.status === "ok" && (
-                      <span className="inline-flex items-center gap-1 text-emerald-700">
-                        <CheckCircle2 className="w-4 h-4" /> OCR: {ocrState.chars} tekens
-                      </span>
-                    )}
-                    {ocrState.status === "none" && (
-                      <span className="inline-flex items-center gap-1 text-amber-700">
-                        <AlertCircle className="w-4 h-4" /> Geen tekst herkend
-                      </span>
-                    )}
-                    {ocrState.status === "error" && (
-                      <span className="inline-flex items-center gap-1 text-rose-700">
-                        <AlertCircle className="w-4 h-4" /> {ocrState.msg || "OCR niet beschikbaar"}
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
+              {/* vraagveld: 100% breed */}
+              <Label htmlFor="opgave-text" className="sr-only">Vraag</Label>
+              <Textarea
+                id="opgave-text"
+                ref={textRef}
+                value={opgave}
+                onChange={(e) => setOpgave(e.target.value)}
+                rows={1}
+                onInput={autoResize}
+                placeholder="Typ je vraag of plak OCR-tekst…"
+                className="w-full h-auto min-h-[42px] max-h-[132px] overflow-auto resize-none text-[15px]"
+              />
 
-              {/* Rechts: Verstuur + i + reset */}
-              <div className="flex items-center gap-1 sm:gap-2">
+              {/* ocr status (compact) */}
+              {ocrState.status !== "idle" && (
+                <div className="mt-1 text-[11px] flex items-center gap-2">
+                  {ocrState.status === "ok" && (
+                    <span className="inline-flex items-center gap-1 text-emerald-700">
+                      <CheckCircle2 className="w-4 h-4" /> OCR: {ocrState.chars} tekens
+                    </span>
+                  )}
+                  {ocrState.status === "none" && (
+                    <span className="inline-flex items-center gap-1 text-amber-700">
+                      <AlertCircle className="w-4 h-4" /> Geen tekst herkend
+                    </span>
+                  )}
+                  {ocrState.status === "error" && (
+                    <span className="inline-flex items-center gap-1 text-rose-700">
+                      <AlertCircle className="w-4 h-4" /> {ocrState.msg || "OCR niet beschikbaar"}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* knop ONDER het veld, volle breedte op mobiel */}
+              <div className="mt-2">
                 <Button
                   onClick={() => handleSendMessage()}
                   disabled={isGenerating || !selectedCourse || (!opgave.trim())}
                   size="default"
-                  className="shrink-0 w-full sm:w-auto"
+                  className="w-full sm:w-auto"
                   title="Verstuur"
                 >
                   <Send className="w-5 h-5 mr-2" />
                   Verstuur
                 </Button>
-
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" title="Tips">
-                      <Info className="w-5 h-5 text-muted-foreground" />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
-                    <ul className="space-y-3 pt-2 text-sm">
-                      <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
-                      <li><strong>Wees concreet</strong> (“Wat is suburbanisatie?”).</li>
-                      <li><strong>Vraag om oefenvragen</strong> na de uitleg.</li>
-                    </ul>
-                  </DialogContent>
-                </Dialog>
-
-                <Button variant="ghost" size="icon" onClick={startNewChat} title="Nieuwe chat">
-                  <Repeat className="w-5 h-5 text-muted-foreground" />
-                </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );
