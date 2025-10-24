@@ -2,9 +2,8 @@
 import * as React from "react";
 import { useMemo, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Check, Trash2, Info, Clock, Calendar } from "lucide-react";
+import { Loader2, Check, Trash2, Info, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,27 +14,20 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Schedule, Course, Task } from "@shared/schema";
 import CoachChat, { type CoachChatHandle } from "@/features/chat/CoachChat";
-import VoiceCheckinButton from "@/features/voice/VoiceCheckinButton";
 import SmartVoiceInput from "@/features/chat/SmartVoiceInput";
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 
 function getLocalDayBounds(dateLike: Date | string) {
   const d = typeof dateLike === "string" ? new Date(dateLike) : new Date(dateLike);
-  const start = new Date(d);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const start = new Date(d); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
   return { startISO: start.toISOString(), endISO: end.toISOString() };
 }
 
 type CoachMemory = {
-  id: string;
-  user_id: string;
-  course: string;
-  status: string | null;
-  note: string | null;
-  last_update: string | null;
+  id: string; user_id: string; course: string;
+  status: string | null; note: string | null; last_update: string | null;
 };
 
 export default function Vandaag() {
@@ -50,8 +42,7 @@ export default function Vandaag() {
     const mm = String(d.getMonth() + 1).padStart(2, "0");
     const dd = String(d.getDate()).padStart(2, "0");
     const iso = `${yyyy}-${mm}-${dd}`;
-    const js = d.getDay();
-    const dow = js === 0 ? 7 : js;
+    const js = d.getDay(); const dow = js === 0 ? 7 : js;
     return { date: d, iso, dow };
   }, []);
 
@@ -119,25 +110,15 @@ export default function Vandaag() {
   const addTaskMutation = useMutation({
     mutationFn: async (input: { title: string; courseId: string | null; estMinutes: number | null }) => {
       const { startISO } = getLocalDayBounds(today.iso);
-      const dueLocal = new Date(startISO);
-      dueLocal.setHours(20, 0, 0, 0);
+      const dueLocal = new Date(startISO); dueLocal.setHours(20, 0, 0, 0);
       const { error } = await supabase.from("tasks").insert({
-        user_id: userId,
-        title: input.title,
-        status: "todo",
-        due_at: dueLocal.toISOString(),
-        course_id: input.courseId,
-        est_minutes: input.estMinutes,
+        user_id: userId, title: input.title, status: "todo",
+        due_at: dueLocal.toISOString(), course_id: input.courseId, est_minutes: input.estMinutes,
       });
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: qcKey as any });
-      toast({ title: "Taak toegevoegd" });
-    },
-    onError: (e: any) => {
-      toast({ title: "Toevoegen mislukt", variant: "destructive", description: e?.message ?? "Onbekende fout" });
-    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: qcKey as any }); toast({ title: "Taak toegevoegd" }); },
+    onError: (e: any) => { toast({ title: "Toevoegen mislukt", variant: "destructive", description: e?.message ?? "Onbekende fout" }); },
   });
 
   const toggleDone = useMutation({
@@ -163,18 +144,12 @@ export default function Vandaag() {
 
   const onAddTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      toast({ title: "Titel is verplicht", variant: "destructive" });
-      return;
-    }
-    addTaskMutation.mutate({
-      title: title.trim(),
-      courseId,
-      estMinutes: estMinutes ? Number(estMinutes) : null,
-    });
+    if (!title.trim()) return toast({ title: "Titel is verplicht", variant: "destructive" });
+    addTaskMutation.mutate({ title: title.trim(), courseId, estMinutes: estMinutes ? Number(estMinutes) : null });
     setTitle(""); setCourseId(null); setEstMinutes("");
   };
 
+  // --- Coach chat ---
   const coachRef = useRef<CoachChatHandle>(null);
   const [msg, setMsg] = useState("");
   const [sending, setSending] = useState(false);
@@ -182,14 +157,8 @@ export default function Vandaag() {
   async function handleSend(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const text = msg.trim();
-    if (!text) {
-      toast({ title: "Leeg bericht", description: "Typ eerst je bericht.", variant: "destructive" });
-      return;
-    }
-    if (!coachRef.current?.sendMessage) {
-      toast({ title: "Chat niet klaar", description: "CoachChat is nog niet geladen.", variant: "destructive" });
-      return;
-    }
+    if (!text) return toast({ title: "Leeg bericht", description: "Typ eerst je bericht.", variant: "destructive" });
+    if (!coachRef.current?.sendMessage) return toast({ title: "Chat niet klaar", description: "CoachChat is nog niet geladen.", variant: "destructive" });
     try {
       setSending(true);
       const p = coachRef.current.sendMessage(text);
@@ -207,45 +176,30 @@ export default function Vandaag() {
     todaySchedule: todayItems.map((i) => ({
       kind: i.kind,
       course: getCourseById(i.course_id)?.name ?? i.title ?? "Activiteit",
-      start: i.start_time,
-      end: i.end_time,
+      start: i.start_time, end: i.end_time,
     })),
     openTasks: tasksToday.map((t) => ({ id: t.id, title: t.title, status: t.status, courseId: t.course_id })),
-    difficulties: coachMemory.map((m) => ({
-      course: m.course,
-      status: m.status,
-      note: m.note,
-      lastUpdate: m.last_update,
-    })),
+    difficulties: coachMemory.map((m) => ({ course: m.course, status: m.status, note: m.note, lastUpdate: m.last_update })),
   };
 
   const coachSystemHint = `
 Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het Nederlands.
 - Gebruik context (rooster/taken/memory) alleen als het helpt; noem het niet expliciet tenzij relevant.
-- Bied GEEN vaste blokken of schema's aan, tenzij de gebruiker daar duidelijk om vraagt.
 - Max 2-3 zinnen. Hoogstens 1 vraag terug als dat nodig is.
-- Vier kleine successen. Als de gebruiker planning vraagt: doe 1-2 concrete vervolgstappen (geen sjablonen).
+- Vier kleine successen. Als de gebruiker planning vraagt: doe 1-2 concrete vervolgstappen.
 `.trim();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-      <div className="max-w-5xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        
-        {/* Versienummer */}
-        <div className="text-center text-xs text-slate-400">
-          v2.1.0
-        </div>
-        
-        {/* Chat sectie - rustig en luchtig */}
-        <section className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-sm border border-slate-200/50 p-6 space-y-4">
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <h2 className="text-lg font-medium text-slate-700">Praat met Noukie</h2>
-              <p className="text-sm text-slate-500 mt-1">
-                Je studiecoach helpt je graag met planning en motivatie
-              </p>
-            </div>
+    <div className="min-h-screen bg-slate-50">
+      {/* 👇 MAX 1600px, minimale zij-paddings voor maximale chatbreedte */}
+      <div className="max-w-[1600px] mx-auto px-2 sm:px-3 md:px-4 py-3 md:py-4 space-y-4">
+        {/* (Versienummer helemaal verwijderd) */}
 
+        {/* CHAT — zo breed mogelijk, compact UI */}
+        <section className="bg-white rounded-2xl border border-slate-200 p-3 md:p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            {/* Titel verwijderd voor meer ruimte; alleen een subtiele label + info-knop */}
+            <div className="text-sm text-slate-600">Praat met Noukie</div>
             <Dialog>
               <DialogTrigger asChild>
                 <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600">
@@ -253,59 +207,39 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
                 </Button>
               </DialogTrigger>
               <DialogContent className="rounded-2xl">
-                <DialogHeader>
-                  <DialogTitle>Tips voor Vandaag</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4 pt-2 text-sm text-slate-600">
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600 font-semibold">1</div>
-                    <div>
-                      <div className="font-medium text-slate-700">Start klein</div>
-                      <div>Kies één ding om nu te doen</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 text-indigo-600 font-semibold">2</div>
-                    <div>
-                      <div className="font-medium text-slate-700">Chat voor planning</div>
-                      <div>Vraag om 1-2 concrete vervolgstappen</div>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0 text-purple-600 font-semibold">3</div>
-                    <div>
-                      <div className="font-medium text-slate-700">Leren of uitleg?</div>
-                      <div>Ga naar de Uitleg-tab voor stap-voor-stap begeleiding</div>
-                    </div>
-                  </div>
+                <DialogHeader><DialogTitle>Tips</DialogTitle></DialogHeader>
+                <div className="space-y-3 text-sm text-slate-600 pt-1">
+                  <div>Vraag om 1–2 concrete vervolgstappen.</div>
+                  <div>Houd berichten kort; dan blijft de chat overzichtelijk.</div>
                 </div>
               </DialogContent>
             </Dialog>
           </div>
 
-          <CoachChat
-            ref={coachRef}
-            systemHint={coachSystemHint}
-            context={coachContext}
-            size="large"
-            hideComposer
-            threadKey={`today:${userId || "anon"}`}
-          />
+          {/* CoachChat op volle breedte */}
+          <div className="w-full">
+            <CoachChat
+              ref={coachRef}
+              systemHint={coachSystemHint}
+              context={coachContext}
+              size="large"
+              hideComposer
+              threadKey={`today:${userId || "anon"}`}
+            />
+          </div>
 
-          <form onSubmit={handleSend} className="space-y-3">
+          {/* Composer compact */}
+          <form onSubmit={handleSend} className="space-y-2">
             <Textarea
-              placeholder="Hoe ging het op school? Waar kan ik je mee helpen?"
+              placeholder="Waarmee kan ik je helpen?"
               value={msg}
               onChange={(e) => setMsg(e.target.value)}
-              rows={3}
-              className="min-h-24 text-base border-slate-200 focus:border-blue-300 focus:ring-blue-200 rounded-xl"
+              rows={2}
+              className="min-h-[44px] text-base border-slate-200 focus:border-blue-300 focus:ring-blue-200 rounded-xl"
             />
             <div className="flex flex-col sm:flex-row gap-2">
               <SmartVoiceInput
-                onTranscript={(text) => {
-                  setMsg(text);
-                  handleSend();
-                }}
+                onTranscript={(text) => { setMsg(text); handleSend(); }}
                 lang="nl-NL"
               />
               <Button type="submit" disabled={sending} className="bg-slate-800 hover:bg-slate-700 rounded-xl">
@@ -313,25 +247,17 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
                 {sending ? "Versturen..." : "Stuur"}
               </Button>
             </div>
-            <div className="text-sm text-slate-500">
-              Zoek je hulp bij leren of studeren?
-              <a href="/LeerChat" className="text-blue-600 hover:underline ml-1">
-                Ga naar Uitleg
-              </a>
-            </div>
           </form>
         </section>
 
-        {/* Rooster en taken - side by side op desktop */}
-        <div className="grid lg:grid-cols-2 gap-6">
-          
+        {/* ROOSTER & TAKEN — behoud, maar compacter en naast elkaar, volle breedte */}
+        <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
           {/* Rooster */}
-          <section className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-sm border border-slate-200/50 p-6">
-            <div className="flex items-center gap-2 mb-4">
+          <section className="bg-white rounded-2xl border border-slate-200 p-4">
+            <div className="flex items-center gap-2 mb-3">
               <Clock className="w-5 h-5 text-slate-400" />
-              <h2 className="text-lg font-medium text-slate-700">Je rooster</h2>
+              <h2 className="text-base font-medium text-slate-700">Je rooster</h2>
             </div>
-            
             {scheduleLoading ? (
               <div className="text-center py-8">
                 <Loader2 className="w-6 h-6 animate-spin inline-block text-slate-400" />
@@ -341,136 +267,145 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
                 {todayItems.map((item) => {
                   const course = getCourseById(item.course_id);
                   return (
-                    <div key={item.id} className="bg-slate-50/50 rounded-xl p-4 border border-slate-100">
+                    <div key={item.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
                       <div className="font-medium text-slate-700">{item.title || course?.name || "Activiteit"}</div>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm text-slate-500">
-                          {fmtTime(item.start_time)}{item.end_time ? ` - ${fmtTime(item.end_time)}` : ""}
-                        </span>
-                        <span className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
-                          {item.kind || "les"}
-                        </span>
+                      <div className="text-sm text-slate-500 mt-0.5">
+                        {fmtTime(item.start_time)}{item.end_time ? ` - ${fmtTime(item.end_time)}` : ""}
                       </div>
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-slate-400">
-                Geen activiteiten gepland
-              </div>
+              <div className="text-center py-8 text-slate-400">Geen activiteiten gepland</div>
             )}
           </section>
 
           {/* Taken */}
-          <section className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-sm border border-slate-200/50 p-6">
-            <h2 className="text-lg font-medium text-slate-700 mb-4">Je taken</h2>
-            
-            {tasksLoading ? (
-              <div className="text-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin inline-block text-slate-400" />
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {tasksToday.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">
-                    Geen taken voor vandaag
-                  </div>
-                ) : (
-                  tasksToday.map((task) => {
-                    const isDone = task.status === "done";
-                    return (
-                      <div key={task.id} className="bg-slate-50/50 rounded-xl p-4 border border-slate-100 flex items-center justify-between gap-3">
-                        <div className={`flex-1 text-sm ${isDone ? "line-through text-slate-400" : "text-slate-700"}`}>
-                          {task.title}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
-                            onClick={() => toggleDone.mutate(task)}
-                          >
-                            <Check className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                            onClick={() => delTask.mutate(task.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </section>
+          <TasksPanel
+            courses={courses}
+            tasksToday={tasksToday}
+            tasksLoading={tasksLoading}
+            addTaskMutation={addTaskMutation}
+            toggleDone={toggleDone}
+            delTask={delTask}
+            title={title}
+            setTitle={setTitle}
+            courseId={courseId}
+            setCourseId={setCourseId}
+            estMinutes={estMinutes}
+            setEstMinutes={setEstMinutes}
+            onAddTask={onAddTask}
+          />
         </div>
+      </div>
+    </div>
+  );
+}
 
-        {/* Nieuwe taak toevoegen */}
-        <section className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-sm border border-slate-200/50 p-6">
-          <h2 className="text-lg font-medium text-slate-700 mb-4">Nieuwe taak toevoegen</h2>
-          <form onSubmit={onAddTask} className="space-y-4">
+/** Takenpaneel losgetrokken voor leesbaarheid */
+function TasksPanel(props: {
+  courses: Course[]; tasksToday: Task[]; tasksLoading: boolean;
+  addTaskMutation: any; toggleDone: any; delTask: any;
+  title: string; setTitle: (v: string) => void;
+  courseId: string | null; setCourseId: (v: string | null) => void;
+  estMinutes: string; setEstMinutes: (v: string) => void;
+  onAddTask: (e: React.FormEvent) => void;
+}) {
+  const {
+    courses, tasksToday, tasksLoading,
+    addTaskMutation, toggleDone, delTask,
+    title, setTitle, courseId, setCourseId, estMinutes, setEstMinutes, onAddTask
+  } = props;
+
+  return (
+    <section className="bg-white rounded-2xl border border-slate-200 p-4">
+      <h2 className="text-base font-medium text-slate-700 mb-3">Je taken</h2>
+      {tasksLoading ? (
+        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin inline-block text-slate-400" /></div>
+      ) : (
+        <div className="space-y-2">
+          {tasksToday.length === 0 ? (
+            <div className="text-center py-8 text-slate-400">Geen taken voor vandaag</div>
+          ) : (
+            tasksToday.map((task) => {
+              const isDone = task.status === "done";
+              return (
+                <div key={task.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center justify-between gap-3">
+                  <div className={`flex-1 text-sm ${isDone ? "line-through text-slate-400" : "text-slate-700"}`}>{task.title}</div>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
+                      onClick={() => toggleDone.mutate(task)}
+                    >
+                      <Check className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      onClick={() => delTask.mutate(task.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* Toevoegen */}
+      <div className="mt-4">
+        <h3 className="text-sm font-medium text-slate-700 mb-2">Nieuwe taak toevoegen</h3>
+        <form onSubmit={onAddTask} className="space-y-3">
+          <div>
+            <Label htmlFor="t-title" className="text-slate-600">Wat moet je doen?</Label>
+            <Textarea
+              id="t-title" rows={2}
+              placeholder="Bijv. Wiskunde §2.3 oefenen, Engelse woordjes H2"
+              value={title} onChange={(e) => setTitle(e.target.value)}
+              className="mt-1.5 border-slate-200 focus:border-blue-300 focus:ring-blue-200 rounded-xl"
+            />
+          </div>
+
+          <div className="grid sm:grid-cols-3 gap-3">
             <div>
-              <Label htmlFor="t-title" className="text-slate-600">Wat moet je doen?</Label>
-              <Textarea
-                id="t-title"
-                placeholder="Bijv. Wiskunde §2.3 oefenen, Engelse woordjes H2, samenvatting H4"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                rows={2}
-                className="mt-1.5 border-slate-200 focus:border-blue-300 focus:ring-blue-200 rounded-xl"
+              <Label htmlFor="t-course" className="text-slate-600">Vak (optioneel)</Label>
+              <Select value={courseId ?? "none"} onValueChange={(v) => setCourseId(v === "none" ? null : v)}>
+                <SelectTrigger id="t-course" className="mt-1.5 border-slate-200 rounded-xl">
+                  <SelectValue placeholder="Kies vak" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Geen vak</SelectItem>
+                  {courses.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="t-min" className="text-slate-600">Duur (min)</Label>
+              <Input
+                id="t-min" type="number" min={5} step={5} placeholder="30"
+                value={estMinutes} onChange={(e) => setEstMinutes(e.target.value)}
+                className="mt-1.5 border-slate-200 rounded-xl"
               />
             </div>
 
-            <div className="grid sm:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="t-course" className="text-slate-600">Vak (optioneel)</Label>
-                <Select value={courseId ?? "none"} onValueChange={(v) => setCourseId(v === "none" ? null : v)}>
-                  <SelectTrigger id="t-course" className="mt-1.5 border-slate-200 rounded-xl">
-                    <SelectValue placeholder="Kies vak" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Geen vak</SelectItem>
-                    {courses.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="t-min" className="text-slate-600">Duur (min)</Label>
-                <Input
-                  id="t-min"
-                  type="number"
-                  min={5}
-                  step={5}
-                  placeholder="30"
-                  value={estMinutes}
-                  onChange={(e) => setEstMinutes(e.target.value)}
-                  className="mt-1.5 border-slate-200 rounded-xl"
-                />
-              </div>
-
-              <div className="flex items-end">
-                <Button 
-                  type="submit" 
-                  disabled={addTaskMutation.isPending} 
-                  className="w-full bg-slate-800 hover:bg-slate-700 rounded-xl"
-                >
-                  {addTaskMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                  {addTaskMutation.isPending ? "Toevoegen..." : "Toevoegen"}
-                </Button>
-              </div>
+            <div className="flex items-end">
+              <Button
+                type="submit"
+                disabled={addTaskMutation.isPending}
+                className="w-full bg-slate-800 hover:bg-slate-700 rounded-xl"
+              >
+                {addTaskMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                {addTaskMutation.isPending ? "Toevoegen..." : "Toevoegen"}
+              </Button>
             </div>
-          </form>
-        </section>
+          </div>
+        </form>
       </div>
-    </div>
+    </section>
   );
 }

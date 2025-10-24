@@ -2,7 +2,7 @@ import * as React from "react";
 import { useState, useEffect, useRef } from "react";
 import { Send, Camera, Repeat, Info, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,7 +20,6 @@ interface Message {
   imageUrl?: string;
   audioUrl?: string;
 }
-
 interface ChatSession {
   id: string;
   created_at: string;
@@ -57,20 +56,20 @@ export default function LeerChat() {
     setCurrentSessionId(null);
     setOpgave("");
     setOcrState({ status: "idle" });
-    toast({ title: "Nieuwe chat gestart", description: "Je kunt nu een nieuwe vraag stellen." });
+    toast({ title: "Nieuwe chat gestart" });
   };
 
-  // Auto-resize textarea tot max hoogte
+  // Auto-resize textarea tot max 6 regels
   const autoResize = () => {
     const el = textRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const max = 8 * 22; // ~8 regels * 22px line-height
+    const max = 6 * 22;
     el.style.height = Math.min(el.scrollHeight, max) + "px";
   };
   useEffect(() => { autoResize(); }, [opgave]);
 
-  // === Vakken laden ===
+  // Vakken laden
   useEffect(() => {
     const loadCourseOptions = async () => {
       if (!user) { setCourseOptions([]); return; }
@@ -81,18 +80,18 @@ export default function LeerChat() {
           .eq("user_id", user.id)
           .order("name", { ascending: true });
         if (error) throw error;
-        const courseNames = (courses ?? []).map((c) => c.name).filter(Boolean);
-        setCourseOptions(courseNames);
-        if (selectedCourse && !courseNames.includes(selectedCourse)) setSelectedCourse("");
+        const names = (courses ?? []).map((c) => c.name).filter(Boolean);
+        setCourseOptions(names);
+        if (selectedCourse && !names.includes(selectedCourse)) setSelectedCourse("");
       } catch (e: any) {
-        console.error("Kon vakken niet laden:", e);
-        toast({ title: "Fout", description: "Kon de lijst met vakken niet laden.", variant: "destructive" });
+        console.error(e);
+        toast({ title: "Fout", description: "Kon vakken niet laden.", variant: "destructive" });
       } finally { setLoadingCourses(false); }
     };
     loadCourseOptions();
   }, [user, toast, selectedCourse]);
 
-  // === Chatsessies laden per vak ===
+  // Chatsessies laden per vak
   useEffect(() => {
     const loadChatSessions = async () => {
       if (!user || !selectedCourse) { setChatSessions([]); setSelectedSessionId("new"); setMessages([]); return; }
@@ -106,17 +105,17 @@ export default function LeerChat() {
         const sessions = data as ChatSession[];
         setChatSessions(sessions);
         if (sessions.length > 0) {
-          const mostRecentSession = sessions[0];
-          setSelectedSessionId(mostRecentSession.id);
-          setCurrentSessionId(mostRecentSession.id);
-          setMessages(mostRecentSession.berichten || []);
+          const mostRecent = sessions[0];
+          setSelectedSessionId(mostRecent.id);
+          setCurrentSessionId(mostRecent.id);
+          setMessages(mostRecent.berichten || []);
         } else {
           setSelectedSessionId("new");
           setMessages([]);
           setCurrentSessionId(null);
         }
       } catch (error) {
-        console.error("Kon chatgeschiedenis niet laden:", error);
+        console.error(error);
         toast({ title: "Fout", description: "Kon chatgeschiedenis niet laden.", variant: "destructive" });
       }
     };
@@ -126,8 +125,8 @@ export default function LeerChat() {
   useEffect(() => {
     if (selectedSessionId === "new") { setMessages([]); setCurrentSessionId(null); }
     else {
-      const session = chatSessions.find((s) => s.id === selectedSessionId);
-      if (session) { setMessages(session.berichten || []); setCurrentSessionId(session.id); }
+      const s = chatSessions.find((x) => x.id === selectedSessionId);
+      if (s) { setMessages(s.berichten || []); setCurrentSessionId(s.id); }
     }
   }, [selectedSessionId, chatSessions]);
 
@@ -136,7 +135,7 @@ export default function LeerChat() {
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
 
-  // === Chat sturen ===
+  // Chat sturen
   const handleSendMessage = async (imageUrl?: string) => {
     if (isGenerating) return;
     const hasText = opgave.trim().length > 0;
@@ -155,14 +154,9 @@ export default function LeerChat() {
     }
 
     const visibleUserText = hasText ? opgave : "Kun je helpen met deze opgave/foto?";
-    const userMessage: Message = {
-      id: Date.now(),
-      sender: "user",
-      text: visibleUserText,
-      imageUrl,
-    };
-    const newMessagesList = [...messages, userMessage];
-    setMessages(newMessagesList);
+    const userMessage: Message = { id: Date.now(), sender: "user", text: visibleUserText, imageUrl };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setOpgave("");
     setOcrState({ status: "idle" });
     setIsGenerating(true);
@@ -171,19 +165,15 @@ export default function LeerChat() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      const history = newMessagesList.map(m => ({
+      const history = newMessages.map(m => ({
         role: m.sender === "user" ? "user" : "assistant",
         content: m.text,
       }));
-
       const context = { vak: selectedCourse, image_url: imageUrl || undefined };
 
       const resp = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ mode: "studeren", message: visibleUserText, history, context }),
       });
 
@@ -192,17 +182,17 @@ export default function LeerChat() {
       const data = rawText ? JSON.parse(rawText) : {};
       const reply: string = data?.reply ?? "Oké—kun je iets specifieker vertellen?";
       const aiMessage: Message = { id: Date.now() + 1, sender: "ai", text: reply, audioUrl: data?.audioUrl };
-      const finalMessagesList = [...newMessagesList, aiMessage];
-      setMessages(finalMessagesList);
+      const finalMessages = [...newMessages, aiMessage];
+      setMessages(finalMessages);
 
       if (currentSessionId) {
         await supabase.from("chatsessies").update({
-          berichten: finalMessagesList,
+          berichten: finalMessages,
           updated_at: new Date().toISOString()
         }).eq("id", currentSessionId);
       } else {
         const { data: ins } = await supabase.from("chatsessies")
-          .insert({ user_id: user.id, vak: selectedCourse, berichten: finalMessagesList })
+          .insert({ user_id: user.id, vak: selectedCourse, berichten: finalMessages })
           .select("id").single();
         if (ins) setCurrentSessionId(ins.id);
       }
@@ -214,7 +204,7 @@ export default function LeerChat() {
     }
   };
 
-  // === Image upload + OCR ===
+  // Upload + OCR
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -225,14 +215,13 @@ export default function LeerChat() {
     const fileName = `${user.id}/${crypto.randomUUID()}.${ext}`;
 
     try {
-      // 1) Upload naar public bucket (zodat AI/coach de foto kan zien)
       const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
       if (uploadError) throw uploadError;
       const res = supabase.storage.from("uploads").getPublicUrl(fileName) as any;
       const publicUrl: string = res?.data?.publicUrl ?? res?.publicURL;
       if (!publicUrl) throw new Error("Public URL niet gevonden. Check je 'uploads' bucket policy.");
 
-      // 2) OCR proberen (optioneel)
+      // OCR proberen (optioneel)
       try {
         const fd = new FormData();
         fd.append("image", file);
@@ -255,7 +244,7 @@ export default function LeerChat() {
         setOcrState({ status: "error", msg: "OCR fout" });
       }
 
-      // 3) Berichten sturen (foto + evt. tekst die al in veld staat)
+      // Stuur meteen de foto mee (de herkende tekst staat al in het veld)
       await handleSendMessage(publicUrl);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
@@ -269,37 +258,37 @@ export default function LeerChat() {
   return (
     <div
       className="
-        flex flex-col min-h-[100dvh] p-4 bg-slate-50
-        pb-[calc(100px+env(safe-area-inset-bottom))] /* ruimte voor sticky composer + tabbar */
+        flex flex-col min-h-[100dvh] p-2 sm:p-3 md:p-4 bg-slate-50
+        pb-[calc(92px+env(safe-area-inset-bottom))]
       "
     >
-      <div className="mx-auto w-full max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
-        <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
-          <div className="space-y-4">
+      {/* max-w op laptop 1600px, minimale zijkant padding */}
+      <div className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4">
+        <ScrollArea className="flex-1 mb-2 sm:mb-3 md:mb-4 p-2 sm:p-3 md:p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
+          <div className="space-y-3 sm:space-y-4">
             {messages.length === 0 && !isGenerating && (
-              <div className="text-center text-muted-foreground min-h-[320px] flex flex-col items-center justify-center px-4">
-                <p className="font-medium text-lg">Welkom bij de AI Tutor!</p>
-                <p className="text-sm mt-1">Kies een vak en stel je vraag.</p>
-                <p className="text-sm mt-2 text-blue-700">
-                  Upload een foto van het boek; we lezen de tekst (OCR) en leggen het uit 🎓
-                </p>
+              <div className="text-center text-muted-foreground min-h-[260px] sm:min-h-[300px] flex flex-col items-center justify-center px-2">
+                <p className="font-medium">Kies een vak, stel je vraag of upload een foto (OCR).</p>
               </div>
             )}
 
             {messages.map((msg) => (
               <div key={msg.id} className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}>
-                <div className={cn("max-w-xl p-3 rounded-lg shadow-sm", msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-background border")}>
-                  <p className="font-bold text-sm mb-1">{msg.sender === "user" ? "Jij" : "AI Tutor"}</p>
-                  {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-xs" />}
-                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                <div className={cn(
+                  "max-w-[95%] sm:max-w-[85%] md:max-w-[75%] p-2 sm:p-3 rounded-lg shadow-sm",
+                  msg.sender === "user" ? "bg-primary text-primary-foreground" : "bg-background border"
+                )}>
+                  <p className="font-bold text-xs mb-1">{msg.sender === "user" ? "Jij" : "AI Tutor"}</p>
+                  {msg.imageUrl && <img src={msg.imageUrl} alt="Opgave" className="rounded-md my-2 max-w-full" />}
+                  <p className="whitespace-pre-wrap text-sm sm:text-base">{msg.text}</p>
                 </div>
               </div>
             ))}
 
             {isGenerating && (
               <div className="flex justify-start">
-                <div className="p-3 rounded-lg bg-background border shadow-sm">
-                  <p className="font-bold text-sm mb-1">AI Tutor</p>
+                <div className="p-2 sm:p-3 rounded-lg bg-background border shadow-sm">
+                  <p className="font-bold text-xs mb-1">AI Tutor</p>
                   <div className="flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-primary animate-bounce" />
                     <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-150" />
@@ -312,51 +301,22 @@ export default function LeerChat() {
         </ScrollArea>
       </div>
 
-      {/* Sticky composer (compact) boven mobiele tabbar */}
+      {/* Sticky composer — compact, volle breedte, knoppen rechts naast Verstuur */}
       <div
         className="
-          fixed bottom-[calc(72px+env(safe-area-inset-bottom))] left-0 right-0 z-40
-          md:static md:bottom-auto md:left-auto md:right-auto
+          fixed bottom-[calc(60px+env(safe-area-inset-bottom))] left-0 right-0 z-40
+          md:static md:bottom-auto
           bg-slate-50/90 backdrop-blur supports-[backdrop-filter]:bg-slate-50/60
-          px-4
+          px-2 sm:px-3 md:px-4
         "
       >
-        <div className="mx-auto w-full max-w-7xl">
-          <Card className="mt-2 flex-shrink-0 overflow-hidden">
-            <CardHeader className="flex-row items-center justify-between pb-2">
-              <CardTitle className="text-base">Vraag & uitleg</CardTitle>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" onClick={startNewChat} title="Nieuwe chat">
-                  <Repeat className="w-5 h-5 text-muted-foreground" />
-                </Button>
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button variant="ghost" size="icon" title="Tips">
-                      <Info className="w-5 h-5 text-muted-foreground" />
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
-                    <ul className="space-y-3 pt-2 text-sm">
-                      <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
-                      <li><strong>Vraag concreet</strong> (“Wat is suburbanisatie?”).</li>
-                      <li><strong>Vraag om oefenvragen</strong> na de uitleg.</li>
-                    </ul>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-
-            <CardContent className="p-3 pt-0 space-y-3 pb-3">
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="hidden"
-                  />
+        <div className="mx-auto w-full max-w-[1600px]">
+          <Card className="mt-1 md:mt-2 flex-shrink-0 overflow-hidden">
+            <CardContent className="p-2 sm:p-3">
+              <div className="flex items-end gap-2">
+                {/* Foto + vakkeuze links, compact */}
+                <div className="flex items-center gap-2">
+                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                   <Button
                     variant="outline"
                     size="icon"
@@ -368,35 +328,36 @@ export default function LeerChat() {
                   </Button>
 
                   <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-                    <SelectTrigger className="w-40 h-9">
-                      <SelectValue placeholder={loadingCourses ? "Vakken laden..." : "Kies vak"} />
+                    <SelectTrigger className="w-36 h-9">
+                      <SelectValue placeholder={loadingCourses ? "Vakken…" : "Kies vak"} />
                     </SelectTrigger>
                     <SelectContent>
                       {courseOptions.length > 0
                         ? courseOptions.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))
-                        : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken gevonden</div>}
+                        : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken</div>}
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="flex-1 min-w-[220px] max-w-[720px]">
+                {/* Tekstveld in het midden – zo breed mogelijk */}
+                <div className="flex-1 min-w-[160px]">
                   <Label htmlFor="opgave-text" className="sr-only">Vraag</Label>
                   <Textarea
                     id="opgave-text"
                     ref={textRef}
                     value={opgave}
                     onChange={(e) => setOpgave(e.target.value)}
-                    rows={2}
+                    rows={1}
                     onInput={autoResize}
                     placeholder="Typ je vraag of plak OCR-tekst…"
-                    className="w-full h-auto min-h-[44px] max-h-[176px] overflow-auto resize-none"
+                    className="w-full h-auto min-h-[40px] max-h-[132px] overflow-auto resize-none text-sm sm:text-base"
                   />
-                  {/* OCR status */}
+                  {/* OCR-status compact */}
                   {ocrState.status !== "idle" && (
-                    <div className="mt-1 text-xs flex items-center gap-2">
+                    <div className="mt-1 text-[11px] flex items-center gap-2">
                       {ocrState.status === "ok" && (
                         <span className="inline-flex items-center gap-1 text-emerald-700">
-                          <CheckCircle2 className="w-4 h-4" /> OCR: {ocrState.chars} tekens herkend
+                          <CheckCircle2 className="w-4 h-4" /> OCR: {ocrState.chars} tekens
                         </span>
                       )}
                       {ocrState.status === "none" && (
@@ -413,16 +374,46 @@ export default function LeerChat() {
                   )}
                 </div>
 
-                <Button
-                  onClick={() => handleSendMessage()}
-                  disabled={isGenerating || !selectedCourse || (!opgave.trim())}
-                  size="default"
-                  className="shrink-0 sm:w-auto"
-                  title="Verstuur"
-                >
-                  <Send className="w-5 h-5 mr-2" />
-                  Verstuur
-                </Button>
+                {/* Rechter cluster: Verstuur + i + pijl (nieuwe chat) */}
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <Button
+                    onClick={() => handleSendMessage()}
+                    disabled={isGenerating || !selectedCourse || (!opgave.trim())}
+                    size="default"
+                    className="shrink-0"
+                    title="Verstuur"
+                  >
+                    <Send className="w-5 h-5 mr-2" />
+                    Verstuur
+                  </Button>
+
+                  {/* i-knop (info) direct naast Verstuur */}
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="ghost" size="icon" title="Tips">
+                        <Info className="w-5 h-5 text-muted-foreground" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
+                      <ul className="space-y-3 pt-2 text-sm">
+                        <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
+                        <li><strong>Wees concreet</strong> (“Wat is suburbanisatie?”).</li>
+                        <li><strong>Vraag om oefenvragen</strong> na de uitleg.</li>
+                      </ul>
+                    </DialogContent>
+                  </Dialog>
+
+                  {/* Pijlknop alleen als hij de reset-functie heeft */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={startNewChat}
+                    title="Nieuwe chat"
+                  >
+                    <Repeat className="w-5 h-5 text-muted-foreground" />
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
