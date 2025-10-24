@@ -59,12 +59,12 @@ export default function LeerChat() {
     toast({ title: "Nieuwe chat gestart" });
   };
 
-  // Auto-resize textarea tot max 6 regels
+  // Auto-resize textarea tot max 5 regels (22px line-height ~110px)
   const autoResize = () => {
     const el = textRef.current;
     if (!el) return;
     el.style.height = "auto";
-    const max = 6 * 22;
+    const max = 5 * 22;
     el.style.height = Math.min(el.scrollHeight, max) + "px";
   };
   useEffect(() => { autoResize(); }, [opgave]);
@@ -244,7 +244,6 @@ export default function LeerChat() {
         setOcrState({ status: "error", msg: "OCR fout" });
       }
 
-      // Stuur meteen de foto mee (de herkende tekst staat al in het veld)
       await handleSendMessage(publicUrl);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
@@ -258,16 +257,20 @@ export default function LeerChat() {
   return (
     <div
       className="
-        flex flex-col min-h-[100dvh] p-2 sm:p-3 md:p-4 bg-slate-50
-        pb-[calc(92px+env(safe-area-inset-bottom))]
+        flex flex-col min-h-[100dvh] bg-slate-50
+        px-2 sm:px-3 md:px-4
+        pt-2 sm:pt-3 md:pt-4
+        pb-4                      /* composer staat in flow, dus gewone padding */
       "
     >
-      {/* max-w op laptop 1600px, minimale zijkant padding */}
-      <div className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4">
-        <ScrollArea className="flex-1 mb-2 sm:mb-3 md:mb-4 p-2 sm:p-3 md:p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
+      {/* Binnen jouw Layout is de content al gecentreerd/ingevangen; we minimaliseren extra randen.
+          We zetten max-breedte op 1600px indien je Layout dit toelaat. */}
+      <div className="mx-auto w-full max-w-[1600px]">
+        {/* CHAT */}
+        <ScrollArea className="flex-1 mb-3 md:mb-4 p-2 sm:p-3 md:p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
           <div className="space-y-3 sm:space-y-4">
             {messages.length === 0 && !isGenerating && (
-              <div className="text-center text-muted-foreground min-h-[260px] sm:min-h-[300px] flex flex-col items-center justify-center px-2">
+              <div className="text-center text-muted-foreground min-h-[220px] sm:min-h-[280px] flex flex-col items-center justify-center px-2">
                 <p className="font-medium">Kies een vak, stel je vraag of upload een foto (OCR).</p>
               </div>
             )}
@@ -299,125 +302,106 @@ export default function LeerChat() {
             )}
           </div>
         </ScrollArea>
-      </div>
 
-      {/* Sticky composer — compact, volle breedte, knoppen rechts naast Verstuur */}
-      <div
-        className="
-          fixed bottom-[calc(60px+env(safe-area-inset-bottom))] left-0 right-0 z-40
-          md:static md:bottom-auto
-          bg-slate-50/90 backdrop-blur supports-[backdrop-filter]:bg-slate-50/60
-          px-2 sm:px-3 md:px-4
-        "
-      >
-        <div className="mx-auto w-full max-w-[1600px]">
-          <Card className="mt-1 md:mt-2 flex-shrink-0 overflow-hidden">
-            <CardContent className="p-2 sm:p-3">
-              <div className="flex items-end gap-2">
-                {/* Foto + vakkeuze links, compact */}
-                <div className="flex items-center gap-2">
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isUploading || isGenerating}
-                    title="Foto toevoegen"
-                  >
-                    {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
-                  </Button>
+        {/* COMPOSER (in flow, compact) */}
+        <Card className="flex-shrink-0 overflow-hidden">
+          <CardContent className="p-2 sm:p-3">
+            <div className="flex items-end gap-2">
+              {/* Foto + vak */}
+              <div className="flex items-center gap-2">
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploading || isGenerating}
+                  title="Foto toevoegen"
+                >
+                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                </Button>
 
-                  <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-                    <SelectTrigger className="w-36 h-9">
-                      <SelectValue placeholder={loadingCourses ? "Vakken…" : "Kies vak"} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {courseOptions.length > 0
-                        ? courseOptions.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))
-                        : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken</div>}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Tekstveld in het midden – zo breed mogelijk */}
-                <div className="flex-1 min-w-[160px]">
-                  <Label htmlFor="opgave-text" className="sr-only">Vraag</Label>
-                  <Textarea
-                    id="opgave-text"
-                    ref={textRef}
-                    value={opgave}
-                    onChange={(e) => setOpgave(e.target.value)}
-                    rows={1}
-                    onInput={autoResize}
-                    placeholder="Typ je vraag of plak OCR-tekst…"
-                    className="w-full h-auto min-h-[40px] max-h-[132px] overflow-auto resize-none text-sm sm:text-base"
-                  />
-                  {/* OCR-status compact */}
-                  {ocrState.status !== "idle" && (
-                    <div className="mt-1 text-[11px] flex items-center gap-2">
-                      {ocrState.status === "ok" && (
-                        <span className="inline-flex items-center gap-1 text-emerald-700">
-                          <CheckCircle2 className="w-4 h-4" /> OCR: {ocrState.chars} tekens
-                        </span>
-                      )}
-                      {ocrState.status === "none" && (
-                        <span className="inline-flex items-center gap-1 text-amber-700">
-                          <AlertCircle className="w-4 h-4" /> Geen tekst herkend
-                        </span>
-                      )}
-                      {ocrState.status === "error" && (
-                        <span className="inline-flex items-center gap-1 text-rose-700">
-                          <AlertCircle className="w-4 h-4" /> {ocrState.msg || "OCR niet beschikbaar"}
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Rechter cluster: Verstuur + i + pijl (nieuwe chat) */}
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <Button
-                    onClick={() => handleSendMessage()}
-                    disabled={isGenerating || !selectedCourse || (!opgave.trim())}
-                    size="default"
-                    className="shrink-0"
-                    title="Verstuur"
-                  >
-                    <Send className="w-5 h-5 mr-2" />
-                    Verstuur
-                  </Button>
-
-                  {/* i-knop (info) direct naast Verstuur */}
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="ghost" size="icon" title="Tips">
-                        <Info className="w-5 h-5 text-muted-foreground" />
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
-                      <ul className="space-y-3 pt-2 text-sm">
-                        <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
-                        <li><strong>Wees concreet</strong> (“Wat is suburbanisatie?”).</li>
-                        <li><strong>Vraag om oefenvragen</strong> na de uitleg.</li>
-                      </ul>
-                    </DialogContent>
-                  </Dialog>
-
-                  {/* Pijlknop alleen als hij de reset-functie heeft */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={startNewChat}
-                    title="Nieuwe chat"
-                  >
-                    <Repeat className="w-5 h-5 text-muted-foreground" />
-                  </Button>
-                </div>
+                <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+                  <SelectTrigger className="w-36 h-9">
+                    <SelectValue placeholder={loadingCourses ? "Vakken…" : "Kies vak"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courseOptions.length > 0
+                      ? courseOptions.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))
+                      : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken</div>}
+                  </SelectContent>
+                </Select>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+
+              {/* Tekstveld */}
+              <div className="flex-1 min-w-[160px]">
+                <Label htmlFor="opgave-text" className="sr-only">Vraag</Label>
+                <Textarea
+                  id="opgave-text"
+                  ref={textRef}
+                  value={opgave}
+                  onChange={(e) => setOpgave(e.target.value)}
+                  rows={1}
+                  onInput={autoResize}
+                  placeholder="Typ je vraag of plak OCR-tekst…"
+                  className="w-full h-auto min-h-[40px] max-h-[110px] overflow-auto resize-none text-sm sm:text-base"
+                />
+                {ocrState.status !== "idle" && (
+                  <div className="mt-1 text-[11px] flex items-center gap-2">
+                    {ocrState.status === "ok" && (
+                      <span className="inline-flex items-center gap-1 text-emerald-700">
+                        <CheckCircle2 className="w-4 h-4" /> OCR: {ocrState.chars} tekens
+                      </span>
+                    )}
+                    {ocrState.status === "none" && (
+                      <span className="inline-flex items-center gap-1 text-amber-700">
+                        <AlertCircle className="w-4 h-4" /> Geen tekst herkend
+                      </span>
+                    )}
+                    {ocrState.status === "error" && (
+                      <span className="inline-flex items-center gap-1 text-rose-700">
+                        <AlertCircle className="w-4 h-4" /> {ocrState.msg || "OCR niet beschikbaar"}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Rechts: Verstuur + i + reset */}
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button
+                  onClick={() => handleSendMessage()}
+                  disabled={isGenerating || !selectedCourse || (!opgave.trim())}
+                  size="default"
+                  className="shrink-0 w-full sm:w-auto"
+                  title="Verstuur"
+                >
+                  <Send className="w-5 h-5 mr-2" />
+                  Verstuur
+                </Button>
+
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" title="Tips">
+                      <Info className="w-5 h-5 text-muted-foreground" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
+                    <ul className="space-y-3 pt-2 text-sm">
+                      <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
+                      <li><strong>Wees concreet</strong> (“Wat is suburbanisatie?”).</li>
+                      <li><strong>Vraag om oefenvragen</strong> na de uitleg.</li>
+                    </ul>
+                  </DialogContent>
+                </Dialog>
+
+                <Button variant="ghost" size="icon" onClick={startNewChat} title="Nieuwe chat">
+                  <Repeat className="w-5 h-5 text-muted-foreground" />
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
