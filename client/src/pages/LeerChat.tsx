@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+import UploadOcrExplain from "@/features/explain/UploadOcrExplain";
 
 interface Message {
   id: number;
@@ -28,6 +29,14 @@ interface ChatSession {
   updated_at: string;
   vak: string;
   berichten: Message[];
+}
+
+export default function UitlegTab() {
+  return (
+    <div className="space-y-4">
+      <UploadOcrExplain />
+    </div>
+  );
 }
 
 export default function LeerChat() {
@@ -114,14 +123,6 @@ export default function LeerChat() {
   }, [selectedCourse, user, toast]);
 
   useEffect(() => {
-    if (selectedSessionId === "new") { setMessages([]); setCurrentSessionId(null); }
-    else {
-      const session = chatSessions.find((s) => s.id === selectedSessionId);
-      if (session) { setMessages(session.berichten || []); setCurrentSessionId(session.id); }
-    }
-  }, [selectedSessionId, chatSessions]);
-
-  useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('div[data-radix-scroll-area-viewport]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages]);
@@ -205,7 +206,7 @@ export default function LeerChat() {
     }
   };
 
-  // === Nieuwe image upload (public bucket) ===
+  // === Image upload (+ optionele OCR) ===
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -213,11 +214,41 @@ export default function LeerChat() {
     const ext = file.name.split(".").pop()?.toLowerCase() || "png";
     const fileName = `${user.id}/${crypto.randomUUID()}.${ext}`;
     try {
+      // 1) Upload naar public bucket
       const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
       if (uploadError) throw uploadError;
       const res = supabase.storage.from("uploads").getPublicUrl(fileName) as any;
       const publicUrl: string = res?.data?.publicUrl ?? res?.publicURL;
       if (!publicUrl || !publicUrl.includes("/public/")) throw new Error("Bucket niet public of URL ongeldig.");
+
+      // 2) Probeer OCR (optioneel) – fallback: als /api/ocr ontbreekt of faalt, sturen we gewoon de foto mee
+      let recognized = "";
+      try {
+        const fd = new FormData();
+        fd.append("image", file);
+        const r = await fetch("/api/ocr", { method: "POST", body: fd });
+        if (r.ok) {
+          const j = await r.json();
+          if (j?.text?.trim()) recognized = j.text.trim();
+        }
+      } catch {
+        // OCR niet beschikbaar of faalt → negeren
+      }
+
+      if (recognized) {
+        setOpgave(recognized);
+        toast({
+          title: "Tekst herkend",
+          description: "De herkende tekst staat nu in het tekstvak. Controleer en druk op Verstuur.",
+        });
+      } else {
+        toast({
+          title: "Afbeelding geüpload",
+          description: "Geen tekst herkend (of OCR niet actief). Je kunt de foto zo versturen.",
+        });
+      }
+
+      // 3) Stuur bericht met image + (optioneel) herkende tekst
       await handleSendMessage(publicUrl);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
@@ -227,8 +258,14 @@ export default function LeerChat() {
     }
   };
 
+  // ================== UI ==================
   return (
-    <div className="flex flex-col h-screen p-4 bg-slate-50">
+    <div
+      className="
+        flex flex-col min-h-[100dvh] p-4 bg-slate-50
+        pb-[calc(110px+env(safe-area-inset-bottom))]  /* ruimte voor sticky composer + mobiele tabbar */
+      "
+    >
       {/* responsieve breedte zoals Layout */}
       <div className="mx-auto w-full max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
         <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg bg-white" ref={scrollAreaRef}>
@@ -267,110 +304,121 @@ export default function LeerChat() {
             )}
           </div>
         </ScrollArea>
+      </div>
 
-        {/* Composer */}
-        <Card className="mt-4 flex-shrink-0 overflow-hidden">
-          <CardHeader className="flex-row items-center justify-between pb-2">
-            <CardTitle className="text-lg">Stel je vraag</CardTitle>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" onClick={startNewChat} title="Nieuwe chat">
-                <Repeat className="w-5 h-5 text-muted-foreground" />
-              </Button>
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="ghost" size="icon" title="Tips voor goede hulp">
-                    <Info className="w-5 h-5 text-muted-foreground" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Tips voor Goede Hulp</DialogTitle>
-                  </DialogHeader>
-                  <ul className="space-y-3 pt-2 text-sm">
-                    <li>
-                      <strong>1. Stel een duidelijke vraag:</strong> Hoe specifieker je vraag, hoe beter de uitleg.
-                      Bijvoorbeeld: “Hoe bereken ik de omtrek van een cirkel?” i.p.v. “Ik snap het niet”.
-                    </li>
-                    <li>
-                      <strong>2. Laat zien wat je al hebt geprobeerd:</strong> Schrijf je eigen stappen of ideeën op.
-                      De AI kan dan gericht feedback geven en je verder helpen.
-                    </li>
-                    <li>
-                      <strong>3. Gebruik een foto:</strong> Upload een duidelijke foto van je opgave of aantekeningen.
-                      Handig bij lastige sommen of tekstvragen.
-                    </li>
-                    <li>
-                      <strong>4. Oefenvragen:</strong> Vraag na de uitleg om extra oefenvragen.
-                      De AI kan oefenopgaven bedenken om te checken of je het snapt.
-                    </li>
-                    <li>
-                      <strong>5. Ezelsbruggetjes & tips:</strong> De AI kan handige trucjes geven om iets te onthouden,
-                      of de stof in stappen uitleggen.
-                    </li>
-                    <li className="text-xs text-blue-800 p-2 bg-blue-50 rounded-md">
-                      <strong>Let op:</strong> De uitlegcoach werkt op basis van jouw vraag en foto. Hoe beter je input,
-                      hoe beter de hulp 🎓
-                    </li>
-                  </ul>
-                </DialogContent>
-              </Dialog>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-4 pt-0 space-y-4 pb-4">
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="opgave-text">Opgave of Begrip</Label>
-                <Textarea
-                  id="opgave-text"
-                  value={opgave}
-                  onChange={(e) => setOpgave(e.target.value)}
-                  rows={4}
-                  placeholder="Typ of plak hier de opgave..."
-                />
-              </div>
-              <div>
-                <Label htmlFor="poging-text">Mijn eigen poging (optioneel)</Label>
-                <Textarea
-                  id="poging-text"
-                  value={poging}
-                  onChange={(e) => setPoging(e.target.value)}
-                  rows={4}
-                  placeholder="Wat heb je zelf al geprobeerd?"
-                />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div className="flex items-center gap-2 flex-wrap">
-                <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-                <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isUploading || isGenerating}>
-                  {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+      {/* Sticky composer: altijd boven de mobiele tabbar en safe-area */}
+      <div
+        className="
+          fixed bottom-[calc(72px+env(safe-area-inset-bottom))] left-0 right-0 z-40
+          md:static md:bottom-auto md:left-auto md:right-auto
+          bg-slate-50/90 backdrop-blur supports-[backdrop-filter]:bg-slate-50/60
+          px-4
+        "
+      >
+        <div className="mx-auto w-full max-w-7xl">
+          <Card className="mt-4 flex-shrink-0 overflow-hidden">
+            <CardHeader className="flex-row items-center justify-between pb-2">
+              <CardTitle className="text-lg">Stel je vraag</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" onClick={startNewChat} title="Nieuwe chat">
+                  <Repeat className="w-5 h-5 text-muted-foreground" />
                 </Button>
-                <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-                  <SelectTrigger className="w-40">
-                    <SelectValue placeholder={loadingCourses ? "Vakken laden..." : "Kies een vak"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {courseOptions.length > 0
-                      ? courseOptions.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))
-                      : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken gevonden</div>}
-                  </SelectContent>
-                </Select>
+                <Dialog>
+                  <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" title="Tips voor goede hulp">
+                      <Info className="w-5 h-5 text-muted-foreground" />
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Tips voor Goede Hulp</DialogTitle>
+                    </DialogHeader>
+                    <ul className="space-y-3 pt-2 text-sm">
+                      <li>
+                        <strong>1. Stel een duidelijke vraag:</strong> Hoe specifieker je vraag, hoe beter de uitleg.
+                        Bijvoorbeeld: “Hoe bereken ik de omtrek van een cirkel?” i.p.v. “Ik snap het niet”.
+                      </li>
+                      <li>
+                        <strong>2. Laat zien wat je al hebt geprobeerd:</strong> Schrijf je eigen stappen of ideeën op.
+                        De AI kan dan gericht feedback geven en je verder helpen.
+                      </li>
+                      <li>
+                        <strong>3. Gebruik een foto:</strong> Upload een duidelijke foto van je opgave of aantekeningen.
+                        Handig bij lastige sommen of tekstvragen.
+                      </li>
+                      <li>
+                        <strong>4. Oefenvragen:</strong> Vraag na de uitleg om extra oefenvragen.
+                        De AI kan oefenopgaven bedenken om te checken of je het snapt.
+                      </li>
+                      <li>
+                        <strong>5. Ezelsbruggetjes & tips:</strong> De AI kan handige trucjes geven om iets te onthouden,
+                        of de stof in stappen uitleggen.
+                      </li>
+                      <li className="text-xs text-blue-800 p-2 bg-blue-50 rounded-md">
+                        <strong>Let op:</strong> De uitlegcoach werkt op basis van jouw vraag en foto. Hoe beter je input,
+                        hoe beter de hulp 🎓
+                      </li>
+                    </ul>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-4 pt-0 space-y-4 pb-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="opgave-text">Opgave of Begrip</Label>
+                  <Textarea
+                    id="opgave-text"
+                    value={opgave}
+                    onChange={(e) => setOpgave(e.target.value)}
+                    rows={4}
+                    placeholder="Typ of plak hier de opgave..."
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="poging-text">Mijn eigen poging (optioneel)</Label>
+                  <Textarea
+                    id="poging-text"
+                    value={poging}
+                    onChange={(e) => setPoging(e.target.value)}
+                    rows={4}
+                    placeholder="Wat heb je zelf al geprobeerd?"
+                  />
+                </div>
               </div>
 
-              <Button
-                onClick={() => handleSendMessage()}
-                disabled={isGenerating || !selectedCourse || (!opgave.trim() && !(fileInputRef.current?.files?.length))}
-                size="lg"
-                className="shrink-0 sm:w-auto w-full"
-              >
-                <Send className="w-5 h-5 mr-2" />
-                Verstuur
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="flex flex-wrap items-end justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
+                  <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()} disabled={isUploading || isGenerating}>
+                    {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                  </Button>
+                  <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder={loadingCourses ? "Vakken laden..." : "Kies een vak"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {courseOptions.length > 0
+                        ? courseOptions.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))
+                        : <div className="px-3 py-2 text-sm text-muted-foreground">Geen vakken gevonden</div>}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button
+                  onClick={() => handleSendMessage()}
+                  disabled={isGenerating || !selectedCourse || (!opgave.trim() && !(fileInputRef.current?.files?.length))}
+                  size="lg"
+                  className="shrink-0 sm:w-auto w-full"
+                >
+                  <Send className="w-5 h-5 mr-2" />
+                  Verstuur
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

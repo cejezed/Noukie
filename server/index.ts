@@ -1,17 +1,21 @@
-// server/index.ts
 import "dotenv/config";
 import express from "express";
-<<<<<<< HEAD
 import path from "node:path";
 import { promises as fs } from "node:fs";
 import { createServer } from "node:http";
+
+// OCR deps (inline endpoint)
+import multer from "multer";
+import sharp from "sharp";
+import Tesseract from "tesseract.js";
 
 async function createAppServer() {
   const app = express();
   const server = createServer(app);
 
   // ------- Basics -------
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ extended: true }));
 
   // CORS (simpel & overal)
   app.use((req, res, next) => {
@@ -26,46 +30,77 @@ async function createAppServer() {
   const apiExt = process.env.NODE_ENV !== "production" ? ".ts" : ".js";
   const apiDir = path.resolve(process.cwd(), "api");
 
-  // ------- API routes (compatibel met Vercel handlers) -------
+  // Helper om handlers dynamisch te laden (compatibel met Vercel-style default export)
+  const loadAndRun = async (name: string, req: any, res: any) => {
+    try {
+      const mod = await import(path.join(apiDir, `${name}${apiExt}`));
+      if (typeof mod?.default === "function") {
+        return mod.default(req, res);
+      }
+      return res.status(500).json({ error: `Handler ${name} heeft geen default export()` });
+    } catch (err) {
+      console.error(`${name} handler error:`, err);
+      return res.status(500).json({ error: `${name} service unavailable` });
+    }
+  };
+
+  // ------- API routes -------
   // Chat (generieke coach-chat)
-  app.post("/api/chat", async (req, res) => {
-    try {
-      const mod = await import(path.join(apiDir, `chat${apiExt}`));
-      return mod.default(req as any, res as any);
-    } catch (err) {
-      console.error("Chat handler error:", err);
-      return res.status(500).json({ error: "Chat service unavailable" });
-    }
+  app.post("/api/chat", (req, res) => loadAndRun("chat", req, res));
+
+  // Coach
+  app.post("/api/coach", (req, res) => loadAndRun("coach", req, res));
+
+  // Explain (opgave/poging + LLM + evt. TTS)
+  app.post("/api/explain", (req, res) => loadAndRun("explain", req, res));
+
+  // ASR (spraak → tekst) – dynamisch uit /api/asr
+  app.post("/api/asr", (req, res) => loadAndRun("asr", req, res));
+
+  // OCR (foto → tekst) – inline endpoint (direct in deze server)
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
+    fileFilter: (_req, file, cb) => {
+      const ok = ["image/jpeg", "image/png", "image/webp"].includes(file.mimetype);
+      cb(ok ? null : new Error("Ongeldig bestandsformaat (jpeg/png/webp)"), ok);
+    },
   });
 
-  // Coach (indien je deze nog gebruikt — anders deprecaten)
-  app.post("/api/coach", async (req, res) => {
+  app.post("/api/ocr", upload.single("image"), async (req, res) => {
     try {
-      const mod = await import(path.join(apiDir, `coach${apiExt}`));
-      return mod.default(req as any, res as any);
-    } catch (err) {
-      console.error("Coach handler error:", err);
-      return res.status(500).json({ error: "Coach service unavailable" });
+      if (!req.file) return res.status(400).json({ error: "Geen afbeelding ontvangen" });
+
+      // Pre-process: auto-rotate, grayscale, normalize → betere OCR
+      const preprocessed = await sharp(req.file.buffer)
+        .rotate()
+        .grayscale()
+        .normalize()
+        .toFormat("png")
+        .toBuffer();
+
+      // Nederlands + Engels (veel vaktermen zijn EN)
+      const { data } = await Tesseract.recognize(preprocessed, "nld+eng");
+      const text = (data.text || "").trim();
+
+      return res.json({
+        text,
+        confidence: data.confidence,
+        blocks: data.blocks?.length ?? 0,
+        lines: data.lines?.length ?? 0,
+      });
+    } catch (err: any) {
+      console.error("OCR error:", err);
+      return res.status(500).json({ error: "OCR mislukt", details: err?.message });
     }
   });
-
-  // Explain (opgave/poging + Gemini + TTS)
-app.post("/api/explain", async (req, res) => {
-  try {
-    const mod = await import(path.join(apiDir, `explain${apiExt}`));
-    return mod.default(req as any, res as any);
-  } catch (err) {
-    console.error("Explain handler error:", err);
-    return res.status(500).json({ error: "Explain service unavailable" });
-  }
-});
 
   // Health
   app.get("/api/health", (_req, res) => {
     res.json({
       status: "ok",
       timestamp: new Date().toISOString(),
-      services: ["chat", "coach", "explain"],
+      services: ["chat", "coach", "explain", "asr", "ocr"],
       env: process.env.NODE_ENV,
     });
   });
@@ -91,7 +126,7 @@ app.post("/api/explain", async (req, res) => {
       try {
         if (req.originalUrl.startsWith("/api/")) return next();
         const indexPath = path.join(clientRoot, "index.html");
-        let html = await fs.readFile(indexPath, "utf-8");     // <- echte index
+        let html = await fs.readFile(indexPath, "utf-8");
         html = await vite.transformIndexHtml(req.originalUrl, html);
         res.status(200).setHeader("Content-Type", "text/html").end(html);
       } catch (e: any) {
@@ -114,52 +149,18 @@ app.post("/api/explain", async (req, res) => {
   }
 
   const port = Number(process.env.PORT) || 8787;
-  server.listen(port, () => {
-    console.log(`[express] serving on port ${port}`);
-    console.log(`[api] chat     -> /api/chat  (${apiExt})`);
-    console.log(`[api] coach    -> /api/coach (${apiExt})`);
+  const host = process.env.HOST || "0.0.0.0";
+  server.listen(port, host, () => {
+    console.log(`[express] serving on ${host}:${port}`);
+    console.log(`[api] chat     -> /api/chat    (${apiExt})`);
+    console.log(`[api] coach    -> /api/coach   (${apiExt})`);
     console.log(`[api] explain  -> /api/explain (${apiExt})`);
+    console.log(`[api] asr      -> /api/asr     (${apiExt})`);
+    console.log(`[api] ocr      -> /api/ocr     (inline)`);
   });
 }
 
 createAppServer().catch((err) => {
   console.error(err);
   process.exit(1);
-=======
-import cors from "cors";
-import morgan from "morgan";
-
-// ✅ onze routes
-import registerCoachRoute from "./api/coach";
-import registerAsrRoute from "./api/asr";
-
-const app = express();
-const router = express.Router();
-
-// ── middlewares
-app.use(cors());
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true }));
-app.use(morgan("dev"));
-
-// ── health
-router.get("/api/health", (_req, res) => res.json({ ok: true }));
-
-// ── routes mounten
-registerCoachRoute(router); // POST /api/coach
-registerAsrRoute(router);   // POST /api/asr
-
-// (als je nog andere routes had, laat die ook hier mounten)
-// vb: registerChatRoute(router); registerExplainRoute(router); etc.
-
-app.use(router);
-
-// ── start server
-const port = Number(process.env.PORT || 8787);
-const host = process.env.HOST || "0.0.0.0";
-app.listen(port, host, () => {
-  console.log(`[express] serving on port ${port}`);
-  console.log(`[api] coach    -> /api/coach (.ts)`);
-  console.log(`[api] asr      -> /api/asr   (.ts)`);
->>>>>>> voice-chat
 });
