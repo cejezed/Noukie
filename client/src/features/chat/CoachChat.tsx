@@ -1,6 +1,15 @@
 // client/src/features/chat/CoachChat.tsx
+'use client';
+
 import * as React from "react";
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Send, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,8 +19,6 @@ import { cn } from "@/lib/utils";
 import { sendChat, type ChatMessage } from "@/lib/chat";
 import { speak, stopSpeak } from "@/lib/speech";
 import HandsfreeVoice from "./HandsfreeVoice";
-// (optioneel) laat staan als je ook de push-to-talk knop gebruikt
-// import VoiceButton from "./VoiceButton";
 
 type Mode = "chat" | "studeren";
 
@@ -32,6 +39,55 @@ type Props = {
   className?: string;
 };
 
+/** -----------------------------------------------------------
+ *  SCOPE: alleen school/leren/planning
+ * ----------------------------------------------------------*/
+const SCHOOL_KEYWORDS = [
+  "huiswerk","toets","so","pw","examen","tentamen","samenvatting","oefenen","paragraaf","hoofdstuk",
+  "vak","vakken","cijfer","docent","les","klas","rooster","school",
+  "wiskunde","natuurkunde","scheikunde","biologie","nederlands","engels","frans","duits","geschiedenis",
+  "aardrijkskunde","economie","informatica","muziek","ckv","filosofie","latijn","grieks","spaans","mentor","havo","vwo","vmbo"
+];
+const PLANNING_KEYWORDS = [
+  "planning","plannen","schema","timemanagement","tijd","agenda","studieplanning","blok","pomodoro",
+  "prioriteit","taken","to-do","todo","focus","studeren","leren"
+];
+
+const SCOPE_REGEX = new RegExp(
+  `\\b(${[...SCHOOL_KEYWORDS, ...PLANNING_KEYWORDS]
+    .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join("|")})\\b`,
+  "i"
+);
+
+function isInScope(text: string): boolean {
+  const q = (text || "").toLowerCase().trim();
+  if (!q) return false;
+  if (q.length <= 2) return true; // laat "ok", "hi" door
+  if (
+    /(huiswerk|toets|examen|samenvat|oefen|paragraaf|hoofdstuk|vak|cijfer|docent|klas|les|rooster|planning|schema|studeren|leren|pomodoro|priori|taken?)/i.test(
+      q
+    )
+  ) {
+    return true;
+  }
+  return SCOPE_REGEX.test(q);
+}
+
+const OUT_OF_SCOPE_REPLY =
+  "Ik help je met school, leren en je planning. Waarmee kan ik je daarbij helpen?";
+
+const STRICT_SCOPE_HINT = `
+Je bent Noukie, een vriendelijke studiecoach. Antwoord ALLEEN over school, leren/studeren, huiswerk/toetsen/vakken en planning/timemanagement.
+Weiger alle andere onderwerpen kort en vriendelijk: "Ik help je met school en planning. Waarmee kan ik je daarbij helpen?"
+
+Regels:
+- Nederlands, kort (max 2–3 zinnen), hoogstens 1 vraag terug.
+- Gebruik context (rooster/taken/memory) alleen als het helpt; noem het niet expliciet tenzij relevant.
+- Geen complete schema's tenzij de gebruiker dat expliciet vraagt; geef liever 1–2 concrete vervolgstappen.
+`.trim();
+/** -------------------------------------------------------- */
+
 const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
   {
     systemHint,
@@ -50,7 +106,7 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
 
-  // Nieuw: live ondertiteling + cooldown
+  // Live ondertiteling + cooldown
   const [livePartial, setLivePartial] = useState("");
   const lastSendRef = useRef(0);
   const cooldownMs = 1000;
@@ -63,13 +119,21 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
       : { bubbleText: "text-sm", pad: "px-3 py-1.5", inputRows: 3 };
   }, [size]);
 
+  // System-hint combineren met strikte scope-hint
+  const combinedHint = useMemo(() => {
+    const extra = (systemHint ?? "").trim();
+    return extra ? `${STRICT_SCOPE_HINT}\n\n---\n${extra}` : STRICT_SCOPE_HINT;
+  }, [systemHint]);
+
   // Load thread
   useEffect(() => {
     try {
       const raw = localStorage.getItem(threadKey);
       if (raw) setMessages(JSON.parse(raw) as Msg[]);
       else if (initialAssistantMessage)
-        setMessages([{ id: crypto.randomUUID(), role: "assistant", content: initialAssistantMessage }]);
+        setMessages([
+          { id: crypto.randomUUID(), role: "assistant", content: initialAssistantMessage },
+        ]);
     } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [threadKey]);
@@ -83,7 +147,9 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
 
   // Autoscroll
   useEffect(() => {
-    const vp = viewportRef.current?.querySelector('div[data-radix-scroll-area-viewport]');
+    const vp = viewportRef.current?.querySelector(
+      'div[data-radix-scroll-area-viewport]'
+    );
     if (vp) vp.scrollTop = vp.scrollHeight;
   }, [messages, sending]);
 
@@ -101,19 +167,43 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    // Client-side scope guard
+    if (!isInScope(trimmed)) {
+      const friendly = OUT_OF_SCOPE_REPLY;
+      setMessages((m) => [
+        ...m,
+        { id: crypto.randomUUID(), role: "user", content: trimmed },
+        { id: crypto.randomUUID(), role: "assistant", content: friendly },
+      ]);
+      toast({
+        title: "Alleen school & planning",
+        description: "Hou het bij vakken, huiswerk, toetsen of je studieplanning.",
+        variant: "destructive",
+      });
+      stopSpeak();
+      speak(friendly, "nl-NL", 1);
+      setInput("");
+      return;
+    }
+
     setMessages((m) => [...m, { id: crypto.randomUUID(), role: "user", content: trimmed }]);
     setInput("");
     setSending(true);
 
     try {
-      const history: ChatMessage[] = [...messages, { id: "tmp", role: "user", content: trimmed }].map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      const history: ChatMessage[] = [...messages, { id: "tmp", role: "user", content: trimmed }].map(
+        (m) => ({
+          role: m.role,
+          content: m.content,
+        })
+      );
 
-      const { reply } = await sendChat(trimmed, history, mode, systemHint, context);
+      const { reply } = await sendChat(trimmed, history, mode, combinedHint, context);
 
-      setMessages((m) => [...m, { id: crypto.randomUUID(), role: "assistant", content: reply }]);
+      setMessages((m) => [
+        ...m,
+        { id: crypto.randomUUID(), role: "assistant", content: reply },
+      ]);
 
       // TTS: eerst zeker stoppen, dan spreken (geen overlap)
       stopSpeak();
@@ -144,7 +234,10 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
   return (
     <div className={cn("rounded-lg border border-border/60 bg-card", className)}>
       {/* Chat viewport */}
-      <ScrollArea className="h-64 sm:h-72 md:h-80 border-b border-border/60" ref={viewportRef as any}>
+      <ScrollArea
+        className="h-64 sm:h-72 md:h-80 border-b border-border/60"
+        ref={viewportRef as any}
+      >
         <div className="p-3 space-y-2">
           {messages.length === 0 ? (
             <div className="text-center text-muted-foreground py-10">
@@ -154,7 +247,10 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
             </div>
           ) : (
             messages.map((m) => (
-              <div key={m.id} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
+              <div
+                key={m.id}
+                className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
+              >
                 <div
                   className={cn(
                     "max-w-[80%] rounded-md border border-border/60",
@@ -170,7 +266,13 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
           )}
           {sending && (
             <div className="flex justify-start">
-              <div className={cn("rounded-md border border-border/60 bg-background", sz.pad, sz.bubbleText)}>
+              <div
+                className={cn(
+                  "rounded-md border border-border/60 bg-background",
+                  sz.pad,
+                  sz.bubbleText
+                )}
+              >
                 <Loader2 className="inline-block mr-2 h-4 w-4 animate-spin align-[-2px]" />
                 Denkt na…
               </div>
@@ -191,9 +293,7 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
 
           {/* Live ondertiteling onder de invoer (optioneel) */}
           {livePartial && (
-            <div className="text-sm text-muted-foreground italic">
-              🎙️ {livePartial}
-            </div>
+            <div className="text-sm text-muted-foreground italic">🎙️ {livePartial}</div>
           )}
 
           <div className="flex items-center justify-between gap-2">
@@ -208,9 +308,15 @@ const CoachChat = forwardRef<CoachChatHandle, Props>(function CoachChat(
             />
 
             <div className="flex items-center gap-2">
-              <Button type="button" variant="ghost" onClick={stopSpeak}>🔈 Stop</Button>
+              <Button type="button" variant="ghost" onClick={stopSpeak}>
+                🔈 Stop
+              </Button>
               <Button type="submit" disabled={sending}>
-                {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
+                {sending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4 mr-2" />
+                )}
                 {sending ? "Versturen…" : "Stuur"}
               </Button>
             </div>
