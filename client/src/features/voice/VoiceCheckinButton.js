@@ -1,0 +1,74 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import * as React from "react";
+import { Button } from "@/components/ui/button";
+export default function VoiceCheckinButton({ userId, onComplete, className, labelIdle = "Opnemen", labelBusy = "Uploaden…", labelStop = "Stop", }) {
+    const [recorder, setRecorder] = React.useState(null);
+    const [isRec, setIsRec] = React.useState(false);
+    const [busy, setBusy] = React.useState(false);
+    const timeoutRef = React.useRef(null);
+    React.useEffect(() => {
+        return () => {
+            if (timeoutRef.current)
+                window.clearTimeout(timeoutRef.current);
+            if (recorder && recorder.state !== "inactive")
+                recorder.stop();
+        };
+    }, [recorder]);
+    async function start() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const rec = new MediaRecorder(stream);
+            const chunks = [];
+            rec.ondataavailable = (e) => { if (e.data && e.data.size)
+                chunks.push(e.data); };
+            rec.onstop = async () => {
+                setIsRec(false);
+                setRecorder(null);
+                try {
+                    const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
+                    setBusy(true);
+                    const fd = new FormData();
+                    fd.append("file", blob, `checkin-${Date.now()}.webm`);
+                    if (userId)
+                        fd.append("userId", userId);
+                    const resp = await fetch("/api/asr", { method: "POST", body: fd });
+                    const json = await resp.json().catch(() => ({}));
+                    onComplete?.(json ?? null);
+                }
+                catch {
+                    onComplete?.(null);
+                }
+                finally {
+                    setBusy(false);
+                    try {
+                        rec.stream?.getTracks().forEach((t) => t.stop());
+                    }
+                    catch { }
+                }
+            };
+            rec.start();
+            setRecorder(rec);
+            setIsRec(true);
+            timeoutRef.current = window.setTimeout(() => {
+                if (rec.state === "recording")
+                    rec.stop();
+            }, 60_000);
+        }
+        catch {
+            onComplete?.(null);
+        }
+    }
+    function stop() {
+        if (timeoutRef.current) {
+            window.clearTimeout(timeoutRef.current);
+            timeoutRef.current = null;
+        }
+        if (recorder && recorder.state === "recording")
+            recorder.stop();
+    }
+    const isDisabled = busy;
+    return (_jsxs(Button, { type: "button", onClick: isRec ? stop : start, disabled: isDisabled, className: [
+            isRec ? "bg-red-600 hover:bg-red-700" : "", // rood tijdens opnemen
+            className ?? "",
+        ].join(" "), title: isRec ? "Stop opname" : "Start opname", children: [_jsx("span", { "aria-hidden": true, children: "\uD83C\uDF99\uFE0F" }), busy ? labelBusy : isRec ? labelStop : labelIdle] }));
+}
