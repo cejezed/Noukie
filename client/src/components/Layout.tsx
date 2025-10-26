@@ -15,8 +15,10 @@ export default function Layout({ children }: LayoutProps) {
     { id: "vandaag", label: "Vandaag", icon: Icons.Home, path: "/" },
     { id: "planning", label: "Planning", icon: Icons.Calendar, path: "/planning" },
     { id: "mental", label: "Mentaal", icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
-    { id: "uitleg", label: "Uitleg", icon: Icons.HelpCircle, path: "/LeerChat" },
-    { id: "archief", label: "archief", icon: Icons.CalendarCheck ?? Icons.Calendar, path: "/ChatGeschiedenis" },
+    // ✅ Uitleg pad gecorrigeerd naar lowercase
+    { id: "uitleg", label: "Uitleg", icon: Icons.HelpCircle, path: "/leerchat" },
+    // ✅ Archief vervangen door Toets (quizlijst)
+    { id: "toets", label: "Toets", icon: Icons.ClipboardList, path: "/toets" },
     { id: "instellingen", label: "Instellingen", icon: Icons.Settings, path: "/instellingen" },
   ];
 
