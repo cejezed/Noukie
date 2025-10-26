@@ -16,15 +16,16 @@ import ParentDashboard from "./pages/ParentDashboard";
 import NotFound from "./pages/not-found";
 import MentalPage from "./pages/Mental";
 import { supabase } from "./lib/supabase";
-import QuizletImport from "./pages/study/QuizletImport";
 
 // ✅ NIEUW
 import Toets from "./pages/Toets";
 import StudyPlay from "./pages/study/StudyPlay";
+import AdminQuiz from "./pages/study/AdminQuiz";
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
 
+  // sessie debug/keepalive
   React.useEffect(() => {
     if (loading) return;
     (async () => {
@@ -68,7 +69,7 @@ function AuthenticatedApp() {
     );
   }
 
-  // Student-interface — VOLGORDE EXACT VOLGENS JOUW WENS
+  // Student-interface — volgorde volgens jouw wens
   return (
     <Layout>
       <Switch>
@@ -84,15 +85,21 @@ function AuthenticatedApp() {
         {/* 4) Uitleg (LeerChat) */}
         <Route path="/leerchat" component={LeerChat} />
 
-        {/* 5) Toets (i.p.v. Archief/ChatGeschiedenis) */}
+        {/* 5) Toets (lijst) */}
         <Route path="/toets" component={Toets} />
-        {/* Speler route (directe deeplink) */}
+
+        {/* 5b) Toetsspeler (deeplink) */}
         <Route path="/toets/spelen" component={StudyPlay} />
+
+        {/* Admin voor toetsen (voor jou); beide paden werken */}
+        <Route path="/study/admin" component={AdminQuiz} />
+        <Route path="/toets/admin" component={AdminQuiz} />
 
         {/* 6) Instellingen */}
         <Route path="/instellingen" component={Instellingen} />
 
-        <Route path="/toets/import" component={QuizletImport} />
+        {/* (optioneel) Rooster - als je ‘m weer zichtbaar wilt maken */}
+        {/* <Route path="/rooster" component={Rooster} /> */}
 
         {/* Fallback */}
         <Route component={NotFound} />
