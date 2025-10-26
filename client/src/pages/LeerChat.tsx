@@ -158,7 +158,7 @@ export default function LeerChat() {
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, composerH, tabbarH]);
 
-  // ✅ ORIGINELE handleSendMessage - ONVERANDERD
+  // Send message
   const handleSendMessage = async (imageUrl?: string) => {
     if (isGenerating) return;
     const hasText = opgave.trim().length > 0;
@@ -215,7 +215,7 @@ export default function LeerChat() {
     }
   };
 
-  // ✅ NIEUWE handleImageUpload - nu met Tesseract.js OCR
+  // ✅ GEFIXT: handleImageUpload met betere error handling & progress
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -224,60 +224,56 @@ export default function LeerChat() {
 
     const ext = file.name.split(".").pop()?.toLowerCase() || "png";
     const fileName = `${user.id}/${crypto.randomUUID()}.${ext}`;
+    let publicUrl = "";
 
     try {
       // Stap 1: Upload foto naar Supabase
       const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
       if (uploadError) throw uploadError;
       const res = supabase.storage.from("uploads").getPublicUrl(fileName) as any;
-      const publicUrl: string = res?.data?.publicUrl ?? res?.publicURL;
-      if (!publicUrl) throw new Error("Public URL niet gevonden. Check je 'uploads' bucket policy.");
+      publicUrl = res?.data?.publicUrl ?? res?.publicURL;
+      if (!publicUrl) throw new Error("Public URL niet gevonden");
 
-      // Stap 2: OCR met Tesseract.js (client-side)
-      try {
+      // Stap 2: OCR met Tesseract.js - met timeout & progress
+      setOcrState({ status: "idle" });
+      toast({ title: "OCR bezig...", description: "Tekst wordt herkend (kan 30-60 sec duren)" });
+
+      const imageData = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
-        
-        reader.onload = async (e) => {
-          const imageData = e.target?.result as string;
-
-          try {
-            // OCR uitvoeren
-            const result = await Tesseract.recognize(
-              imageData,
-              'nld', // Nederlands
-              {
-                logger: (m) => {
-                  // Optioneel: toon progress
-                }
-              }
-            );
-
-            const recognized = (result.data.text || "").trim();
-
-            if (recognized) {
-              setOpgave(recognized);
-              setOcrState({ status: "ok", chars: recognized.length, msg: "Tekst herkend" });
-              toast({ title: "Tekst herkend", description: "Controleer de OCR-tekst en druk op Verstuur." });
-            } else {
-              setOcrState({ status: "none", msg: "Geen tekst herkend" });
-              toast({ title: "Geen tekst gevonden", description: "Probeer een scherpere foto", variant: "destructive" });
-            }
-          } catch (ocrError) {
-            console.error("OCR Error:", ocrError);
-            setOcrState({ status: "error", msg: "OCR niet beschikbaar" });
-            toast({ title: "OCR fout", description: "Kon tekst niet herkennen", variant: "destructive" });
-          }
-        };
-
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.onerror = () => reject(new Error("File read error"));
         reader.readAsDataURL(file);
+      });
 
-      } catch (ocrError) {
-        console.error("OCR Error:", ocrError);
-        setOcrState({ status: "error", msg: "OCR fout" });
+      // Tesseract met progress feedback
+      const result = await Tesseract.recognize(imageData, "nld", {
+        logger: (m) => {
+          if (m.status === "recognizing") {
+            const progress = Math.round(m.progress * 100);
+            setOcrState({ status: "idle", msg: `OCR: ${progress}%` });
+          }
+        },
+      });
+
+      const recognized = (result.data.text || "").trim();
+
+      if (recognized.length > 0) {
+        setOpgave(recognized);
+        setOcrState({ status: "ok", chars: recognized.length });
+        toast({ title: "✅ Tekst herkend!", description: `${recognized.length} tekens` });
+      } else {
+        setOcrState({ status: "none", msg: "Geen tekst gevonden" });
+        toast({ title: "Geen tekst", description: "Foto bevat geen tekst", variant: "destructive" });
       }
 
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
+      console.error("OCR/Upload Error:", error);
+      setOcrState({ status: "error", msg: error.message });
+      toast({ 
+        variant: "destructive", 
+        title: "Fout", 
+        description: error.message || "OCR kon niet starten"
+      });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -381,8 +377,8 @@ export default function LeerChat() {
                       <ul className="space-y-3 pt-2 text-sm">
                         <li><strong>📸 Camera-knop</strong> → Foto uploaden, tekst automatisch herkend!</li>
                         <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
+                        <li><strong>Eerst keer OCR</strong> → kan 1-2 minuten duren (workers download)</li>
                         <li><strong>Vraag concreet</strong> ("Wat is suburbanisatie?").</li>
-                        <li><strong>Oefenvragen</strong> helpen checken.</li>
                       </ul>
                     </DialogContent>
                   </Dialog>
@@ -416,12 +412,12 @@ export default function LeerChat() {
                   )}
                   {ocrState.status === "none" && (
                     <span className="inline-flex items-center gap-1 text-amber-700">
-                      <AlertCircle className="w-4 h-4" /> Geen tekst herkend
+                      <AlertCircle className="w-4 h-4" /> {ocrState.msg}
                     </span>
                   )}
                   {ocrState.status === "error" && (
                     <span className="inline-flex items-center gap-1 text-rose-700">
-                      <AlertCircle className="w-4 h-4" /> {ocrState.msg || "OCR niet beschikbaar"}
+                      <AlertCircle className="w-4 h-4" /> {ocrState.msg || "OCR fout"}
                     </span>
                   )}
                 </div>
