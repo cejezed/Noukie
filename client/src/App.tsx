@@ -21,6 +21,7 @@ import { supabase } from "./lib/supabase";
 import Toets from "./pages/Toets";
 import StudyPlay from "./pages/study/StudyPlay";
 import AdminQuiz from "./pages/study/AdminQuiz";
+import { ErrorBoundary } from "./components/dev/ErrorBoundary";
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
@@ -113,7 +114,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <AuthenticatedApp />
+        <ErrorBoundary>
+          <AuthenticatedApp />
+        </ErrorBoundary>
       </TooltipProvider>
     </QueryClientProvider>
   );
