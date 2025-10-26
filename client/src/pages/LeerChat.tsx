@@ -158,7 +158,7 @@ export default function LeerChat() {
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, composerH, tabbarH]);
 
-  // ✅ ORIGINELE handleSendMessage - ONVERANDERD
+  // Send message - ORIGINEEL ONVERANDERD
   const handleSendMessage = async (imageUrl?: string) => {
     if (isGenerating) return;
     const hasText = opgave.trim().length > 0;
@@ -215,7 +215,7 @@ export default function LeerChat() {
     }
   };
 
-  // ✅ NIEUWE handleImageUpload - nu met Tesseract.js OCR
+  // Upload + OCR met Tesseract.js
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -226,28 +226,26 @@ export default function LeerChat() {
     const fileName = `${user.id}/${crypto.randomUUID()}.${ext}`;
 
     try {
-      // Stap 1: Upload foto naar Supabase
       const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
       if (uploadError) throw uploadError;
       const res = supabase.storage.from("uploads").getPublicUrl(fileName) as any;
       const publicUrl: string = res?.data?.publicUrl ?? res?.publicURL;
       if (!publicUrl) throw new Error("Public URL niet gevonden. Check je 'uploads' bucket policy.");
 
-      // Stap 2: OCR met Tesseract.js (client-side)
       try {
+        // OCR met Tesseract.js (client-side)
         const reader = new FileReader();
         
         reader.onload = async (e) => {
           const imageData = e.target?.result as string;
 
           try {
-            // OCR uitvoeren
             const result = await Tesseract.recognize(
               imageData,
-              'nld', // Nederlands
+              'nld',
               {
                 logger: (m) => {
-                  // Optioneel: toon progress
+                  // progress tracking optioneel
                 }
               }
             );
@@ -260,22 +258,20 @@ export default function LeerChat() {
               toast({ title: "Tekst herkend", description: "Controleer de OCR-tekst en druk op Verstuur." });
             } else {
               setOcrState({ status: "none", msg: "Geen tekst herkend" });
-              toast({ title: "Geen tekst gevonden", description: "Probeer een scherpere foto", variant: "destructive" });
             }
           } catch (ocrError) {
             console.error("OCR Error:", ocrError);
-            setOcrState({ status: "error", msg: "OCR niet beschikbaar" });
-            toast({ title: "OCR fout", description: "Kon tekst niet herkennen", variant: "destructive" });
+            setOcrState({ status: "error", msg: "OCR fout" });
           }
         };
 
         reader.readAsDataURL(file);
 
-      } catch (ocrError) {
-        console.error("OCR Error:", ocrError);
+      } catch {
         setOcrState({ status: "error", msg: "OCR fout" });
       }
 
+      await handleSendMessage(publicUrl);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
     } finally {
@@ -379,7 +375,6 @@ export default function LeerChat() {
                     <DialogContent>
                       <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
                       <ul className="space-y-3 pt-2 text-sm">
-                        <li><strong>📸 Camera-knop</strong> → Foto uploaden, tekst automatisch herkend!</li>
                         <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
                         <li><strong>Vraag concreet</strong> ("Wat is suburbanisatie?").</li>
                         <li><strong>Oefenvragen</strong> helpen checken.</li>
