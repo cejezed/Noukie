@@ -30,7 +30,7 @@ export default defineConfig({
 
   // output naar repo-root/dist (server serve’t al /dist)
   build: {
-    outDir: path.resolve(__dirname, "client/dist"),
+    outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
   },
 
