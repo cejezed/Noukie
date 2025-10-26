@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/auth";
+import Tesseract from 'tesseract.js';
 
 interface Message {
   id: number;
@@ -157,7 +158,7 @@ export default function LeerChat() {
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, composerH, tabbarH]);
 
-  // Send message
+  // Send message - ORIGINEEL ONVERANDERD
   const handleSendMessage = async (imageUrl?: string) => {
     if (isGenerating) return;
     const hasText = opgave.trim().length > 0;
@@ -214,7 +215,7 @@ export default function LeerChat() {
     }
   };
 
-  // Upload + OCR
+  // Upload + OCR met Tesseract.js
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || !user) return;
@@ -232,22 +233,40 @@ export default function LeerChat() {
       if (!publicUrl) throw new Error("Public URL niet gevonden. Check je 'uploads' bucket policy.");
 
       try {
-        const fd = new FormData();
-        fd.append("image", file);
-        const r = await fetch("/api/ocr", { method: "POST", body: fd });
-        if (r.ok) {
-          const j = await r.json();
-          const recognized = (j?.text || "").trim();
-          if (recognized) {
-            setOpgave(recognized);
-            setOcrState({ status: "ok", chars: recognized.length, msg: "Tekst herkend" });
-            toast({ title: "Tekst herkend", description: "Controleer de OCR-tekst en druk op Verstuur." });
-          } else {
-            setOcrState({ status: "none", msg: "Geen tekst herkend" });
+        // OCR met Tesseract.js (client-side)
+        const reader = new FileReader();
+        
+        reader.onload = async (e) => {
+          const imageData = e.target?.result as string;
+
+          try {
+            const result = await Tesseract.recognize(
+              imageData,
+              'nld',
+              {
+                logger: (m) => {
+                  // progress tracking optioneel
+                }
+              }
+            );
+
+            const recognized = (result.data.text || "").trim();
+
+            if (recognized) {
+              setOpgave(recognized);
+              setOcrState({ status: "ok", chars: recognized.length, msg: "Tekst herkend" });
+              toast({ title: "Tekst herkend", description: "Controleer de OCR-tekst en druk op Verstuur." });
+            } else {
+              setOcrState({ status: "none", msg: "Geen tekst herkend" });
+            }
+          } catch (ocrError) {
+            console.error("OCR Error:", ocrError);
+            setOcrState({ status: "error", msg: "OCR fout" });
           }
-        } else {
-          setOcrState({ status: "error", msg: "OCR niet beschikbaar" });
-        }
+        };
+
+        reader.readAsDataURL(file);
+
       } catch {
         setOcrState({ status: "error", msg: "OCR fout" });
       }
