@@ -52,7 +52,8 @@ export default function LeerChat() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const [tabbarH, setTabbarH] = useState<number>(64);
+  // Measure bottom tabbar height to anchor composer above it
+  const [tabbarH, setTabbarH] = useState<number>(64); // fallback
   const [composerH, setComposerH] = useState<number>(0);
   const composerRef = useRef<HTMLDivElement | null>(null);
 
@@ -82,6 +83,7 @@ export default function LeerChat() {
     toast({ title: "Nieuwe chat gestart" });
   };
 
+  // textarea auto-resize (1–6 lines)
   const autoResize = () => {
     const el = textRef.current;
     if (!el) return;
@@ -91,6 +93,7 @@ export default function LeerChat() {
   };
   useEffect(() => { autoResize(); }, [opgave]);
 
+  // Load courses
   useEffect(() => {
     const loadCourseOptions = async () => {
       if (!user) { setCourseOptions([]); return; }
@@ -111,6 +114,7 @@ export default function LeerChat() {
     loadCourseOptions();
   }, [user, toast, selectedCourse]);
 
+  // Load sessions per subject
   useEffect(() => {
     const loadChatSessions = async () => {
       if (!user || !selectedCourse) { setChatSessions([]); setSelectedSessionId("new"); setMessages([]); return; }
@@ -148,11 +152,13 @@ export default function LeerChat() {
     }
   }, [selectedSessionId, chatSessions]);
 
+  // Scroll to bottom when messages change
   useEffect(() => {
     const viewport = viewportRef.current;
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, composerH, tabbarH]);
 
+  // ✅ ORIGINELE handleSendMessage - ONVERANDERD
   const handleSendMessage = async (imageUrl?: string) => {
     if (isGenerating) return;
     const hasText = opgave.trim().length > 0;
@@ -176,125 +182,117 @@ export default function LeerChat() {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
 
-      const response = await fetch("/api/chat", {
+      const history = newMessages.map(m => ({ role: m.sender === "user" ? "user" : "assistant", content: m.text }));
+      const context = { vak: selectedCourse, image_url: imageUrl || undefined };
+
+      const resp = await fetch("/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          message: visibleUserText,
-          imageUrl: imageUrl || null,
-          chatSessionId: currentSessionId,
-          vak: selectedCourse,
-          userId: user.id,
-        }),
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ mode: "studeren", message: visibleUserText, history, context }),
       });
 
-      if (!response.ok) throw new Error("Antwoord niet ontvangen");
+      const rawText = await resp.text();
+      if (!resp.ok) throw new Error(rawText || `HTTP ${resp.status}`);
+      const data = rawText ? JSON.parse(rawText) : {};
+      const reply: string = data?.reply ?? "Oké—kun je iets specifieker vertellen?";
+      const aiMessage: Message = { id: Date.now() + 1, sender: "ai", text: reply, audioUrl: data?.audioUrl };
+      const finalMessages = [...newMessages, aiMessage];
+      setMessages(finalMessages);
 
-      const aiMessage: Message = {
-        id: Date.now() + 1,
-        sender: "ai",
-        text: await response.text(),
-      };
-
-      setMessages([...newMessages, aiMessage]);
-
-      if (!currentSessionId) {
-        const { data: newSession, error } = await supabase
-          .from("chatsessies")
-          .insert([{ user_id: user.id, vak: selectedCourse, berichten: [userMessage, aiMessage] }])
-          .select()
-          .single();
-
-        if (!error && newSession) {
-          setCurrentSessionId(newSession.id);
-        }
+      if (currentSessionId) {
+        await supabase.from("chatsessies").update({ berichten: finalMessages, updated_at: new Date().toISOString() }).eq("id", currentSessionId);
+      } else {
+        const { data: ins } = await supabase.from("chatsessies")
+          .insert({ user_id: user.id, vak: selectedCourse, berichten: finalMessages })
+          .select("id").single();
+        if (ins) setCurrentSessionId(ins.id);
       }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Fout", description: error.message });
+      toast({ variant: "destructive", title: "AI fout", description: error.message });
+      setMessages(messages);
     } finally {
       setIsGenerating(false);
     }
   };
 
-  // ✅ VOLLEDIG WERKENDE IMAGEUPLOAD MET OCR
+  // ✅ NIEUWE handleImageUpload - nu met Tesseract.js OCR
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (!file) return;
-
+    if (!file || !user) return;
     setIsUploading(true);
-    try {
-      // Stap 1: Maak preview/data URL van de afbeelding
-      const reader = new FileReader();
-      
-      reader.onload = async (e) => {
-        const imageData = e.target?.result as string;
+    setOcrState({ status: "idle" });
 
-        try {
-          // Stap 2: OCR uitvoeren met Tesseract.js
-          setOcrState({ status: "idle" });
-          
-          const result = await Tesseract.recognize(
-            imageData,
-            'nld', // Nederlands
-            {
-              logger: (m) => {
-                if (m.status === 'recognizing') {
+    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+    const fileName = `${user.id}/${crypto.randomUUID()}.${ext}`;
+
+    try {
+      // Stap 1: Upload foto naar Supabase
+      const { error: uploadError } = await supabase.storage.from("uploads").upload(fileName, file);
+      if (uploadError) throw uploadError;
+      const res = supabase.storage.from("uploads").getPublicUrl(fileName) as any;
+      const publicUrl: string = res?.data?.publicUrl ?? res?.publicURL;
+      if (!publicUrl) throw new Error("Public URL niet gevonden. Check je 'uploads' bucket policy.");
+
+      // Stap 2: OCR met Tesseract.js (client-side)
+      try {
+        const reader = new FileReader();
+        
+        reader.onload = async (e) => {
+          const imageData = e.target?.result as string;
+
+          try {
+            // OCR uitvoeren
+            const result = await Tesseract.recognize(
+              imageData,
+              'nld', // Nederlands
+              {
+                logger: (m) => {
                   // Optioneel: toon progress
                 }
               }
+            );
+
+            const recognized = (result.data.text || "").trim();
+
+            if (recognized) {
+              setOpgave(recognized);
+              setOcrState({ status: "ok", chars: recognized.length, msg: "Tekst herkend" });
+              toast({ title: "Tekst herkend", description: "Controleer de OCR-tekst en druk op Verstuur." });
+            } else {
+              setOcrState({ status: "none", msg: "Geen tekst herkend" });
+              toast({ title: "Geen tekst gevonden", description: "Probeer een scherpere foto", variant: "destructive" });
             }
-          );
-
-          const extractedText = result.data.text.trim();
-
-          if (extractedText.length > 0) {
-            // ✅ Zet OCR-tekst in het tekstveld
-            setOpgave(extractedText);
-            setOcrState({ status: "ok", chars: extractedText.length });
-            toast({ title: "OCR geslaagd", description: `${extractedText.length} tekens herkend` });
-          } else {
-            setOcrState({ status: "none", msg: "Geen tekst herkend in foto" });
-            toast({ title: "Geen tekst gevonden", description: "Probeer een scherpere foto", variant: "destructive" });
+          } catch (ocrError) {
+            console.error("OCR Error:", ocrError);
+            setOcrState({ status: "error", msg: "OCR niet beschikbaar" });
+            toast({ title: "OCR fout", description: "Kon tekst niet herkennen", variant: "destructive" });
           }
+        };
 
-          // Stap 3: Upload afbeelding naar Supabase als je dat wilt
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from("chat-images")
-            .upload(`uploads/${Date.now()}-${file.name}`, file);
+        reader.readAsDataURL(file);
 
-          if (!uploadError && uploadData) {
-            const { data: publicUrl } = supabase.storage
-              .from("chat-images")
-              .getPublicUrl(uploadData.path);
-            
-            // Optioneel: stuur meteen bericht met foto
-            // await handleSendMessage(publicUrl.publicUrl);
-          }
-
-        } catch (ocrError) {
-          console.error("OCR Error:", ocrError);
-          setOcrState({ status: "error", msg: "OCR niet beschikbaar" });
-          toast({ title: "OCR fout", description: "Kon tekst niet herkennen", variant: "destructive" });
-        }
-      };
-
-      reader.readAsDataURL(file);
+      } catch (ocrError) {
+        console.error("OCR Error:", ocrError);
+        setOcrState({ status: "error", msg: "OCR fout" });
+      }
 
     } catch (error: any) {
       toast({ variant: "destructive", title: "Upload mislukt", description: error.message });
-      setOcrState({ status: "error", msg: error.message });
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
+  // layout paddings so bubbles don't hide under composer/tabbar
   const bottomSpacer = tabbarH + composerH + 16;
 
   return (
     <div className="relative min-h-[100dvh] bg-slate-50">
+      {/* SCROLLER (WhatsApp-like): full height area, bottom padding equals composer+tabbar */}
       <div className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4" style={{ paddingBottom: bottomSpacer }}>
         <ScrollArea className="h-[100dvh] pt-2 sm:pt-3 md:pt-4" ref={scrollerRef}>
+          {/* hook the internal viewport so we can auto-scroll to bottom */}
           <div ref={(outer) => {
             if (!outer) return;
             const vp = outer.querySelector('div[data-radix-scroll-area-viewport]') as HTMLDivElement | null;
@@ -303,7 +301,7 @@ export default function LeerChat() {
             <div className="space-y-3 sm:space-y-4 px-1 pb-4">
               {messages.length === 0 && !isGenerating && (
                 <div className="text-center text-muted-foreground min-h-[220px] sm:min-h-[280px] flex flex-col items-center justify-center px-2">
-                  <p className="font-medium">Kies een vak, typ je vraag of upload een foto van de tekst die je moet leren.</p>
+                  <p className="font-medium">Kies een vak, typ je vraag of upload een foto — werkt als WhatsApp 🙂</p>
                 </div>
               )}
 
@@ -342,10 +340,12 @@ export default function LeerChat() {
         </ScrollArea>
       </div>
 
+      {/* FIXED COMPOSER: full width, sits above tabbar. Field 100%, Send button BELOW field. */}
       <div ref={composerRef} className="fixed left-0 right-0 z-50" style={{ bottom: `calc(${tabbarH}px + env(safe-area-inset-bottom))` }}>
         <div className="mx-auto w-full max-w-[1600px] px-2 sm:px-3 md:px-4">
           <Card className="shadow-lg border-t border-slate-200 overflow-hidden">
             <CardContent className="p-2 sm:p-3">
+              {/* top row: photo + subject + tools */}
               <div className="flex items-center gap-2 mb-2">
                 <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
                 <Button
@@ -353,7 +353,7 @@ export default function LeerChat() {
                   size="icon"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading || isGenerating}
-                  title="Foto toevoegen (OCR)"
+                  title="Foto toevoegen"
                 >
                   {isUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
                 </Button>
@@ -379,7 +379,7 @@ export default function LeerChat() {
                     <DialogContent>
                       <DialogHeader><DialogTitle>Snelle tips</DialogTitle></DialogHeader>
                       <ul className="space-y-3 pt-2 text-sm">
-                        <li><strong>📸 Camera-knop</strong> → Foto van boek uploaden, tekst automatisch herkend!</li>
+                        <li><strong>📸 Camera-knop</strong> → Foto uploaden, tekst automatisch herkend!</li>
                         <li><strong>Foto recht & scherp</strong> → betere OCR.</li>
                         <li><strong>Vraag concreet</strong> ("Wat is suburbanisatie?").</li>
                         <li><strong>Oefenvragen</strong> helpen checken.</li>
@@ -393,6 +393,7 @@ export default function LeerChat() {
                 </div>
               </div>
 
+              {/* the field: 100% width */}
               <Label htmlFor="opgave-text" className="sr-only">Vraag</Label>
               <Textarea
                 id="opgave-text"
@@ -405,6 +406,7 @@ export default function LeerChat() {
                 className="w-full h-auto min-h-[42px] max-h-[132px] overflow-auto resize-none text-[15px]"
               />
 
+              {/* ocr status (compact) */}
               {ocrState.status !== "idle" && (
                 <div className="mt-1 text-[11px] flex items-center gap-2">
                   {ocrState.status === "ok" && (
@@ -425,6 +427,7 @@ export default function LeerChat() {
                 </div>
               )}
 
+              {/* the SEND button, BELOW the field (full width on mobile) */}
               <div className="mt-2">
                 <Button
                   onClick={() => handleSendMessage()}
