@@ -5,17 +5,15 @@ import tsconfigPaths from "vite-tsconfig-paths";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// __dirname shim voor ESM (veilig, ook als je géén "type": "module" hebt)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
-  // 👇 vertel Vite expliciet dat de client map je root is
+  // client is je web-root
   root: path.resolve(__dirname, "client"),
 
   plugins: [
     react(),
-    // 👇 absoluut pad, en zet ignoreConfigErrors aan zodat CI niet stuk loopt
     tsconfigPaths({
       projects: [path.resolve(__dirname, "client/tsconfig.json")],
       ignoreConfigErrors: true,
@@ -23,12 +21,20 @@ export default defineConfig({
   ],
 
   resolve: {
+    // ⬇️ CRUCIAAL: één React-instantie erzorgen
+    dedupe: ["react", "react-dom"],
     alias: {
       "@": path.resolve(__dirname, "client/src"),
+      // forceer dezelfde react/react-dom instance vanuit root node_modules
+      react: path.resolve(__dirname, "node_modules/react"),
+      "react-dom": path.resolve(__dirname, "node_modules/react-dom"),
     },
   },
 
-  // output naar repo-root/dist (server serve’t al /dist)
+  optimizeDeps: {
+    include: ["react", "react-dom"],
+  },
+
   build: {
     outDir: path.resolve(__dirname, "dist"),
     emptyOutDir: true,
@@ -36,5 +42,12 @@ export default defineConfig({
 
   server: {
     port: 5173,
+    // SPA fallback (dev)
+    historyApiFallback: true as any,
+  },
+
+  preview: {
+    // SPA fallback (preview)
+    historyApiFallback: true as any,
   },
 });

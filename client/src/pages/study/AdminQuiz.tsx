@@ -38,6 +38,23 @@ export default function AdminQuiz() {
     available_until: "" as string | "",
   });
 
+const deleteQuiz = useMutation({
+  mutationFn: async (quizId: string) => {
+    const res = await fetch(`/api/quizzes?id=${encodeURIComponent(quizId)}`, {
+      method: "DELETE",
+      headers: { "x-user-id": me! },
+    });
+    if (!res.ok && res.status !== 204) {
+      const text = await res.text();
+      throw new Error(text || "Verwijderen mislukt");
+    }
+  },
+  onSuccess: () => {
+    if (selectedQuizId) setSelectedQuizId("");
+    qc.invalidateQueries({ queryKey: ["quizzes-admin", me] });
+  },
+});
+
   // --- Vragen-form (single add) ---
   const [qForm, setQForm] = useState<{
     qtype: "mc" | "open";
@@ -315,27 +332,40 @@ export default function AdminQuiz() {
         ) : (
           <ul className="space-y-2">
             {myQuizzes.map((q) => (
-              <li key={q.id} className="border rounded p-3 flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-sm text-gray-500">
-                    {q.subject} · {q.chapter}
-                  </div>
-                  <div className="font-semibold">{q.title}</div>
-                  <div className="text-xs text-gray-600">
-                    {q.is_published ? "Gepubliceerd" : "Concept"}{" "}
-                    {q.assigned_to ? "· Toegewezen (specifiek)" : "· Open"}
-                    {q.available_from ? ` · Vanaf: ${new Date(q.available_from).toLocaleString()}` : ""}
-                    {q.available_until ? ` · Tot: ${new Date(q.available_until).toLocaleString()}` : ""}
-                  </div>
-                </div>
-                <button
-                  className="px-3 py-2 rounded border"
-                  onClick={() => setSelectedQuizId(q.id)}
-                  title="Vragen toevoegen"
-                >
-                  Bewerken
-                </button>
-              </li>
+             <li key={q.id} className="border rounded p-3 flex items-center justify-between gap-3">
+  <div>
+    <div className="text-sm text-gray-500">{q.subject} · {q.chapter}</div>
+    <div className="font-semibold">{q.title}</div>
+    <div className="text-xs text-gray-600">
+      {q.is_published ? "Gepubliceerd" : "Concept"} {q.assigned_to ? "· Toegewezen (specifiek)" : "· Open"}
+      {q.available_from ? ` · Vanaf: ${new Date(q.available_from).toLocaleString()}` : ""}
+      {q.available_until ? ` · Tot: ${new Date(q.available_until).toLocaleString()}` : ""}
+    </div>
+  </div>
+
+  <div className="flex items-center gap-2">
+    <button
+      className="px-3 py-2 rounded border"
+      onClick={() => setSelectedQuizId(q.id)}
+      title="Vragen toevoegen/bewerken"
+    >
+      Bewerken
+    </button>
+
+    <button
+      className="px-3 py-2 rounded border border-red-300 text-red-700 hover:bg-red-50"
+      onClick={() => {
+        if (confirm(`Weet je zeker dat je "${q.title}" wilt verwijderen? Dit verwijdert ook alle vragen en resultaten.`)) {
+          deleteQuiz.mutate(q.id);
+        }
+      }}
+      title="Definitief verwijderen"
+    >
+      Verwijderen
+    </button>
+  </div>
+</li>
+
             ))}
           </ul>
         )}

@@ -8,7 +8,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!userId) return res.status(401).json({ error: "Missing x-user-id" });
 
   if (req.method === "GET") {
-    // RLS-policy doet al de zichtbaarheid, we kunnen desgewenst filteren op subject
     const subject = (req.query.subject as string) || "";
     const { data, error } = await admin
       .from("study_quizzes")
@@ -20,7 +19,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === "POST") {
-    // create/update + klaarzetten
     type Body = {
       id?: string;
       subject: string;
@@ -28,9 +26,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title: string;
       description?: string;
       is_published?: boolean;
-      assigned_to?: string | null;      // ← Anouk's user id of null
-      available_from?: string | null;   // ISO string
-      available_until?: string | null;  // ISO string
+      assigned_to?: string | null;
+      available_from?: string | null;
+      available_until?: string | null;
     };
     const body = req.body as Body;
 
@@ -49,7 +47,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updated_at: new Date().toISOString(),
         })
         .eq("id", body.id)
-        .eq("user_id", userId) // alleen eigenaar kan wijzigen
+        .eq("user_id", userId)
         .select("*")
         .single();
       if (error) return res.status(400).json({ error: error.message });
@@ -77,6 +75,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  res.setHeader("Allow", "GET, POST");
-  res.status(405).end("Method Not Allowed");
+  if (req.method === "DELETE") {
+    const id = (req.query.id as string) || "";
+    if (!id) return res.status(400).json({ error: "Missing ?id" });
+
+    // eigenaar-check
+    const { data: q, error: qErr } = await admin
+      .from("study_quizzes")
+      .select("id,user_id")
+      .eq("id", id)
+      .single();
+    if (qErr) return res.status(400).json({ error: qErr.message });
+    if (q.user_id !== userId) return res.status(403).json({ error: "Not owner" });
+
+    const { error: delErr } = await admin.from("study_quizzes").delete().eq("id", id);
+    if (delErr) return res.status(400).json({ error: delErr.message });
+
+    return res.status(204).end();
+  }
+
+  res.setHeader("Allow", "GET, POST, DELETE");
+  return res.status(405).end("Method Not Allowed");
 }
