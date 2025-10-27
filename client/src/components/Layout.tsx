@@ -12,7 +12,7 @@ export default function Layout({ children }: LayoutProps) {
   const { user, signOut } = useAuth();
 
   const tabs = [
-    { id: "vandaag", label: "Vandaag", icon: Icons.Home, path: "/" },
+    { id: "vandaag", label: "", icon: Icons.Home, path: "/" },
     { id: "planning", label: "Planning", icon: Icons.Calendar, path: "/planning" },
     { id: "mental", label: "Mentaal", icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
     // ✅ Uitleg pad gecorrigeerd naar lowercase
@@ -21,7 +21,7 @@ export default function Layout({ children }: LayoutProps) {
 
     // ✅ Archief vervangen door Toets (quizlijst)
     { id: "toets", label: "Toets", icon: Icons.ClipboardList, path: "/toets" },
-    { id: "instellingen", label: "Instellingen", icon: Icons.Settings, path: "/instellingen" },
+    { id: "instellingen", label: "", icon: Icons.Settings, path: "/instellingen" },
   ];
 
   const isParent = user?.user_metadata?.role === "parent";

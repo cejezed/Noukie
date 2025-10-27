@@ -1,5 +1,5 @@
 import * as Accordion from "@radix-ui/react-accordion";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
@@ -11,12 +11,13 @@ type Chapter = {
   summary?: string | null;
   cheat_sheet?: CheatItem[] | null;
   quiz_id?: string | null;
+  is_published?: boolean;
 };
 
 export default function Leren() {
   const [q, setQ] = useState("");
 
-  const chapters = useQuery({
+  const chaptersQ = useQuery({
     queryKey: ["study_chapters"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -30,36 +31,40 @@ export default function Leren() {
     },
   });
 
-  if (chapters.isLoading) return <main className="p-6">Laden…</main>;
-  if (chapters.isError) return <main className="p-6 text-red-600">Kon hoofdstukken niet laden.</main>;
+  if (chaptersQ.isLoading) return <main className="p-6">Laden…</main>;
+  if (chaptersQ.isError) return <main className="p-6 text-red-600">Kon hoofdstukken niet laden.</main>;
 
-  const list = chapters.data || [];
+  const list = chaptersQ.data || [];
   if (!list.length) return <main className="p-6">Nog geen hoofdstukken toegevoegd.</main>;
 
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return list;
-    return list.filter(
-      (c) =>
-        c.subject.toLowerCase().includes(needle) ||
-        c.chapter_title.toLowerCase().includes(needle) ||
-        (c.summary ?? "").toLowerCase().includes(needle) ||
-        (Array.isArray(c.cheat_sheet) &&
-          c.cheat_sheet.some((i) =>
-            (i.term + " " + i.uitleg).toLowerCase().includes(needle)
-          ))
-    );
-  }, [list, q]);
+  // Filter (zonder useMemo voor absolute eenvoud/robustheid)
+  const needle = q.trim().toLowerCase();
+  const filtered = !needle
+    ? list
+    : list.filter((c) => {
+        const hay1 = c.subject?.toLowerCase() ?? "";
+        const hay2 = c.chapter_title?.toLowerCase() ?? "";
+        const hay3 = (c.summary ?? "").toLowerCase();
+        const hay4 =
+          Array.isArray(c.cheat_sheet)
+            ? c.cheat_sheet.map((i) => (i.term + " " + i.uitleg).toLowerCase()).join(" ")
+            : "";
+        return (
+          hay1.includes(needle) ||
+          hay2.includes(needle) ||
+          hay3.includes(needle) ||
+          hay4.includes(needle)
+        );
+      });
 
-  // groepeer per vak
-  const bySubject = useMemo(() => {
-    const m = new Map<string, Chapter[]>();
-    for (const ch of filtered) {
-      if (!m.has(ch.subject)) m.set(ch.subject, []);
-      m.get(ch.subject)!.push(ch);
-    }
-    return Array.from(m.entries()); // [ [subject, Chapter[]], ... ]
-  }, [filtered]);
+  // Groepeer per vak (zonder useMemo)
+  const groups: Record<string, Chapter[]> = {};
+  for (const ch of filtered) {
+    const key = ch.subject || "Overig";
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(ch);
+  }
+  const grouped = Object.entries(groups); // [ [subject, Chapter[]], ... ]
 
   return (
     <main className="mx-auto max-w-[1000px] px-6 py-8 space-y-6">
@@ -75,15 +80,15 @@ export default function Leren() {
       </div>
 
       <div className="space-y-4">
-        {bySubject.map(([subject, chapters]) => (
+        {grouped.map(([subject, chapterList]) => (
           <section key={subject} className="bg-white shadow rounded-2xl overflow-hidden">
             <div className="border-b px-5 py-4">
               <h2 className="text-lg font-semibold">{subject}</h2>
-              <p className="text-xs text-gray-500">{chapters.length} hoofdstuk(ken)</p>
+              <p className="text-xs text-gray-500">{chapterList.length} hoofdstuk(ken)</p>
             </div>
 
             <Accordion.Root type="multiple" className="w-full">
-              {chapters.map((ch) => (
+              {chapterList.map((ch) => (
                 <Accordion.Item key={ch.id} value={ch.id} className="border-b last:border-b-0">
                   <Accordion.Header>
                     <Accordion.Trigger className="w-full text-left px-5 py-4 flex items-center justify-between gap-3 hover:bg-gray-50">
