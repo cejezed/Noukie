@@ -81,7 +81,7 @@ export default function Layout({ children }: LayoutProps) {
           data-testid="bottom-navigation"
         >
           <div className={`${containerWidths}`}>
-            <div className="grid grid-cols-6 gap-0">
+            <div className="grid grid-cols-7 gap-0">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = location === tab.path;
