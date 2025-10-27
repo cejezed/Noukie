@@ -7,12 +7,12 @@ const admin = createClient(
 );
 
 /** -------------------------------------------------------
- *  Helpers: tekst-normalisatie + contextuele distractors
+ *  Utilities
  * ------------------------------------------------------*/
 function normalizeSpaces(s: string): string {
   return (s || "")
     .replace(/\r/g, "")
-    .replace(/\s*\n+\s*/g, " ")  // interne newlines -> spatie
+    .replace(/\s*\n+\s*/g, " ") // collapse newlines to spaces within a line
     .replace(/\s{2,}/g, " ")
     .trim();
 }
@@ -47,52 +47,63 @@ function jaccard(a: string, b: string): number {
   return inter / union;
 }
 
-function similarDistractors(correct: string, pool: string[], k = 3): string[] {
-  const MIN_LEN = 18; // te korte zinnetjes vermijden (zoals “muziek en waarden”)
+/** Small deterministic shuffle seeded per question index
+ * keeps options order varied but stable per run. */
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  const a = arr.slice();
+  let s = (seed >>> 0) + 1;
+  for (let i = a.length - 1; i > 0; i--) {
+    // Linear congruential generator
+    s = (1103515245 * s + 12345) & 0x7fffffff;
+    const j = s % (i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/** Pick contextually similar distractors.
+ *  - Prefers top-K most similar definitions
+ *  - Then samples randomly from that top-set (seeded by question index)
+ *  - Falls back to random long-enough strings if needed
+ */
+function similarDistractors(
+  correct: string,
+  pool: string[],
+  k: number,
+  seedForQuestion: number
+): string[] {
+  const MIN_LEN = 10;
   const cleanCorrect = normalizeSpaces(correct);
 
-  // Kandidaten scoren op gelijkenis en filteren op lengte + geen (deel)duplicaten
-  const candidates = pool
+  const basePool = pool
     .map(s => normalizeSpaces(s))
-    .filter(s =>
-      s &&
-      s !== cleanCorrect &&
-      s.length >= MIN_LEN &&
-      !s.includes(cleanCorrect) &&
-      !cleanCorrect.includes(s)
-    )
+    .filter(s => s && s !== cleanCorrect);
+
+  const scored = basePool
     .map(s => ({ s, score: jaccard(cleanCorrect, s) }))
     .sort((a, b) => b.score - a.score);
 
-  const chosen: string[] = [];
-  for (const c of candidates) {
-    if (!chosen.includes(c.s)) chosen.push(c.s);
-    if (chosen.length >= k) break;
+  // Take a top window (10) and seeded-shuffle it to avoid the same 3 every time
+  const topWindow = scored.slice(0, Math.max(10, k * 3)).map(x => x.s);
+  let chosen: string[] = [];
+  if (topWindow.length > 0) {
+    const shuffled = seededShuffle(topWindow, seedForQuestion);
+    chosen = shuffled.filter(s => s.length >= MIN_LEN).slice(0, k);
   }
 
-  // Fallback: random aanvullen als er te weinig overblijven
+  // Fallback: fill any missing with random (seeded)
   if (chosen.length < k) {
-    const rest = pool
-      .map(s => normalizeSpaces(s))
-      .filter(
-        s =>
-          s &&
-          s !== cleanCorrect &&
-          !chosen.includes(s) &&
-          s.length >= MIN_LEN
-      );
-    rest.sort(() => Math.random() - 0.5);
+    const rest = seededShuffle(basePool, seedForQuestion + 7).filter(
+      s => !chosen.includes(s) && s.length >= MIN_LEN
+    );
     chosen.push(...rest.slice(0, k - chosen.length));
   }
 
-  return chosen.slice(0, k);
+  return Array.from(new Set(chosen)).slice(0, k);
 }
 
 /** -------------------------------------------------------
- *  Parser: ondersteunt meerdere invoervormen
- *  - "Vraag?\sAntwoord"
- *  - "term<TAB>def"  /  "term;def"
- *  - CSV-achtig: 2 velden, desnoods met quotes
+ *  Parsing
  * ------------------------------------------------------*/
 type Pair = { term: string; def: string };
 
@@ -102,33 +113,45 @@ function splitFirst(haystack: string, delimiter: string): [string, string] | nul
   return [haystack.slice(0, i), haystack.slice(i + delimiter.length)];
 }
 
+function stripLeadingTag(term: string): string {
+  // Remove leading "[...]" tag if present, keep it if you prefer
+  // e.g. "[Nederland 1948–2008] Vraag?" -> "Vraag?"
+  const m = term.match(/^\[[^\]]+\]\s*(.*)$/);
+  return m ? m[1] : term;
+}
+
 function parseLine(line: string): Pair | null {
   const raw = normalizeSpaces(line);
 
-  // 1) Q/A: split op eerste '? ' (jouw invoer)
+  // Prefer Q/A pattern: split at first "? "
   const qa = splitFirst(raw, "? ");
   if (qa) {
-    return { term: (qa[0] + "?").trim(), def: qa[1].trim() };
+    const term = stripLeadingTag((qa[0] + "?").trim());
+    const def = qa[1].trim();
+    if (term && def) return { term, def };
   }
 
-  // 2) Tab-gescheiden
+  // Tab
   if (raw.includes("\t")) {
     const parts = raw.split("\t").map(normalizeSpaces).filter(Boolean);
-    if (parts.length >= 2) return { term: parts[0], def: parts.slice(1).join(" ") };
+    if (parts.length >= 2) return { term: stripLeadingTag(parts[0]), def: parts.slice(1).join(" ") };
   }
 
-  // 3) Semicolon-gescheiden
+  // Semicolon
   if (raw.includes(";")) {
-    const [a, b] = raw.split(/;(.*)/).map(s => normalizeSpaces(s || ""));
-    if (a && b) return { term: a, def: b };
+    const m = raw.split(/;(.*)/);
+    if (m && m.length >= 3) {
+      const a = normalizeSpaces(m[0]);
+      const b = normalizeSpaces(m[1]);
+      if (a && b) return { term: stripLeadingTag(a), def: b };
+    }
   }
 
-  // 4) CSV (2 velden), tolerant met quotes
-  //    Voorbeeld: "term","def met, komma"
+  // CSV tolerant
   const csvMatch = raw.match(/^\s*"([^"]+)"\s*,\s*"([^"]+)"\s*$/)
                 || raw.match(/^\s*([^,]+)\s*,\s*(.+)\s*$/);
   if (csvMatch) {
-    const term = normalizeSpaces(csvMatch[1]);
+    const term = stripLeadingTag(normalizeSpaces(csvMatch[1]));
     const def  = normalizeSpaces(csvMatch[2]);
     if (term && def) return { term, def };
   }
@@ -137,6 +160,7 @@ function parseLine(line: string): Pair | null {
 }
 
 function parseQuizletLike(input: string): Pair[] {
+  // Split by hard line breaks into candidate lines; allow multiple sentences per line
   const lines = (input || "")
     .split(/\r?\n/)
     .map(l => l.trim())
@@ -147,6 +171,29 @@ function parseQuizletLike(input: string): Pair[] {
     const pair = parseLine(line);
     if (pair) rows.push(pair);
   }
+
+  // Also try to recover if user pasted a whole paragraph (no line breaks)
+  if (rows.length <= 3) {
+    const para = normalizeSpaces(input || "");
+    // Split at pattern: "<vraag>? <antwoord>. " by capturing the first "? "
+    const chunks = para.split(/(?<=\?)\s+(?=[^\?]+\.\s|\S)/);
+    for (const chunk of chunks) {
+      const p = parseLine(chunk);
+      if (p) rows.push(p);
+    }
+    // Deduplicate
+    const uniq: Pair[] = [];
+    const seen = new Set<string>();
+    for (const r of rows) {
+      const key = r.term + "||" + r.def;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniq.push(r);
+      }
+    }
+    return uniq;
+  }
+
   return rows;
 }
 
@@ -170,13 +217,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: "Missing text/title/subject" });
     }
 
-    // 1) Parse input
+    // 1) Parse
     const pairs = parseQuizletLike(text);
     if (!pairs.length) {
       return res.status(400).json({ error: "No questions parsed from input" });
     }
 
-    // 2) Quiz row
+    // 2) Create quiz
     const { data: quiz, error: qErr } = await admin
       .from("study_quizzes")
       .insert({
@@ -190,16 +237,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (qErr || !quiz) return res.status(400).json({ error: qErr?.message || "quiz insert failed" });
 
-    // 3) Items bouwen
-    const allDefs = pairs.map(p => normalizeSpaces(p.def));
+    // 3) Build items
+    const allDefs = pairs.map(p => normalizeSpaces(p.def)).filter(Boolean);
 
     const items = pairs.map((row, idx) => {
       const prompt = normalizeSpaces(row.term);
       const correct = normalizeSpaces(row.def);
 
       if (mode === "mc" && generateMc) {
-        const distractors = similarDistractors(correct, allDefs, 3);
-        const choices = [correct, ...distractors].sort(() => Math.random() - 0.5);
+        const distractors = similarDistractors(correct, allDefs, 3, idx + 1234);
+        const choices = seededShuffle([correct, ...distractors], idx + 5678);
 
         return {
           qtype: "mc",
@@ -211,7 +258,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         };
       }
 
-      // open vraag
       return {
         qtype: "open",
         prompt,
