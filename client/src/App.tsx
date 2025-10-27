@@ -16,6 +16,11 @@ import ParentDashboard from "./pages/ParentDashboard";
 import NotFound from "./pages/not-found";
 import MentalPage from "./pages/Mental";
 import { supabase } from "./lib/supabase";
+import Leren from "./pages/Leren";
+import Leren from "./pages/Leren";
+import LerenAdmin from "./pages/LerenAdmin";
+
+
 
 // ✅ NIEUW
 import Toets from "./pages/Toets";
@@ -85,6 +90,10 @@ function AuthenticatedApp() {
 
         {/* 4) Uitleg (LeerChat) */}
         <Route path="/leerchat" component={LeerChat} />
+
+       <Route path="/leren" component={Leren} />
+<Route path="/leren/admin" component={LerenAdmin} />
+
 
         {/* 5) Toets (lijst) */}
         <Route path="/toets" component={Toets} />

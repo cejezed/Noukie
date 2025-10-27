@@ -17,6 +17,8 @@ export default function Layout({ children }: LayoutProps) {
     { id: "mental", label: "Mentaal", icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
     // ✅ Uitleg pad gecorrigeerd naar lowercase
     { id: "uitleg", label: "Uitleg", icon: Icons.HelpCircle, path: "/leerchat" },
+    { id: "leren", label: "Leren", icon: Icons.BookOpen, path: "/leren" },
+
     // ✅ Archief vervangen door Toets (quizlijst)
     { id: "toets", label: "Toets", icon: Icons.ClipboardList, path: "/toets" },
     { id: "instellingen", label: "Instellingen", icon: Icons.Settings, path: "/instellingen" },
