@@ -1,9 +1,8 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/use-toast";
 
 // Helpers
 async function getUserId(): Promise<string | null> {
@@ -39,7 +38,6 @@ type Mode = "NEW" | "EDIT";
 
 export default function AdminQuiz() {
   const qc = useQueryClient();
-  const { toast } = useToast();
   const [me, setMe] = useState<string | null>(null);
 
   // master list state
@@ -82,11 +80,6 @@ export default function AdminQuiz() {
   const [bulkText, setBulkText] = useState("");
   const [bulkMode, setBulkMode] = useState<"open" | "mc">("open");
   const [bulkAutoDistractors, setBulkAutoDistractors] = useState(true);
-  const [bulkPreview, setBulkPreview] = useState<
-    { prompt: string; answer: string; choices?: string[] }[]
-  >([]);
-  const [bulkParsingError, setBulkParsingError] = useState<string | null>(null);
-  const [bulkBusy, setBulkBusy] = useState(false);
 
   // init user
   useEffect(() => {
@@ -149,6 +142,7 @@ export default function AdminQuiz() {
     }
   }, [selectedQuiz?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // helpers voor datetime-local (bewaar/lees in ISO UTC maar toon lokaal)
   function toLocalInputValue(iso?: string | null) {
     if (!iso) return "";
     const d = new Date(iso);
@@ -185,11 +179,9 @@ export default function AdminQuiz() {
       if (id) {
         setSelectedId(id);
         setMode("EDIT");
-        toast({ title: "Toets aangemaakt", description: "Je kunt nu vragen toevoegen." });
       }
       setIsDirty(false);
     },
-    onError: (e: any) => toast({ variant: "destructive", title: "Opslaan mislukt", description: String(e?.message || e) }),
   });
 
   const updateQuiz = useMutation({
@@ -217,9 +209,7 @@ export default function AdminQuiz() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quizzes-admin", me] });
       setIsDirty(false);
-      toast({ title: "Wijzigingen bewaard" });
     },
-    onError: (e: any) => toast({ variant: "destructive", title: "Bewaren mislukt", description: String(e?.message || e) }),
   });
 
   const deleteQuiz = useMutation({
@@ -240,9 +230,7 @@ export default function AdminQuiz() {
       setTab("DETAILS");
       resetForm();
       qc.invalidateQueries({ queryKey: ["quizzes-admin", me] });
-      toast({ title: "Toets verwijderd" });
     },
-    onError: (e: any) => toast({ variant: "destructive", title: "Verwijderen mislukt", description: String(e?.message || e) }),
   });
 
   const addQuestion = useMutation({
@@ -273,138 +261,130 @@ export default function AdminQuiz() {
       setQForm({ qtype: "mc", prompt: "", choices: "", answer: "", explanation: "" });
       qc.invalidateQueries({ queryKey: ["quiz-questions", selectedId, me] });
       setTab("QUESTIONS");
-      toast({ title: "Vraag toegevoegd" });
     },
-    onError: (e: any) => toast({ variant: "destructive", title: "Vraag toevoegen mislukt", description: String(e?.message || e) }),
   });
 
-  // ===== BULK: client-side parsing en direct posten =====
+  // ---------- BULK IMPORT (WERKEND) ----------
+  function parseBulkLines(text: string): Array<{
+    prompt: string;
+    answer: string;
+    qtype?: "mc" | "open";
+    choices?: string[];
+  }> {
+    const lines = text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
 
-  function parseBulk(raw: string): { prompt: string; answer: string }[] {
-    setBulkParsingError(null);
-    const lines = raw.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const out: { prompt: string; answer: string }[] = [];
+    const rows: Array<{ prompt: string; answer: string; qtype?: "mc" | "open"; choices?: string[] }> = [];
+
     for (const line of lines) {
-      if (!line || line.startsWith("#")) continue;
-      // TSV (primair), anders CSV, anders " - " of ":" als scheiding
-      let q = "";
-      let a = "";
-
-      if (line.includes("\t")) {
-        const [p, ...rest] = line.split("\t");
-        q = (p ?? "").trim();
-        a = rest.join("\t").trim();
-      } else if (line.includes(";")) {
-        const [p, ...rest] = line.split(";");
-        q = (p ?? "").trim();
-        a = rest.join(";").trim();
-      } else if (line.includes(",")) {
-        // CSV kan komma in tekst hebben; voor simpelheid: eerste komma
-        const idx = line.indexOf(",");
-        q = line.slice(0, idx).trim();
-        a = line.slice(idx + 1).trim();
-      } else if (line.includes(" - ")) {
-        const idx = line.indexOf(" - ");
-        q = line.slice(0, idx).trim();
-        a = line.slice(idx + 3).trim();
-      } else if (line.includes(":")) {
-        const idx = line.indexOf(":");
-        q = line.slice(0, idx).trim();
-        a = line.slice(idx + 1).trim();
-      } else {
-        // fallback: hele regel = prompt; antwoord leeg (wordt dan geskipt)
-        q = line;
-        a = "";
+      // Ondersteun pipes, tabs of komma's als scheiding
+      // Vorm: Vraag | Antwoord | mc | Keuze1;Keuze2;Keuze3
+      const parts = line.split("|").map((p) => p.trim());
+      if (parts.length >= 2) {
+        const prompt = parts[0];
+        const answer = parts[1];
+        const qtype = (parts[2]?.toLowerCase() as "mc" | "open") || undefined;
+        const choices = parts[3] ? parts[3].split(";").map((s) => s.trim()).filter(Boolean) : undefined;
+        rows.push({ prompt, answer, qtype, choices });
+        continue;
       }
 
-      if (q && a) out.push({ prompt: q, answer: a });
-    }
-    if (!out.length) setBulkParsingError("Geen geldige regels gevonden. Gebruik bijv. 'vraag[TAB]antwoord' per regel.");
-    return out;
-  }
-
-  function makeMcItems(rows: { prompt: string; answer: string }[]) {
-    // verzamel alle antwoorden als pool voor afleiders
-    const pool = rows.map(r => r.answer).filter(Boolean);
-    const items = rows.map(r => {
-      let choices = [r.answer];
-      if (bulkAutoDistractors) {
-        const others = pool.filter(a => a !== r.answer);
-        // kies tot 3 afleiders
-        const shuffled = [...others].sort(() => Math.random() - 0.5).slice(0, 3);
-        choices = [...choices, ...shuffled];
+      // TAB (tsv) fallback: Vraag \t Antwoord
+      const t = line.split("\t").map((p) => p.trim());
+      if (t.length >= 2) {
+        rows.push({ prompt: t[0], answer: t[1] });
+        continue;
       }
-      // unieke en beperkt tot max 4
-      const uniq = Array.from(new Set(choices)).slice(0, 4);
-      // shuffle final
-      const final = [...uniq].sort(() => Math.random() - 0.5);
-      return {
-        qtype: "mc" as const,
-        prompt: r.prompt,
-        choices: final,
-        answer: r.answer,
-        explanation: "",
-      };
-    });
-    return items;
+
+      // Comma fallback: Vraag,Antwoord
+      const c = line.split(",").map((p) => p.trim());
+      if (c.length >= 2) {
+        rows.push({ prompt: c[0], answer: c[1] });
+        continue;
+      }
+    }
+
+    return rows;
   }
 
-  function makeOpenItems(rows: { prompt: string; answer: string }[]) {
-    return rows.map(r => ({
-      qtype: "open" as const,
-      prompt: r.prompt,
-      answer: r.answer,
-      explanation: "",
-    }));
+  function buildDistractors(allAnswers: string[], correct: string, need: number): string[] {
+    const pool = Array.from(
+      new Set(
+        allAnswers
+          .map((a) => a.trim())
+          .filter((a) => a && a.toLowerCase() !== correct.trim().toLowerCase())
+      )
+    );
+    const out: string[] = [];
+    for (const a of pool) {
+      if (out.length >= need) break;
+      out.push(a);
+    }
+    // als niet genoeg, vul aan met eenvoudige placeholders (zeldzaam geval)
+    while (out.length < need) out.push(`Optie ${out.length + 2}`);
+    return out.slice(0, need);
   }
 
-  function refreshPreview(text: string, mode: "open" | "mc") {
-    const rows = parseBulk(text);
-    if (!rows.length) { setBulkPreview([]); return; }
-    if (mode === "open") {
-      setBulkPreview(rows.map(r => ({ prompt: r.prompt, answer: r.answer })));
-    } else {
-      const mc = makeMcItems(rows);
-      setBulkPreview(mc.map(m => ({ prompt: m.prompt, answer: m.answer!, choices: m.choices })));
-    }
-  }
+  const bulkImport = useMutation({
+    mutationFn: async () => {
+      if (!selectedId) throw new Error("Kies eerst een toets.");
+      const rows = parseBulkLines(bulkText);
+      if (!rows.length) throw new Error("Geen geldige regels gevonden.");
 
-  useEffect(() => {
-    refreshPreview(bulkText, bulkMode);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bulkText, bulkMode, bulkAutoDistractors]);
+      // Bepaal modus per regel: expliciet in regel > UI-keuze
+      const allAnswers = rows.map((r) => r.answer).filter(Boolean);
 
-  async function handleBulkImport() {
-    if (!selectedId) {
-      toast({ variant: "destructive", title: "Geen toets geselecteerd", description: "Sla eerst de toets op en selecteer hem." });
-      return;
-    }
-    const rows = parseBulk(bulkText);
-    if (!rows.length) {
-      toast({ variant: "destructive", title: "Geen vragen gevonden", description: bulkParsingError ?? "Controleer je invoer." });
-      return;
-    }
-    const items = bulkMode === "open" ? makeOpenItems(rows) : makeMcItems(rows);
-    setBulkBusy(true);
-    try {
+      // Maak items voor API
+      const items = rows.map((r) => {
+        const qtype: "mc" | "open" = (r.qtype ?? bulkMode) === "mc" ? "mc" : "open";
+        let choices: string[] | undefined = r.choices;
+
+        if (qtype === "mc") {
+          if (!choices || choices.length === 0) {
+            if (bulkAutoDistractors) {
+              // Minimaal 4 opties: juist + 3 afleiders (zoveel mogelijk uit andere antwoorden)
+              const distractors = buildDistractors(allAnswers, r.answer, 3);
+              choices = [r.answer, ...distractors];
+            } else {
+              // Alleen juiste antwoord als enige optie (minder mooi, maar valide)
+              choices = [r.answer];
+            }
+          } else {
+            // zorg dat juist antwoord erin zit
+            if (!choices.some((c) => c.toLowerCase() === r.answer.toLowerCase())) {
+              choices = [r.answer, ...choices];
+            }
+          }
+        }
+
+        return {
+          qtype,
+          prompt: r.prompt,
+          answer: r.answer,
+          choices: qtype === "mc" ? choices : undefined,
+          explanation: undefined,
+        };
+      });
+
+      // POST in één call naar je bestaande endpoint
       const res = await fetch("/api/quizzes/questions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-user-id": me! },
         body: JSON.stringify({ quiz_id: selectedId, items }),
       });
-      const text = await res.text();
-      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || "Bulk import mislukt");
+      return json;
+    },
+    onSuccess: () => {
       setBulkText("");
-      setBulkPreview([]);
       qc.invalidateQueries({ queryKey: ["quiz-questions", selectedId, me] });
       setTab("QUESTIONS");
-      toast({ title: "Bulk import gelukt", description: `${items.length} vragen toegevoegd.` });
-    } catch (e: any) {
-      toast({ variant: "destructive", title: "Bulk import mislukt", description: String(e?.message || e) });
-    } finally {
-      setBulkBusy(false);
-    }
-  }
+      alert("Vragen geïmporteerd ✅");
+    },
+  });
 
   // ----- UI helpers -----
   function resetForm() {
@@ -545,6 +525,7 @@ export default function AdminQuiz() {
                   className="px-3 py-2 rounded border"
                   onClick={() => {
                     if (isDirty && !confirm("Niet-opgeslagen wijzigingen gaan verloren. Weet je het zeker?")) return;
+                    // herladen vanaf bron (selectedQuiz)
                     if (!selectedQuiz) return;
                     setForm({
                       subject: selectedQuiz.subject ?? "",
@@ -554,4 +535,363 @@ export default function AdminQuiz() {
                       is_published: !!selectedQuiz.is_published,
                       assigned_to: selectedQuiz.assigned_to ?? "",
                       available_from: selectedQuiz.available_from
-                        ?
+                        ? toLocalInputValue(selectedQuiz.available_from)
+                        : "",
+                      available_until: selectedQuiz.available_until
+                        ? toLocalInputValue(selectedQuiz.available_until)
+                        : "",
+                    });
+                    setIsDirty(false);
+                  }}
+                >
+                  Reset
+                </button>
+
+                <button
+                  className="px-3 py-2 rounded border border-red-300 text-red-700 hover:bg-red-50"
+                  onClick={() => {
+                    if (confirm("Deze toets en alle bijbehorende data verwijderen?")) {
+                      deleteQuiz.mutate();
+                    }
+                  }}
+                >
+                  Verwijderen
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Tabs */}
+          <div className="flex items-center gap-2 border-b mb-4">
+            <button
+              className={`px-3 py-2 text-sm ${tab === "DETAILS" ? "border-b-2 border-sky-600 text-sky-700" : "text-gray-600"}`}
+              onClick={() => setTab("DETAILS")}
+            >
+              Details
+            </button>
+            <button
+              className={`px-3 py-2 text-sm ${tab === "QUESTIONS" ? "border-b-2 border-sky-600 text-sky-700" : "text-gray-600"}`}
+              onClick={() => {
+                if (!selectedId) return alert("Sla eerst de toets op.");
+                setTab("QUESTIONS");
+              }}
+            >
+              Vragen
+            </button>
+            <button
+              className={`px-3 py-2 text-sm ${tab === "BULK" ? "border-b-2 border-sky-600 text-sky-700" : "text-gray-600"}`}
+              onClick={() => {
+                if (!selectedId) return alert("Sla eerst de toets op.");
+                setTab("BULK");
+              }}
+            >
+              Bulk import
+            </button>
+          </div>
+
+          {/* Tab panes */}
+          {tab === "DETAILS" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input
+                  className="border p-2 rounded"
+                  placeholder="Vak (subject)"
+                  value={form.subject}
+                  onChange={(e) => { setForm({ ...form, subject: e.target.value }); setIsDirty(true); }}
+                />
+                <input
+                  className="border p-2 rounded"
+                  placeholder="Hoofdstuk (chapter)"
+                  value={form.chapter}
+                  onChange={(e) => { setForm({ ...form, chapter: e.target.value }); setIsDirty(true); }}
+                />
+                <input
+                  className="border p-2 rounded md:col-span-2"
+                  placeholder="Titel"
+                  value={form.title}
+                  onChange={(e) => { setForm({ ...form, title: e.target.value }); setIsDirty(true); }}
+                />
+                <textarea
+                  className="border p-2 rounded md:col-span-2 min-h-[120px]"
+                  placeholder="Omschrijving (optioneel)"
+                  value={form.description}
+                  onChange={(e) => { setForm({ ...form, description: e.target.value }); setIsDirty(true); }}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border p-3 rounded">
+                  <label className="block text-sm font-medium mb-2">Beschikbaar vanaf</label>
+                  <input
+                    type="datetime-local"
+                    className="border p-2 rounded w-full"
+                    value={form.available_from}
+                    onChange={(e) => { setForm({ ...form, available_from: e.target.value }); setIsDirty(true); }}
+                  />
+                </div>
+                <div className="border p-3 rounded">
+                  <label className="block text-sm font-medium mb-2">Beschikbaar tot (optioneel)</label>
+                  <input
+                    type="datetime-local"
+                    className="border p-2 rounded w-full"
+                    value={form.available_until}
+                    onChange={(e) => { setForm({ ...form, available_until: e.target.value }); setIsDirty(true); }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="border p-3 rounded md:col-span-2">
+                  <label className="block text-sm font-medium mb-1">Toewijzen aan (optioneel)</label>
+                  <p className="text-xs text-gray-500 mb-2">
+                    Laat leeg voor iedereen. Vul Anouks user-id (UUID) in om exclusief toe te wijzen.
+                  </p>
+                  <input
+                    className="border p-2 rounded w-full"
+                    placeholder="assigned_to (UUID)"
+                    value={form.assigned_to}
+                    onChange={(e) => { setForm({ ...form, assigned_to: e.target.value }); setIsDirty(true); }}
+                  />
+                </div>
+
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={form.is_published}
+                    onChange={(e) => { setForm({ ...form, is_published: e.target.checked }); setIsDirty(true); }}
+                  />
+                  <span>Publiceren</span>
+                </label>
+              </div>
+
+              <div className="pt-2 flex items-center gap-3">
+                {mode === "NEW" ? (
+                  <button
+                    className="bg-emerald-600 text-white px-4 py-2 rounded"
+                    onClick={() => createQuiz.mutate()}
+                    disabled={!form.title.trim() || !form.subject.trim()}
+                    title={!form.title.trim() || !form.subject.trim() ? "Vul minimaal Vak en Titel in" : "Opslaan"}
+                  >
+                    Opslaan (aanmaken)
+                  </button>
+                ) : (
+                  <button
+                    className="bg-emerald-600 text-white px-4 py-2 rounded"
+                    onClick={() => updateQuiz.mutate()}
+                    disabled={!isDirty}
+                    title={isDirty ? "Wijzigingen bewaren" : "Geen wijzigingen"}
+                  >
+                    Bewaren (bijwerken)
+                  </button>
+                )}
+
+                <button
+                  className="px-3 py-2 rounded border"
+                  onClick={() => {
+                    if (isDirty && !confirm("Niet-opgeslagen wijzigingen gaan verloren. Doorgaan?")) return;
+                    // reload uit bron
+                    if (mode === "EDIT" && selectedQuiz) {
+                      setForm({
+                        subject: selectedQuiz.subject ?? "",
+                        chapter: selectedQuiz.chapter ?? "",
+                        title: selectedQuiz.title ?? "",
+                        description: selectedQuiz.description ?? "",
+                        is_published: !!selectedQuiz.is_published,
+                        assigned_to: selectedQuiz.assigned_to ?? "",
+                        available_from: selectedQuiz.available_from
+                          ? toLocalInputValue(selectedQuiz.available_from)
+                          : "",
+                        available_until: selectedQuiz.available_until
+                          ? toLocalInputValue(selectedQuiz.available_until)
+                          : "",
+                      });
+                    } else {
+                      setForm({
+                        subject: "",
+                        chapter: "",
+                        title: "",
+                        description: "",
+                        is_published: false,
+                        assigned_to: "",
+                        available_from: "",
+                        available_until: "",
+                      });
+                    }
+                    setIsDirty(false);
+                  }}
+                >
+                  Reset wijzigingen
+                </button>
+              </div>
+            </div>
+          )}
+
+          {tab === "QUESTIONS" && (
+            <div className="space-y-6">
+              {!selectedId ? (
+                <p className="text-sm text-gray-600">Sla eerst de toets op voordat je vragen toevoegt.</p>
+              ) : (
+                <>
+                  {/* Add single */}
+                  <div className="border rounded-2xl p-4">
+                    <h3 className="font-semibold mb-3">Nieuwe vraag</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <select
+                        className="border p-2 rounded"
+                        value={qForm.qtype}
+                        onChange={(e) => setQForm({ ...qForm, qtype: e.target.value as "mc" | "open" })}
+                      >
+                        <option value="mc">Meerkeuze</option>
+                        <option value="open">Open vraag</option>
+                      </select>
+                      <input
+                        className="border p-2 rounded"
+                        placeholder="Juiste antwoord"
+                        value={qForm.answer}
+                        onChange={(e) => setQForm({ ...qForm, answer: e.target.value })}
+                      />
+                      <textarea
+                        className="border p-2 rounded md:col-span-2"
+                        placeholder="Vraag (prompt)"
+                        value={qForm.prompt}
+                        onChange={(e) => setQForm({ ...qForm, prompt: e.target.value })}
+                      />
+                      {qForm.qtype === "mc" && (
+                        <textarea
+                          className="border p-2 rounded md:col-span-2"
+                          placeholder={"Meerkeuze-opties (één per regel, incl. het juiste antwoord)"}
+                          value={qForm.choices}
+                          onChange={(e) => setQForm({ ...qForm, choices: e.target.value })}
+                        />
+                      )}
+                      <textarea
+                        className="border p-2 rounded md:col-span-2"
+                        placeholder="Uitleg/feedback (optioneel)"
+                        value={qForm.explanation}
+                        onChange={(e) => setQForm({ ...qForm, explanation: e.target.value })}
+                      />
+                      <div className="md:col-span-2">
+                        <button
+                          className="bg-sky-600 text-white px-4 py-2 rounded"
+                          onClick={() => addQuestion.mutate()}
+                          disabled={!qForm.prompt.trim() || !qForm.answer.trim()}
+                        >
+                          Vraag toevoegen
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* List */}
+                  <div className="border rounded-2xl p-4">
+                    <h3 className="font-semibold mb-3">Vragen in deze toets</h3>
+                    {questions.isLoading ? (
+                      <p>Laden…</p>
+                    ) : (questions.data ?? []).length ? (
+                      <ol className="list-decimal pl-5 space-y-3">
+                        {(questions.data ?? []).map((qq) => {
+                          let choices: string[] = [];
+                          try {
+                            if (qq.qtype === "mc" && qq.choices) {
+                              const raw = typeof qq.choices === "string" ? qq.choices : String(qq.choices);
+                              choices = Array.isArray(qq.choices) ? (qq.choices as any) : JSON.parse(raw);
+                            }
+                          } catch {
+                            choices = [];
+                          }
+                          return (
+                            <li key={qq.id}>
+                              <div className="font-medium">{qq.prompt}</div>
+                              {qq.qtype === "mc" && choices.length > 0 && (
+                                <ul className="list-disc pl-5 text-sm text-gray-700">
+                                  {choices.map((c, i) => (
+                                    <li key={i}>{c}</li>
+                                  ))}
+                                </ul>
+                              )}
+                              {qq.answer && (
+                                <div className="text-xs text-emerald-700">Antwoord: {qq.answer}</div>
+                              )}
+                              {qq.explanation && (
+                                <div className="text-xs text-gray-600">Uitleg: {qq.explanation}</div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : (
+                      <p className="text-gray-600">Nog geen vragen.</p>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {tab === "BULK" && (
+            <div className="space-y-4">
+              {!selectedId ? (
+                <p className="text-sm text-gray-600">Sla eerst de toets op voordat je bulk importeert.</p>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-600">
+                    Ondersteunde formaten per regel:<br />
+                    <code>Vraag | Antwoord | mc | Keuze1;Keuze2;Keuze3</code> of <code>Vraag[TAB]Antwoord</code>.<br />
+                    Kies hieronder de standaardmodus voor regels zonder expliciet type.
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2">
+                      <span className="text-sm">Modus:</span>
+                      <select
+                        className="border p-2 rounded"
+                        value={bulkMode}
+                        onChange={(e) => setBulkMode(e.target.value as "open" | "mc")}
+                      >
+                        <option value="open">Open vragen</option>
+                        <option value="mc">Meerkeuze</option>
+                      </select>
+                    </label>
+                    {bulkMode === "mc" && (
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={bulkAutoDistractors}
+                          onChange={(e) => setBulkAutoDistractors(e.target.checked)}
+                        />
+                        <span className="text-sm">Afleiders automatisch genereren</span>
+                      </label>
+                    )}
+                  </div>
+
+                  <textarea
+                    className="w-full border rounded p-3 min-h-[220px]"
+                    placeholder={
+                      "Voorbeelden:\n" +
+                      "Wat is de hoofdstad van Frankrijk? | Parijs | mc | Parijs;Lyon;Marseille;Nice\n" +
+                      "Wat is 2 + 2? | 4 | mc | 3;4;5\n" +
+                      "Noem een kenmerk van een rivier. | Stromend water | open\n" +
+                      "Stroomgebied\tGebied waar water naar één rivier stroomt"
+                    }
+                    value={bulkText}
+                    onChange={(e) => setBulkText(e.target.value)}
+                  />
+
+                  <div>
+                    <button
+                      className="px-4 py-2 rounded bg-emerald-600 text-white disabled:opacity-50"
+                      onClick={() => bulkImport.mutate()}
+                      disabled={!bulkText.trim()}
+                    >
+                      Bulk importeren
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
