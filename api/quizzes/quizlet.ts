@@ -3,6 +3,61 @@ import { createClient } from "@supabase/supabase-js";
 
 const admin = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
+/** 
+ * Choose contextually similar distractors based on simple Jaccard similarity over content words.
+ * This avoids silly, obviously-wrong options.
+ */
+function tokenize(s: string): string[] {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[’'"]/g, "'")
+    .replace(/[^a-z0-9\s']/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+const STOP = new Set([
+  "de","het","een","en","of","in","op","van","voor","met","door","dat","die",
+  "te","als","om","aan","bij","uit","tot","over","zoals","waarin","waartoe",
+  "is","zijn","werd","werden","was","waren","heeft","hebben","het","een"
+]);
+
+function contentTokens(s: string): string[] {
+  return tokenize(s).filter(w => !STOP.has(w) && w.length > 2);
+}
+
+function jaccard(a: string, b: string): number {
+  const A = new Set(contentTokens(a));
+  const B = new Set(contentTokens(b));
+  if (A.size === 0 || B.size === 0) return 0;
+  let inter = 0;
+  for (const x of A) if (B.has(x)) inter++;
+  const union = A.size + B.size - inter;
+  return inter / union;
+}
+
+function similarDistractors(correct: string, pool: string[], k = 3): string[] {
+  const candidates = pool
+    .filter(s => s && s !== correct)
+    .map(s => ({ s, score: jaccard(correct, s) }))
+    .sort((a, b) => b.score - a.score);
+
+  // Prefer the top-scoring ones; if scores are too low, fall back to random fill.
+  const chosen: string[] = [];
+  for (const c of candidates) {
+    if (!chosen.includes(c.s)) chosen.push(c.s);
+    if (chosen.length >= k) break;
+  }
+  if (chosen.length < k) {
+    const rest = pool.filter(s => s && s !== correct && !chosen.includes(s));
+    rest.sort(() => Math.random() - 0.5);
+    chosen.push(...rest.slice(0, k - chosen.length));
+  }
+  return chosen.slice(0, k);
+}
+
+
 function parseQuizletLike(input: string) {
   // Ondersteunt: tab-gescheiden (TSV), komma-gescheiden (CSV) of gekopieerde lijsten "term<tab>def"
   // Retourneert [{term, def}, ...]
@@ -79,10 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const items = pairs.map((row, idx) => {
       if (mode === "mc" && body.generateMc) {
         // kies 3 afleiders uit andere definities
-        const distractors = allDefs
-          .filter(d => d !== row.def)
-          .sort(() => Math.random() - 0.5)
-          .slice(0, 3);
+        const distractors = similarDistractors(row.def, allDefs, 3);
         const choices = [row.def, ...distractors].sort(() => Math.random() - 0.5);
         return {
           qtype: "mc",
