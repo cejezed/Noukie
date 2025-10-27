@@ -1,12 +1,22 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
 
-const admin = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+const admin = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-/** 
- * Choose contextually similar distractors based on simple Jaccard similarity over content words.
- * This avoids silly, obviously-wrong options.
- */
+/** -------------------------------------------------------
+ *  Helpers: tekst-normalisatie + contextuele distractors
+ * ------------------------------------------------------*/
+function normalizeSpaces(s: string): string {
+  return (s || "")
+    .replace(/\r/g, "")
+    .replace(/\s*\n+\s*/g, " ")  // interne newlines -> spatie
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function tokenize(s: string): string[] {
   return (s || "")
     .toLowerCase()
@@ -20,7 +30,7 @@ function tokenize(s: string): string[] {
 const STOP = new Set([
   "de","het","een","en","of","in","op","van","voor","met","door","dat","die",
   "te","als","om","aan","bij","uit","tot","over","zoals","waarin","waartoe",
-  "is","zijn","werd","werden","was","waren","heeft","hebben","het","een"
+  "is","zijn","werd","werden","was","waren","heeft","hebben"
 ]);
 
 function contentTokens(s: string): string[] {
@@ -38,50 +48,111 @@ function jaccard(a: string, b: string): number {
 }
 
 function similarDistractors(correct: string, pool: string[], k = 3): string[] {
+  const MIN_LEN = 18; // te korte zinnetjes vermijden (zoals “muziek en waarden”)
+  const cleanCorrect = normalizeSpaces(correct);
+
+  // Kandidaten scoren op gelijkenis en filteren op lengte + geen (deel)duplicaten
   const candidates = pool
-    .filter(s => s && s !== correct)
-    .map(s => ({ s, score: jaccard(correct, s) }))
+    .map(s => normalizeSpaces(s))
+    .filter(s =>
+      s &&
+      s !== cleanCorrect &&
+      s.length >= MIN_LEN &&
+      !s.includes(cleanCorrect) &&
+      !cleanCorrect.includes(s)
+    )
+    .map(s => ({ s, score: jaccard(cleanCorrect, s) }))
     .sort((a, b) => b.score - a.score);
 
-  // Prefer the top-scoring ones; if scores are too low, fall back to random fill.
   const chosen: string[] = [];
   for (const c of candidates) {
     if (!chosen.includes(c.s)) chosen.push(c.s);
     if (chosen.length >= k) break;
   }
+
+  // Fallback: random aanvullen als er te weinig overblijven
   if (chosen.length < k) {
-    const rest = pool.filter(s => s && s !== correct && !chosen.includes(s));
+    const rest = pool
+      .map(s => normalizeSpaces(s))
+      .filter(
+        s =>
+          s &&
+          s !== cleanCorrect &&
+          !chosen.includes(s) &&
+          s.length >= MIN_LEN
+      );
     rest.sort(() => Math.random() - 0.5);
     chosen.push(...rest.slice(0, k - chosen.length));
   }
+
   return chosen.slice(0, k);
 }
 
+/** -------------------------------------------------------
+ *  Parser: ondersteunt meerdere invoervormen
+ *  - "Vraag?\sAntwoord"
+ *  - "term<TAB>def"  /  "term;def"
+ *  - CSV-achtig: 2 velden, desnoods met quotes
+ * ------------------------------------------------------*/
+type Pair = { term: string; def: string };
 
-function parseQuizletLike(input: string) {
-  // Ondersteunt: tab-gescheiden (TSV), komma-gescheiden (CSV) of gekopieerde lijsten "term<tab>def"
-  // Retourneert [{term, def}, ...]
-  const lines = input.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const rows: Array<{ term: string; def: string }> = [];
+function splitFirst(haystack: string, delimiter: string): [string, string] | null {
+  const i = haystack.indexOf(delimiter);
+  if (i === -1) return null;
+  return [haystack.slice(0, i), haystack.slice(i + delimiter.length)];
+}
+
+function parseLine(line: string): Pair | null {
+  const raw = normalizeSpaces(line);
+
+  // 1) Q/A: split op eerste '? ' (jouw invoer)
+  const qa = splitFirst(raw, "? ");
+  if (qa) {
+    return { term: (qa[0] + "?").trim(), def: qa[1].trim() };
+  }
+
+  // 2) Tab-gescheiden
+  if (raw.includes("\t")) {
+    const parts = raw.split("\t").map(normalizeSpaces).filter(Boolean);
+    if (parts.length >= 2) return { term: parts[0], def: parts.slice(1).join(" ") };
+  }
+
+  // 3) Semicolon-gescheiden
+  if (raw.includes(";")) {
+    const [a, b] = raw.split(/;(.*)/).map(s => normalizeSpaces(s || ""));
+    if (a && b) return { term: a, def: b };
+  }
+
+  // 4) CSV (2 velden), tolerant met quotes
+  //    Voorbeeld: "term","def met, komma"
+  const csvMatch = raw.match(/^\s*"([^"]+)"\s*,\s*"([^"]+)"\s*$/)
+                || raw.match(/^\s*([^,]+)\s*,\s*(.+)\s*$/);
+  if (csvMatch) {
+    const term = normalizeSpaces(csvMatch[1]);
+    const def  = normalizeSpaces(csvMatch[2]);
+    if (term && def) return { term, def };
+  }
+
+  return null;
+}
+
+function parseQuizletLike(input: string): Pair[] {
+  const lines = (input || "")
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const rows: Pair[] = [];
   for (const line of lines) {
-    // detecteer delimiter per regel
-    let parts: string[] = [];
-    if (line.includes("\t")) parts = line.split("\t");
-    else if (line.includes(";")) parts = line.split(";");
-    else if (line.includes(",")) parts = line.split(",");
-    else {
-      // fallback: probeer " - " scheiding
-      parts = line.split(" - ");
-    }
-    if (parts.length >= 2) {
-      const term = (parts[0] ?? "").trim();
-      const def = (parts.slice(1).join(" ").trim());
-      if (term && def) rows.push({ term, def });
-    }
+    const pair = parseLine(line);
+    if (pair) rows.push(pair);
   }
   return rows;
 }
 
+/** -------------------------------------------------------
+ *  Endpoint
+ * ------------------------------------------------------*/
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = (req.headers["x-user-id"] as string) || null;
   if (!userId) return res.status(401).json({ error: "Missing x-user-id" });
@@ -92,85 +163,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const body = req.body as {
-      subject: string;
-      chapter: string;
-      title: string;
-      description?: string;
-      mode?: "open" | "mc";
-      generateMc?: boolean; // indien true, maak meerkeuze-opties met afleiders
-      text?: string;        // geplakte data (TSV/CSV)
-      csv?: string;         // alternatief veld voor CSV
-    };
+    const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+    const { text, title, subject, mode = "mc", generateMc = true } = body || {};
 
-    const subject = body.subject?.trim();
-    const chapter = body.chapter?.trim();
-    const title = body.title?.trim();
-    const description = body.description?.trim() || "";
-    const mode = body.mode === "mc" ? "mc" : "open";
-    const src = (body.text ?? body.csv ?? "").trim();
-
-    if (!subject || !chapter || !title || !src) {
-      return res.status(400).json({ error: "subject, chapter, title en text/csv zijn verplicht." });
+    if (!text || !title || !subject) {
+      return res.status(400).json({ error: "Missing text/title/subject" });
     }
 
-    const pairs = parseQuizletLike(src);
+    // 1) Parse input
+    const pairs = parseQuizletLike(text);
     if (!pairs.length) {
-      return res.status(400).json({ error: "Geen valide regels gevonden. Verwacht: term<TAB/CSV>definitie per regel." });
+      return res.status(400).json({ error: "No questions parsed from input" });
     }
 
-    // 1) Quiz aanmaken
+    // 2) Quiz row
     const { data: quiz, error: qErr } = await admin
       .from("study_quizzes")
-      .insert([{ user_id: userId, subject, chapter, title, description, is_published: false }])
+      .insert({
+        title,
+        subject,
+        owner_id: userId,
+        is_published: false,
+      })
       .select("*")
       .single();
-    if (qErr) return res.status(400).json({ error: qErr.message });
 
-    // 2) Vragen payload bouwen
-    // - open: prompt = term, answer = definitie
-    // - mc:   prompt = term, choices = [juiste, ...afleiders], answer = juiste
-    let allDefs = pairs.map(p => p.def);
+    if (qErr || !quiz) return res.status(400).json({ error: qErr?.message || "quiz insert failed" });
+
+    // 3) Items bouwen
+    const allDefs = pairs.map(p => normalizeSpaces(p.def));
+
     const items = pairs.map((row, idx) => {
-      if (mode === "mc" && body.generateMc) {
-        // kies 3 afleiders uit andere definities
-        const distractors = similarDistractors(row.def, allDefs, 3);
-        const choices = [row.def, ...distractors].sort(() => Math.random() - 0.5);
+      const prompt = normalizeSpaces(row.term);
+      const correct = normalizeSpaces(row.def);
+
+      if (mode === "mc" && generateMc) {
+        const distractors = similarDistractors(correct, allDefs, 3);
+        const choices = [correct, ...distractors].sort(() => Math.random() - 0.5);
+
         return {
           qtype: "mc",
-          prompt: row.term,
+          prompt,
           choices,
-          answer: row.def,
-          explanation: "",
-          sort_order: idx,
-        };
-      } else if (mode === "mc") {
-        // mc zonder afleiders → maak een simpele 2-optie (juist/onjuist) als fallback
-        const wrong = allDefs.find(d => d !== row.def) || "—";
-        const choices = [row.def, wrong].sort(() => Math.random() - 0.5);
-        return {
-          qtype: "mc",
-          prompt: row.term,
-          choices,
-          answer: row.def,
-          explanation: "",
-          sort_order: idx,
-        };
-      } else {
-        // open vraag
-        return {
-          qtype: "open",
-          prompt: row.term,
-          choices: null,
-          answer: row.def,
-          explanation: "",
+          answer: correct,
+          explanation: null,
           sort_order: idx,
         };
       }
+
+      // open vraag
+      return {
+        qtype: "open",
+        prompt,
+        choices: null,
+        answer: correct,
+        explanation: null,
+        sort_order: idx,
+      };
     });
 
-    // 3) Insert in study_questions (JSONB choices)
-    const payload = items.map(i => ({
+    // 4) Insert questions
+    const payload = items.map((i: any) => ({
       quiz_id: quiz.id,
       qtype: i.qtype,
       prompt: i.prompt,
