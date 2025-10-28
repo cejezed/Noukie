@@ -6,248 +6,318 @@ const admin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// --------------------- Kleine utils ---------------------
+type MC = { question: string; options: string[]; answer: string };
+type Row = { prompt: string; answer: string; qtype: "mc" | "open"; choices?: string[] };
+
 function norm(s: string): string {
-  return (s || "")
-    .replace(/\r/g, "")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\s+\n/g, "\n")
-    .trim();
+  return (s || "").replace(/\r/g, "").trim();
 }
 function stripTag(s: string): string {
-  // "[Nederland 1948–2008] Vraag?" -> "Vraag?"
   const m = s.match(/^\s*\[[^\]]+\]\s*(.*)$/);
   return m ? m[1] : s;
 }
-function seededShuffle<T>(arr: T[], seed: number): T[] {
-  const a = arr.slice();
-  let s = (seed >>> 0) + 1;
-  for (let i = a.length - 1; i > 0; i--) {
-    s = (1103515245 * s + 12345) & 0x7fffffff;
-    const j = s % (i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
+
+/** --------- Per-regel parsing: Q/A, MC met pipes of TSV ---------- */
+function parseBulkLines(text: string, defaultMode: "open" | "mc"): Row[] {
+  const lines = norm(text)
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const rows: Row[] = [];
+
+  for (const line of lines) {
+    if (/^antwo(ord)?\s*:/i.test(line)) continue; // hoort bij blok-parser
+
+    // Pipe: Vraag | A | B | C | D | correct  (MC)
+    if (line.includes("|")) {
+      const parts = line.split("|").map((p) => p.trim()).filter(Boolean);
+      if (parts.length >= 6) {
+        const [prompt, A, B, C, D, correctRaw] = parts;
+        const choices = [A, B, C, D];
+        let correct = correctRaw;
+        const letter = correct.toUpperCase();
+        if (["A", "B", "C", "D"].includes(letter)) {
+          const idx = { A: 0, B: 1, C: 2, D: 3 }[letter as "A" | "B" | "C" | "D"]!;
+          correct = choices[idx];
+        }
+        rows.push({ prompt, answer: correct, qtype: "mc", choices });
+        continue;
+      }
+      // Pipe: Vraag | Antwoord | mc | A;B;C
+      if (parts.length >= 3 && parts[2].toLowerCase() === "mc") {
+        const prompt = parts[0];
+        const answer = parts[1];
+        const rest = parts.slice(3).join("|");
+        const choices =
+          rest
+            .split(";")
+            .map((s) => s.trim())
+            .filter(Boolean) || [];
+        if (!choices.some((c) => c.toLowerCase() === answer.toLowerCase())) {
+          choices.unshift(answer);
+        }
+        rows.push({ prompt, answer, qtype: "mc", choices });
+        continue;
+      }
+      // Pipe: Vraag | Antwoord  (open)
+      if (parts.length >= 2) {
+        rows.push({ prompt: parts[0], answer: parts[1], qtype: defaultMode === "mc" ? "mc" : "open" });
+        continue;
+      }
+    }
+
+    // TSV: Vraag \t A \t B \t C \t D \t correct
+    if (line.includes("\t")) {
+      const t = line.split("\t").map((p) => p.trim());
+      if (t.length >= 6) {
+        const [prompt, A, B, C, D, correctRaw] = t;
+        const choices = [A, B, C, D];
+        let correct = correctRaw;
+        const letter = correct.toUpperCase();
+        if (["A", "B", "C", "D"].includes(letter)) {
+          const idx = { A: 0, B: 1, C: 2, D: 3 }[letter as "A" | "B" | "C" | "D"]!;
+          correct = choices[idx];
+        }
+        rows.push({ prompt, answer: correct, qtype: "mc", choices });
+        continue;
+      }
+      if (t.length >= 2) {
+        rows.push({ prompt: t[0], answer: t[1], qtype: defaultMode === "mc" ? "mc" : "open" });
+        continue;
+      }
+    }
+
+    // Comma: Vraag,Antwoord (exact 1 komma en vraag eindigt met '?')
+    const commaParts = line.split(",").map((p) => p.trim());
+    if (commaParts.length === 2 && /[?¿]$/.test(commaParts[0])) {
+      rows.push({ prompt: commaParts[0], answer: commaParts[1], qtype: defaultMode === "mc" ? "mc" : "open" });
+      continue;
+    }
+
+    // "Vraag? Antwoord"
+    const m = line.match(/^(.+?\?)\s+(.+)$/);
+    if (m) {
+      rows.push({ prompt: m[1].trim(), answer: m[2].trim(), qtype: defaultMode === "mc" ? "mc" : "open" });
+      continue;
+    }
   }
-  return a;
-}
-function endsSentence(line: string): boolean {
-  return /[.!?;:]$/.test(line.trim());
+
+  return rows;
 }
 
-// ---------------- Parser voor jouw toetsformaat ----------------
-type MC = { question: string; options: string[]; answer: string };
-
-function parseToets(text: string): MC[] {
-  const lines = norm(text).split(/\n/);
-
+/** --------- Blok-parser: Chat-stijl A/B/C/D + "Antwoord:" ---------- */
+function parseBlocks(text: string): MC[] {
+  const lines = norm(text).split("\n");
   const blocks: string[][] = [];
   let cur: string[] = [];
-  for (const line of lines) {
-    if (!line.trim()) continue; // oversla lege regels
 
-    // Nieuwe vraag begint als er een vraagteken in zit én "Antwoord:" nog niet gezien is in het huidige blok
-    const looksLikeQuestion = /\?/.test(line);
-    const currentHasAnswer = cur.some((l) => /^Antwoord\s*:/i.test(l));
+  for (const line of lines) {
+    const l = line.trim();
+    if (!l) continue;
+
+    const looksLikeQuestion = /\?/.test(l);
+    const currentHasAnswer = cur.some((x) => /^Antwoord\s*:/i.test(x));
 
     if (cur.length === 0) {
-      cur.push(line);
+      cur.push(l);
     } else if (looksLikeQuestion && !currentHasAnswer) {
-      // start nieuw blok
       blocks.push(cur);
-      cur = [line];
+      cur = [l];
     } else {
-      cur.push(line);
+      cur.push(l);
     }
   }
   if (cur.length) blocks.push(cur);
 
-  // Verwerk blokken naar {question, options, answer}
   const result: MC[] = [];
 
-  for (const rawBlock of blocks) {
-    const block = rawBlock.slice();
-
-    // 1) Vind antwoordregel
-    const ansIdx = block.findIndex((l) => /^Antwoord\s*:/i.test(l));
+  for (const raw of blocks) {
+    const ansIdx = raw.findIndex((l) => /^Antwoord\s*:/i.test(l));
     if (ansIdx === -1) continue;
 
-    const ansLine = block[ansIdx];
-    const ansText = norm(ansLine.replace(/^Antwoord\s*:\s*/i, ""));
-
-    // 2) Vraag = eerste regel (strip tag), alles tot eerste '?' hoort erbij
-    const qFirst = block[0] || "";
-    // Soms staat direct na de vraag al het begin van optie 1 op dezelfde regel. Splits op eerste '? '
-    const qm = qFirst.indexOf("?") >= 0 ? qFirst.indexOf("?") : qFirst.lastIndexOf("?");
-    let question = qFirst;
-    let optionStartInline = "";
+    const ansText = norm(raw[ansIdx].replace(/^Antwoord\s*:\s*/i, ""));
+    const header = raw[0] || "";
+    const qm = header.indexOf("?") >= 0 ? header.indexOf("?") : header.lastIndexOf("?");
+    let question = stripTag(header);
+    let inline = "";
     if (qm >= 0) {
-      question = stripTag(qFirst.slice(0, qm + 1)).trim();
-      optionStartInline = norm(qFirst.slice(qm + 1)); // rest op dezelfde regel als eerste optie-fragment
-    } else {
-      question = stripTag(qFirst).trim();
+      question = stripTag(header.slice(0, qm + 1)).trim();
+      inline = norm(header.slice(qm + 1));
     }
 
-    // 3) Verzamel optie-regels: alles tussen (regel 1 en "Antwoord:"),
-    // inclusief mogelijke inline-start, en plak doorlopende regels aan elkaar
-    const optionLines = block.slice(1, ansIdx);
-    const merged: string[] = [];
+    const mid = raw.slice(1, ansIdx);
+    const linesOpts = (inline ? [inline] : []).concat(mid);
 
-    // Als inline deel lijkt op een optie, voeg als eerste toe
-    if (optionStartInline) {
-      merged.push(optionStartInline);
-    }
-
-    // Merge-regels: een optie kan uit meerdere regels bestaan (tot eindpunctuatie)
+    // haal A/B/C/D uit regels (A. / A) / - A etc.)
+    const opts: string[] = [];
     let buf = "";
-    const pushBuf = () => {
-      const s = norm(buf);
-      if (s) merged.push(s);
+    const push = () => {
+      const s = buf.trim();
+      if (s) opts.push(s);
       buf = "";
     };
+    const ends = (s: string) => /[.!?;:]$/.test(s.trim());
 
-    for (let i = 0; i < optionLines.length; i++) {
-      const line = optionLines[i].trim();
-      if (!line) continue;
-
+    for (let i = 0; i < linesOpts.length; i++) {
+      let ln = linesOpts[i].replace(/^[\-\u2022]?\s*([A-D][\)\.]|\([A-D]\))\s*/, "").trim();
+      if (!ln) continue;
       if (!buf) {
-        buf = line;
+        buf = ln;
       } else {
-        // heuristiek: als vorige niet eindigt op zinsafsluiter, is dit een vervolg van dezelfde optie
-        if (!endsSentence(buf)) {
-          buf = norm(buf + " " + line);
-        } else {
-          pushBuf();
-          buf = line;
+        if (!ends(buf)) buf = (buf + " " + ln).trim();
+        else {
+          push();
+          buf = ln;
         }
       }
-
-      // Als dit de laatste regel is, push resterende buffer
-      if (i === optionLines.length - 1) {
-        pushBuf();
-      }
+      if (i === linesOpts.length - 1) push();
     }
 
-    // Filter rommel
-    const options = merged
-      .map((s) => s.replace(/^[-•]\s*/, "")) // bullets weg
-      .filter((s) => !!s && !/^Antwoord\s*:/i.test(s));
-
-    // Soms staan er meer dan 4 regels (bv. extra uitleg), we houden de 4 meest plausibele:
-    // - Eerst: alle regels die inhoud bevatten
-    // - Als >4: kies de 4 langste, omdat heel korte snippers vaak geen op zichzelf staande optie zijn
-    let picked = options.slice();
-    if (picked.length > 4) {
-      picked = picked
-        .map((s, i) => ({ s, i, len: s.length }))
-        .sort((a, b) => b.len - a.len)
-        .slice(0, 4)
-        .sort((a, b) => a.i - b.i)
-        .map((x) => x.s);
-    }
-
-    // Als we nog steeds <4 hebben, laat blok vallen (onvoldoende opties)
+    let picked = opts.slice(0, 4);
     if (picked.length < 4) {
-      // Laatste redmiddel: vul aan met duplicaten van de langste (zodat importer iig werkt)
-      // (Je kunt dit desgewenst weglaten)
-      while (picked.length < 4 && picked.length > 0) {
-        picked.push(picked[picked.length - 1]);
-      }
+      while (picked.length < 4 && opts.length) picked.push(opts[picked.length] || opts[0]);
       if (picked.length < 4) continue;
     }
 
-    // 4) Bepaal juiste optie:
-    //    - match op exact gelijk
-    //    - of: zoek de optie die de antwoord-text bevat of door het antwoord-text wordt bevat
-    const normalizedAns = norm(ansText).toLowerCase();
-    let correct = picked.find((o) => norm(o).toLowerCase() === normalizedAns);
-    if (!correct) {
+    // answer kan A/B/C/D of tekstfragment zijn
+    const letter = ansText.trim().toUpperCase();
+    let correct = picked[0];
+    if (["A", "B", "C", "D"].includes(letter)) {
+      const idx = { A: 0, B: 1, C: 2, D: 3 }[letter as "A" | "B" | "C" | "D"]!;
+      correct = picked[idx];
+    } else {
+      const n = ansText.toLowerCase();
       correct = picked.find(
-        (o) =>
-          norm(o).toLowerCase().includes(normalizedAns) ||
-          normalizedAns.includes(norm(o).toLowerCase())
-      );
-    }
-    if (!correct) {
-      // Als niets matcht, neem de eerste als fallback (zodat de vraag niet wegvalt)
-      correct = picked[0];
+        (o) => o.toLowerCase() === n || o.toLowerCase().includes(n) || n.includes(o.toLowerCase())
+      ) || picked[0];
     }
 
-    // 5) Shuffle opties zodat juiste antwoord niet steeds op zelfde plek staat
-    const shuffled = seededShuffle(picked, question.length + picked.join("|").length);
-
-    // 6) Resultaat toevoegen
-    result.push({
-      question,
-      options: shuffled,
-      answer: correct,
-    });
+    result.push({ question, options: picked, answer: correct });
   }
 
   return result;
 }
 
-// --------------------- Endpoint ---------------------
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS (optioneel, zoals je eerdere endpoints)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-user-id");
 
   if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method !== "POST") return res.status(405).end("Method Not Allowed");
 
   const userId = (req.headers["x-user-id"] as string) || null;
   if (!userId) return res.status(401).json({ error: "Missing x-user-id" });
 
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).end("Method Not Allowed");
-  }
-
   try {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
-    const { text, title, subject } = body || {};
-    if (!text || !title || !subject) {
-      return res.status(400).json({ error: "Missing text/title/subject" });
+    const {
+      subject,
+      chapter,
+      title,
+      description,
+      mode = "open",           // "open" | "mc" (default voor regels zonder choices)
+      generateMc = false,      // genegeerd in deze variant (we genereren geen afleiders)
+      text,
+    } = body || {};
+
+    if (!subject || !chapter || !title || !text) {
+      return res.status(400).json({ error: "Missing subject/chapter/title/text" });
     }
 
-    const items = parseToets(text);
-    if (!items.length) {
-      return res.status(400).json({ error: "Geen vragen gevonden in de invoer" });
+    // 1) Probeer chat-blok parser (A–D + Antwoord:)
+    let mcBlocks = parseBlocks(text);
+
+    // 2) Per-regel parser
+    const rows = parseBulkLines(text, mode);
+
+    if (!mcBlocks.length && !rows.length) {
+      return res.status(400).json({ error: "Geen vragen gedetecteerd in de invoer." });
     }
 
-    // 1) Quiz aanmaken
+    // 3) Quiz aanmaken
     const { data: quiz, error: qErr } = await admin
       .from("study_quizzes")
       .insert({
         title,
         subject,
+        chapter,
+        description: description || null,
         owner_id: userId,
         is_published: false,
       })
       .select("*")
       .single();
-
     if (qErr || !quiz) return res.status(400).json({ error: qErr?.message || "quiz insert failed" });
 
-    // 2) Vragen klaarmaken
-    const payload = items.map((i, idx) => ({
-      quiz_id: quiz.id,
-      qtype: "mc",
-      prompt: i.question,
-      choices: JSON.stringify(i.options),
-      answer: i.answer,
-      explanation: null,
-      sort_order: idx,
-      is_published: true,
-    }));
+    // 4) Items opbouwen
+    const items: any[] = [];
+    let sort = 0;
 
-    // 3) Insert
-    const { error: insErr } = await admin.from("study_questions").insert(payload);
-    if (insErr) return res.status(400).json({ error: insErr.message });
+    // 4a) uit blokken (altijd MC met jouw keuzes)
+    for (const b of mcBlocks) {
+      items.push({
+        quiz_id: quiz.id,
+        qtype: "mc",
+        prompt: b.question,
+        choices: JSON.stringify(b.options),
+        answer: b.answer,
+        explanation: null,
+        sort_order: sort++,
+        is_published: true,
+      });
+    }
+
+    // 4b) uit regels
+    for (const r of rows) {
+      if (r.qtype === "mc" && r.choices && r.choices.length > 0) {
+        items.push({
+          quiz_id: quiz.id,
+          qtype: "mc",
+          prompt: r.prompt,
+          choices: JSON.stringify(r.choices),
+          answer: r.answer,
+          explanation: null,
+          sort_order: sort++,
+          is_published: true,
+        });
+      } else if (r.qtype === "mc" && (!r.choices || r.choices.length === 0)) {
+        // Jij hebt MC gekozen zonder choices → alleen juiste antwoord als enige optie
+        items.push({
+          quiz_id: quiz.id,
+          qtype: "mc",
+          prompt: r.prompt,
+          choices: JSON.stringify([r.answer]),
+          answer: r.answer,
+          explanation: null,
+          sort_order: sort++,
+          is_published: true,
+        });
+      } else {
+        // open vraag
+        items.push({
+          quiz_id: quiz.id,
+          qtype: "open",
+          prompt: r.prompt,
+          answer: r.answer,
+          explanation: null,
+          sort_order: sort++,
+          is_published: true,
+        });
+      }
+    }
+
+    // 5) Insert alle vragen
+    if (items.length) {
+      const { error: insErr } = await admin.from("study_questions").insert(items);
+      if (insErr) return res.status(400).json({ error: insErr.message });
+    }
 
     return res.status(201).json({
       ok: true,
       quiz_id: quiz.id,
-      questions_detected: items.length,
+      questions: items.length,
     });
   } catch (e: any) {
     return res.status(500).json({ error: String(e?.message || e) });
