@@ -309,6 +309,7 @@ export default function Instellingen() {
         <p className="text-sm text-muted-foreground">Pas je app aan naar jouw wensen</p>
       </div>
 
+
       {/* BOVENAAN: Rooster — Items toevoegen */}
       <Card>
         <CardHeader>
