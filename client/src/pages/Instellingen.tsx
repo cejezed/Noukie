@@ -32,7 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 import type { Course, Schedule } from "@shared/schema";
-import ScheduleScreenshotImport from "@/components/ScheduleScreenshotImport";
+// import ScheduleScreenshotImport from "@/components/ScheduleScreenshotImport"; // TEMPORARILY DISABLED
 
 // Jaargang opties
 const educationLevels = {
@@ -752,10 +752,11 @@ export default function Instellingen() {
         </CardContent>
       </Card>
 
-      {/* Screenshot Import - Fixed layout positioning */}
+      {/* Screenshot Import - TEMPORARILY DISABLED FOR LAYOUT FIX
       <div data-testid="screenshot-import">
         <ScheduleScreenshotImport />
       </div>
+      */}
 
       <Card data-testid="calendar-integration">
         <CardHeader>
