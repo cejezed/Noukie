@@ -51,7 +51,7 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
 
   async function start() {
     setErrorMsg("");
-
+    
     if (!isSupported()) {
       setErrorMsg("Spraakherkenning wordt niet ondersteund in deze browser. Probeer Chrome of Edge op desktop.");
       return;
@@ -71,7 +71,7 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
       setBusy(true);
       const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
       const rec: any = new SpeechRecognition();
-
+      
       rec.lang = lang;
       rec.continuous = true;
       rec.interimResults = true;
@@ -90,7 +90,7 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
         setActive(false);
         setIsListening(false);
         onPartialText?.("");
-
+        
         // Auto-restart als we nog actief waren (tenzij gebruiker stopte)
         if (active && recogRef.current === rec) {
           console.log("Auto-restarting recognition...");
@@ -106,18 +106,18 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
 
       rec.onerror = (e: any) => {
         console.warn("ASR error:", e?.error, e);
-
+        
         // Negeer 'no-speech' errors tijdens actieve sessie
         if (e?.error === "no-speech" && active) {
           console.log("No speech detected, continuing...");
           return;
         }
-
+        
         // Negeer 'aborted' als we zelf stopten
         if (e?.error === "aborted" && !active) {
           return;
         }
-
+        
         setBusy(false);
         setActive(false);
         setIsListening(false);
@@ -128,14 +128,14 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
       rec.onresult = (event: any) => {
         console.log("Got result, resultIndex:", event.resultIndex);
         setIsListening(true); // Bevestig dat we actief luisteren
-
+        
         let finalChunk = "";
         let interim = "";
-
+        
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const r = event.results[i];
           const transcript = r[0].transcript;
-
+          
           if (r.isFinal) {
             finalChunk += transcript.trim() + " ";
             console.log("Final transcript:", transcript);
@@ -144,11 +144,11 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
             console.log("Interim transcript:", transcript);
           }
         }
-
+        
         if (interim) {
           onPartialText?.(interim);
         }
-
+        
         if (finalChunk.trim()) {
           onPartialText?.("");
           onFinalText(finalChunk.trim());
@@ -206,9 +206,9 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
           <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Starten…
         </button>
       ) : active ? (
-        <button
-          type="button"
-          onClick={stop}
+        <button 
+          type="button" 
+          onClick={stop} 
           className="inline-flex items-center px-3 py-2 rounded-md border bg-red-50 hover:bg-red-100 transition-colors"
         >
           {isListening ? (
@@ -219,9 +219,9 @@ export default function HandsfreeVoice({ onFinalText, onPartialText, lang = "nl-
           Stop luisteren
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={start}
+        <button 
+          type="button" 
+          onClick={start} 
           className="inline-flex items-center px-3 py-2 rounded-md border hover:bg-accent transition-colors"
         >
           <Mic className="w-4 h-4 mr-2" /> Handenvrij praten
