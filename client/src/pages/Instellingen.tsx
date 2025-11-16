@@ -748,14 +748,16 @@ export default function Instellingen() {
                 Download Rooster
               </Button>
             </div>
+
+            <Separator />
+
+            {/* Screenshot Import */}
+            <div data-testid="screenshot-import">
+              <ScheduleScreenshotImport />
+            </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* Screenshot Import */}
-      <div data-testid="screenshot-import">
-        <ScheduleScreenshotImport />
-      </div>
 
       <Card data-testid="calendar-integration">
         <CardHeader>
