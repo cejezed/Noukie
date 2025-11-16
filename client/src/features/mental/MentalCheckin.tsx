@@ -185,13 +185,13 @@ async function getCheckinDates(userId: string, startDate: string, endDate: strin
 async function syncPointsWithCheckins(userId: string): Promise<number> {
   const totalCheckins = await getCheckinCount(userId);
   const dbRewards = await loadRewardsFromDatabase(userId);
-  
+
   // Trek totaal geclaimde punten af
   const totalClaimedPoints = dbRewards.reduce((sum, r) => sum + r.points, 0);
   const actualPoints = Math.max(0, totalCheckins - totalClaimedPoints);
-  
+
   console.log(`📊 Sync: ${totalCheckins} check-ins, ${totalClaimedPoints} claimed → ${actualPoints} punten`);
-  
+
   await savePointsToDatabase(userId, actualPoints);
   return actualPoints;
 }
@@ -238,7 +238,7 @@ export default function MentalCheckin({
 
       try {
         console.log('🔄 Loading user data...');
-        
+
         // Check of vandaag al ingevuld is
         const hasSubmittedToday = await checkinExistsToday(userId);
         setSubmitted(hasSubmittedToday);
@@ -289,7 +289,7 @@ export default function MentalCheckin({
 
       if (missedDays > 0) {
         console.log(`⚠️ ${missedDays} gemiste dag(en) gedetecteerd`);
-        
+
         const currentPoints = await loadPointsFromDatabase(userId);
         const newPoints = Math.max(0, currentPoints - missedDays);
 
@@ -345,7 +345,7 @@ export default function MentalCheckin({
       } else {
         setOkMsg("Je check-in is bijgewerkt. Je hebt vandaag al een punt verdiend. 🌟");
       }
-      
+
       setSubmitted(true);
     } catch (e: any) {
       console.error('Error saving checkin:', e);
