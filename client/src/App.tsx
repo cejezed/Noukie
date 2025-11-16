@@ -6,6 +6,7 @@ import { Toaster } from "./components/ui/toaster";
 import { TooltipProvider } from "./components/ui/tooltip";
 import Layout from "./components/Layout";
 import { useAuth } from "./lib/auth";
+import { useTheme } from "./hooks/use-theme";
 import Login from "./pages/Login";
 import Vandaag from "./pages/Vandaag";
 import Rooster from "./pages/Rooster";
@@ -17,10 +18,7 @@ import NotFound from "./pages/not-found";
 import MentalPage from "./pages/Mental";
 import { supabase } from "./lib/supabase";
 import Leren from "./pages/Leren";
-import Leren from "./pages/Leren";
 import LerenAdmin from "./pages/LerenAdmin";
-
-
 
 // ✅ NIEUW
 import Toets from "./pages/Toets";
@@ -30,6 +28,9 @@ import { ErrorBoundary } from "./components/dev/ErrorBoundary";
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
+
+  // Load user's theme preference on app start
+  useTheme();
 
   // sessie debug/keepalive
   React.useEffect(() => {
