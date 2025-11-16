@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 const DEFAULT_TIERS = [
     { points: 25, label: "Samen shoppen" },

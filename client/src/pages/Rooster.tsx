@@ -13,6 +13,7 @@ import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
 import type { Schedule, Course } from "@shared/schema";
+import ScheduleScreenshotImport from "@/components/ScheduleScreenshotImport";
 
 interface ScheduleFormData {
   course_id: string | null; // "none" → null vóór insert
@@ -259,7 +260,14 @@ export default function Rooster() {
 
   return (
     <div className="p-6" data-testid="page-rooster">
-      <h2 className="text-xl font-semibold mb-6">Activiteit toevoegen</h2>
+      <h2 className="text-xl font-semibold mb-6">Rooster beheren</h2>
+
+      {/* SCREENSHOT IMPORT */}
+      <div className="mb-6">
+        <ScheduleScreenshotImport />
+      </div>
+
+      <h3 className="text-lg font-semibold mb-4">Of handmatig toevoegen</h3>
 
       {/* FORM NIEUWE ACTIVITEIT */}
       <Card className="mb-6">

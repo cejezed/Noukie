@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { createServer, type Server } from "http";
 import multer from "multer";
 import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import {
   transcribeAudio,
@@ -16,14 +17,41 @@ import {
   signIn as supabaseSignIn,
   signOut as supabaseSignOut,
 } from "./services/supabase";
+import { processScheduleScreenshot, validateLesson } from "./scheduleOcr";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } 
+  limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+// For file uploads that need to be saved to disk (OCR processing)
+const uploadToDisk = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(process.cwd(), "uploads");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Alleen afbeeldingen (JPEG, PNG, WebP) zijn toegestaan"));
+    }
+  },
 });
 
 // === Coach helpers ===
@@ -819,6 +847,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("iCal import error:", error);
       res.status(500).json({
         error: "Failed to import iCal",
+        details: (error as Error).message,
+      });
+    }
+  });
+
+  app.post("/api/schedule/import-screenshot", uploadToDisk.single("screenshot"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Geen screenshot geüpload" });
+      }
+
+      const { userId } = req.body;
+      if (!userId) {
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "userId is verplicht" });
+      }
+
+      const geminiApiKey = process.env.GEMINI_API_KEY;
+      if (!geminiApiKey) {
+        fs.unlinkSync(req.file.path);
+        return res.status(500).json({ error: "GEMINI_API_KEY niet geconfigureerd" });
+      }
+
+      console.log(`📸 Processing schedule screenshot for user ${userId}`);
+
+      // Process the screenshot with OCR and AI
+      const result = await processScheduleScreenshot(req.file.path, geminiApiKey);
+
+      // Clean up the uploaded file
+      fs.unlinkSync(req.file.path);
+
+      if (!result.success) {
+        return res.status(400).json({
+          error: result.error || "Kon rooster niet verwerken",
+          rawText: result.rawText,
+          warnings: result.warnings,
+        });
+      }
+
+      // Validate all lessons
+      const validatedLessons = result.lessons.map((lesson) => ({
+        ...lesson,
+        validation: validateLesson(lesson),
+      }));
+
+      const invalidLessons = validatedLessons.filter((l) => !l.validation.valid);
+      if (invalidLessons.length > 0) {
+        console.warn(`⚠️ ${invalidLessons.length} invalid lessons detected`);
+      }
+
+      res.json({
+        success: true,
+        rawText: result.rawText,
+        lessons: validatedLessons,
+        warnings: result.warnings,
+        stats: {
+          total: result.lessons.length,
+          valid: validatedLessons.filter((l) => l.validation.valid).length,
+          invalid: invalidLessons.length,
+        },
+      });
+    } catch (error) {
+      console.error("Screenshot import error:", error);
+      // Clean up file if it exists
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({
+        error: "Fout bij verwerken screenshot",
         details: (error as Error).message,
       });
     }
