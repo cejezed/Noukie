@@ -752,7 +752,7 @@ export default function Instellingen() {
         </CardContent>
       </Card>
 
-      {/* Screenshot Import */}
+      {/* Screenshot Import - Fixed layout positioning */}
       <div data-testid="screenshot-import">
         <ScheduleScreenshotImport />
       </div>
