@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Trash2, Plus, X, HelpCircle, CalendarX, Loader2, Circle } from "lucide-react";
+import { Trash2, Plus, X, HelpCircle, CalendarX, Loader2, Circle, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,17 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/components/ui/use-toast";
@@ -154,6 +165,26 @@ export default function Rooster() {
     },
   });
 
+  const deleteAllScheduleMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch(`/api/schedule/user/${userId}/all`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete all schedule items");
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["schedule", userId] });
+      toast({ title: "Rooster gewist", description: "Alle lessen zijn verwijderd." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Fout", description: `Kon rooster niet wissen: ${error.message}`, variant: "destructive" });
+    },
+  });
+
   // === HANDLERS ===
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,6 +292,52 @@ export default function Rooster() {
   return (
     <div className="p-6" data-testid="page-rooster">
       <h2 className="text-xl font-semibold mb-6">Rooster beheren</h2>
+
+      {/* BULK ACTIONS */}
+      {schedule.length > 0 && (
+        <Alert className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>
+              Je hebt {schedule.length} {schedule.length === 1 ? "les" : "lessen"} in je rooster.
+              {" "}Elk kwartaal kun je het oude rooster wissen en een nieuwe screenshot importeren.
+            </span>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Wis alle lessen
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Weet je het zeker?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Dit verwijdert alle {schedule.length} lessen uit je rooster. Deze actie kan niet ongedaan worden gemaakt.
+                    Je kunt hierna een nieuwe screenshot importeren met je nieuwe rooster.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => deleteAllScheduleMutation.mutate()}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {deleteAllScheduleMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Bezig...
+                      </>
+                    ) : (
+                      "Ja, wis alles"
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* SCREENSHOT IMPORT */}
       <div className="mb-6">

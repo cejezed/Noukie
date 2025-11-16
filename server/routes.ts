@@ -685,6 +685,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete schedule item" });
     }
   });
+
+  // Delete all schedule items for a user
+  app.delete("/api/schedule/user/:userId/all", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      await storage.deleteAllScheduleItems(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Schedule bulk delete error:", error);
+      res.status(500).json({ error: "Failed to delete all schedule items" });
+    }
+  });
   // Cancel/restore schedule item
   app.patch("/api/schedule/:id/cancel", async (req, res) => {
     try {

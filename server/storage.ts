@@ -38,6 +38,7 @@ export interface IStorage {
   getScheduleByDay(userId: string, dayOfWeek: number): Promise<Schedule[]>;
   createScheduleItem(schedule: InsertSchedule): Promise<Schedule>;
   deleteScheduleItem(id: string): Promise<void>;
+  deleteAllScheduleItems(userId: string): Promise<void>;
   updateScheduleStatus(id: string, status: string): Promise<void>;
 
   // Tasks
@@ -141,6 +142,11 @@ export class PostgresStorage implements IStorage {
 
   async deleteScheduleItem(id: string): Promise<void> {
     const { error } = await supabase.from("schedule").delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  async deleteAllScheduleItems(userId: string): Promise<void> {
+    const { error } = await supabase.from("schedule").delete().eq("user_id", userId);
     if (error) throw error;
   }
 

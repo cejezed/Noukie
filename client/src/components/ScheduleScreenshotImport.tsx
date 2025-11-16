@@ -59,6 +59,7 @@ export default function ScheduleScreenshotImport() {
   const [processing, setProcessing] = useState(false);
   const [selectedLessons, setSelectedLessons] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
+  const [clearBeforeImport, setClearBeforeImport] = useState(false);
 
   // Reset state
   const reset = () => {
@@ -165,6 +166,16 @@ export default function ScheduleScreenshotImport() {
 
     setImporting(true);
     try {
+      // Step 1: Clear existing schedule if requested
+      if (clearBeforeImport) {
+        const clearResponse = await fetch(`/api/schedule/user/${user.id}/all`, {
+          method: "DELETE",
+        });
+        if (!clearResponse.ok) {
+          throw new Error("Kon bestaande lessen niet verwijderen");
+        }
+      }
+
       const lessonsToImport = Array.from(selectedLessons)
         .map((i) => ocrResult.lessons[i])
         .filter((l) => l.validation?.valid);
@@ -235,9 +246,12 @@ export default function ScheduleScreenshotImport() {
           variant: "destructive",
         });
       } else {
+        const message = clearBeforeImport
+          ? `Oude rooster gewist en ${importedCount} nieuwe lessen toegevoegd`
+          : `${importedCount} lessen toegevoegd aan je rooster`;
         toast({
           title: "Import succesvol!",
-          description: `${importedCount} lessen toegevoegd aan je rooster`,
+          description: message,
         });
         reset();
       }
@@ -444,6 +458,20 @@ export default function ScheduleScreenshotImport() {
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {/* Clear before import option */}
+            {ocrResult.lessons.length > 0 && (
+              <div className="flex items-center space-x-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <Checkbox
+                  id="clearBeforeImport"
+                  checked={clearBeforeImport}
+                  onCheckedChange={(checked) => setClearBeforeImport(checked === true)}
+                />
+                <Label htmlFor="clearBeforeImport" className="text-sm font-medium cursor-pointer">
+                  Wis eerst alle bestaande lessen (aanbevolen bij nieuw kwartaal)
+                </Label>
               </div>
             )}
 
