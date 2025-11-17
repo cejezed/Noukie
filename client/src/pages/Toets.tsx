@@ -2,11 +2,58 @@ import React, { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import type { SubjectKey } from "@/types/game";
 
 /** Hulpje om huidige userId op te halen */
 async function getUid() {
   const { data } = await supabase.auth.getUser();
   return data.user?.id ?? null;
+}
+
+/**
+ * Map quiz subject/course to SubjectKey for game mode
+ * Returns null if subject is not supported for game mode
+ */
+function mapQuizToSubjectKey(quiz: any): SubjectKey | null {
+  if (!quiz?.subject) return null;
+
+  const normalized = quiz.subject.toLowerCase().trim();
+
+  // Direct matches
+  if (normalized === "aardrijkskunde" || normalized === "ak" || normalized.includes("aardrijkskunde")) {
+    return "aardrijkskunde";
+  }
+  if (normalized === "geschiedenis" || normalized === "ges" || normalized.includes("geschiedenis")) {
+    return "geschiedenis";
+  }
+  if (normalized === "wiskunde" || normalized === "wi" || normalized.includes("wiskunde")) {
+    return "wiskunde";
+  }
+  if (normalized === "duits" || normalized === "du" || normalized.includes("duits")) {
+    return "duits";
+  }
+  if (normalized === "engels" || normalized === "en" || normalized.includes("engels")) {
+    return "engels";
+  }
+
+  // HAVO 5 specific patterns (e.g., "havo5_ak", "HAVO 5 Aardrijkskunde")
+  if (normalized.includes("_ak") || (normalized.includes("havo") && normalized.includes("ak"))) {
+    return "aardrijkskunde";
+  }
+  if (normalized.includes("_ges") || (normalized.includes("havo") && normalized.includes("ges"))) {
+    return "geschiedenis";
+  }
+  if (normalized.includes("_wi") || (normalized.includes("havo") && normalized.includes("wi"))) {
+    return "wiskunde";
+  }
+  if (normalized.includes("_du") || (normalized.includes("havo") && normalized.includes("du"))) {
+    return "duits";
+  }
+  if (normalized.includes("_en") || (normalized.includes("havo") && normalized.includes("en"))) {
+    return "engels";
+  }
+
+  return null;
 }
 
 export default function Toets() {
@@ -95,21 +142,51 @@ export default function Toets() {
           <p className="text-red-600">Er ging iets mis bij het laden.</p>
         ) : quizzes.data?.length ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {quizzes.data.map((q: any) => (
-              <button
-                key={q.id}
-                onClick={() => navigate(`/toets/spelen?quiz=${q.id}`)}
-                className="text-left bg-white border rounded-2xl p-4 hover:shadow"
-              >
-                <div className="text-sm text-gray-500">
-                  {q.subject} · {q.chapter}
+            {quizzes.data.map((q: any) => {
+              const subjectKey = mapQuizToSubjectKey(q);
+              const hasGameMode = subjectKey !== null;
+
+              return (
+                <div
+                  key={q.id}
+                  className="bg-white border rounded-2xl p-4 hover:shadow transition-shadow"
+                >
+                  {/* Quiz info */}
+                  <div className="mb-3">
+                    <div className="text-sm text-gray-500">
+                      {q.subject} · {q.chapter}
+                    </div>
+                    <div className="font-semibold">{q.title}</div>
+                    {q.description && (
+                      <div className="text-sm text-gray-600 line-clamp-2">{q.description}</div>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    {/* Normal mode button */}
+                    <button
+                      onClick={() => navigate(`/toets/spelen?quiz=${q.id}`)}
+                      className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm font-medium"
+                    >
+                      Normaal spelen
+                    </button>
+
+                    {/* Game mode button (only for supported subjects) */}
+                    {hasGameMode && (
+                      <button
+                        onClick={() => navigate(`/toets/spelen?quiz=${q.id}&mode=game&subject=${subjectKey}`)}
+                        className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium flex items-center justify-center gap-1"
+                        title="Speel deze toets in gameified modus met XP, levels en power-ups"
+                      >
+                        <span>🎮</span>
+                        <span>Speel als game</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="font-semibold">{q.title}</div>
-                {q.description && (
-                  <div className="text-sm text-gray-600 line-clamp-2">{q.description}</div>
-                )}
-              </button>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-gray-600">Nog geen gepubliceerde toetsen.</p>
