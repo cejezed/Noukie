@@ -50,8 +50,17 @@ export default function StudyPlay() {
   const mode = getQueryParam("mode");
   const subject = getQueryParam("subject");
 
+  // Loading state while userId is being fetched
+  if (!userId) {
+    return (
+      <main className="p-8">
+        <p className="text-sm text-gray-500">Inloggen vereist…</p>
+      </main>
+    );
+  }
+
   // If game mode requested and subject is game-enabled, render game screen
-  if (mode === "game" && subject && isGameEnabled(subject) && userId && quizId) {
+  if (mode === "game" && subject && isGameEnabled(subject) && quizId) {
     return <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />;
   }
 
@@ -171,9 +180,6 @@ export default function StudyPlay() {
   // UI states
   if (!quizId) {
     return <main className="p-8"><p className="text-red-600">Geen quiz geselecteerd.</p></main>;
-  }
-  if (!userId) {
-    return <main className="p-8"><p className="text-sm text-gray-500">Inloggen vereist…</p></main>;
   }
   if (questions.isLoading) {
     return <main className="p-8"><p>Laden…</p></main>;
