@@ -62,6 +62,29 @@ function AuthenticatedApp() {
     );
   }
 
+  // 🔴 BYPASS TEST: Check if /toets/spelen works OUTSIDE Layout
+  if (typeof window !== 'undefined' && window.location.pathname === '/toets/spelen') {
+    return (
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: 'green',
+        color: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '48px',
+        fontWeight: 'bold',
+        zIndex: 99999
+      }}>
+        BYPASS TEST WORKS - /toets/spelen detected!
+      </div>
+    );
+  }
+
   if (!user) return <Login />;
 
   // Ouder-interface
