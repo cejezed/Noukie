@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import GeoGameScreen from "@/components/game/GeoGameScreen";
+import { isGameEnabled } from "@/config/gameSubjects";
 
 function useUserId() {
   const [id, setId] = useState<string | null>(null);
@@ -44,6 +46,16 @@ export default function StudyPlay() {
   const userId = useUserId();
   const quizId = getQueryParam("quiz");
 
+  // Check if game mode is requested
+  const mode = getQueryParam("mode");
+  const subject = getQueryParam("subject");
+
+  // If game mode requested and subject is game-enabled, render game screen
+  if (mode === "game" && subject && isGameEnabled(subject) && userId && quizId) {
+    return <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />;
+  }
+
+  // Otherwise, continue with classic quiz mode below
   const [resultId, setResultId] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
