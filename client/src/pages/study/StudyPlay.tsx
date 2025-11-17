@@ -70,8 +70,11 @@ export default function StudyPlay() {
     );
   }
 
+  // VISUAL DEBUG: Show game mode status banner
+  const isGameMode = mode === "game" && subject && isGameEnabled(subject) && quizId;
+
   // If game mode requested and subject is game-enabled, render game screen
-  if (mode === "game" && subject && isGameEnabled(subject) && quizId) {
+  if (isGameMode) {
     console.log("✅ Activating game mode!");
     return <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />;
   }
@@ -239,6 +242,16 @@ export default function StudyPlay() {
 
   return (
     <main className="mx-auto max-w-[800px] px-6 py-8">
+      {/* DEBUG BANNER */}
+      <div className="mb-4 p-4 bg-yellow-100 border-2 border-yellow-400 rounded">
+        <p className="text-sm font-bold">DEBUG MODE CHECK</p>
+        <p className="text-xs">mode={mode || 'null'}</p>
+        <p className="text-xs">subject={subject || 'null'}</p>
+        <p className="text-xs">quizId={quizId ? 'exists' : 'null'}</p>
+        <p className="text-xs">isGameEnabled={String(subject ? isGameEnabled(subject) : false)}</p>
+        <p className="text-xs font-bold">Result: CLASSIC MODE (Game mode not activated)</p>
+      </div>
+
       {/* Voortgang + Score */}
       <div className="mb-4">
         <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
