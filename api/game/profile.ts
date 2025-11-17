@@ -1,8 +1,9 @@
 /**
- * Game Profile API
+ * Game Profile API (Multi-Subject Support)
  *
- * GET /api/game/profile?subject=aardrijkskunde (optional)
+ * GET /api/game/profile?subject=<SubjectKey> (optional)
  * Returns user's game profile and subject stats
+ * Supports: aardrijkskunde, geschiedenis, wiskunde, duits, engels
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -12,6 +13,44 @@ const admin = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+/**
+ * Subject configurations (synced with client/src/config/gameSubjects.ts)
+ * Each subject has its own rank labels and thresholds
+ */
+type SubjectKey = "aardrijkskunde" | "geschiedenis" | "wiskunde" | "duits" | "engels";
+
+interface SubjectRankConfig {
+  rankLabels: string[];
+  rankThresholds: number[];
+}
+
+const SUBJECT_RANK_CONFIGS: Record<SubjectKey, SubjectRankConfig> = {
+  aardrijkskunde: {
+    rankLabels: ["Local", "Regionaal", "Nationaal", "Europees", "Mondiaal Expert"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  geschiedenis: {
+    rankLabels: ["Novice", "Leerling", "Kenner", "Historicus", "Tijdreiziger"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  wiskunde: {
+    rankLabels: ["Beginner", "Rekenaar", "Analist", "Problem Solver", "Math Master"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  duits: {
+    rankLabels: ["A1", "A2", "B1", "B2", "C1"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  engels: {
+    rankLabels: ["A1", "A2", "B1", "B2", "C1"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+};
+
+function getRankConfig(subject: string): SubjectRankConfig {
+  return SUBJECT_RANK_CONFIGS[subject as SubjectKey] || SUBJECT_RANK_CONFIGS.aardrijkskunde;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Auth check
@@ -77,15 +116,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: statsError.message });
     }
 
-    // 3. Compute rank info if specific subject requested
+    // 3. Compute rank info if specific subject requested (using subject-specific config)
     let rankInfo = undefined;
     if (subject && subjectStats && subjectStats.length > 0) {
       const stats = subjectStats[0];
       const subjectXp = stats.subject_xp || 0;
 
-      // Hardcoded for aardrijkskunde - should match config
-      const rankThresholds = [0, 100, 300, 600, 1000];
-      const rankLabels = ['Local', 'Regionaal', 'Nationaal', 'Europees', 'Mondiaal Expert'];
+      // Get subject-specific rank config
+      const rankConfig = getRankConfig(subject);
+      const { rankLabels, rankThresholds } = rankConfig;
 
       let rankIndex = 0;
       for (let i = rankThresholds.length - 1; i >= 0; i--) {

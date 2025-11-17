@@ -1,9 +1,11 @@
 /**
- * GeoGameScreen Component (with Backend Persistence)
+ * GeoGameScreen Component (Multi-Subject Support)
  *
- * Core game UI that renders questions in gameified format.
+ * Core game UI that renders questions in gameified format for any subject.
  * Uses useGameQuizEngine hook for state management.
  * Saves session to backend and shows GeoGameSummary on completion.
+ *
+ * Supports: aardrijkskunde, geschiedenis, wiskunde, duits, engels
  */
 
 import React, { useState, useEffect } from "react";
@@ -14,7 +16,7 @@ import PowerUpButton from "./PowerUpButton";
 import { useGameQuizEngine } from "@/hooks/useGameQuizEngine";
 import { getSubjectConfig, computeRank } from "@/config/gameSubjects";
 import { saveGameSession } from "@/api/game";
-import type { QuizItem, RankInfo, SaveGameSessionResponse, PowerUpType } from "@/types/game";
+import type { QuizItem, RankInfo, SaveGameSessionResponse, PowerUpType, SubjectKey } from "@/types/game";
 
 // ============================================
 // HELPER FUNCTIONS
@@ -59,7 +61,7 @@ function answersMatch(a?: string | null, b?: string | null): boolean {
 
 interface GeoGameScreenProps {
   quizId: string;
-  subject: "aardrijkskunde";
+  subject: SubjectKey;
   userId: string;
 }
 
@@ -109,7 +111,7 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   // Initialize game engine ONLY when questions are loaded
   const engine = useGameQuizEngine({
     questions: questionsData,
-    config,
+    subject,
     questionsPerLevel: 4,
     onLevelComplete: (level, stats) => {
       console.log("Level complete:", level, stats);

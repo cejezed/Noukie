@@ -15,8 +15,8 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import type { QuizItem, GameState, SubjectGameConfig, GameScore, PowerUpType } from "@/types/game";
-import { calculateXP } from "@/config/gameSubjects";
+import type { QuizItem, GameState, SubjectGameConfig, GameScore, PowerUpType, SubjectKey } from "@/types/game";
+import { calculateXP, SUBJECT_GAME_CONFIG } from "@/config/gameSubjects";
 
 // ============================================
 // TYPES
@@ -24,7 +24,7 @@ import { calculateXP } from "@/config/gameSubjects";
 
 interface UseGameQuizEngineOptions {
   questions: QuizItem[];
-  config: SubjectGameConfig;
+  subject: SubjectKey;
   questionsPerLevel?: number;
   onLevelComplete?: (level: number, stats: any) => void;
   onQuizComplete?: (stats: any) => void;
@@ -86,7 +86,10 @@ function calculateScore(correct: number, total: number): GameScore {
 // ============================================
 
 export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngineAPI {
-  const { questions, config, questionsPerLevel = 4 } = options;
+  const { questions, subject, questionsPerLevel = 4 } = options;
+
+  // Get config for this subject
+  const config = SUBJECT_GAME_CONFIG[subject];
 
   // Split questions into levels (memoized)
   const allLevels = useMemo(
@@ -99,6 +102,9 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
     const firstLevel = allLevels[0] || [];
 
     return {
+      // Subject
+      subject,
+
       // Level system
       currentLevel: 1,
       totalLevels: allLevels.length,
@@ -415,6 +421,7 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
       const isTimeRush = config.timeRushLevels.includes(1);
 
       setState({
+        subject,
         currentLevel: 1,
         totalLevels: newLevels.length,
         questionsPerLevel,
@@ -444,7 +451,7 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
         currentLevelStartedAt: Date.now(),
       });
     }
-  }, [questions, questionsPerLevel, config, state.totalLevels]);
+  }, [questions, questionsPerLevel, config, state.totalLevels, subject]);
 
   /**
    * Trigger quiz complete callback when all levels done

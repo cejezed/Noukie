@@ -2,23 +2,29 @@
  * Subject Game Configurations
  *
  * Configuration for each subject's gameified quiz experience.
- * Currently implemented: HAVO 5 Aardrijkskunde
+ * Implemented: HAVO 5 subjects (Aardrijkskunde, Geschiedenis, Wiskunde, Duits, Engels)
  *
- * TODO: Add other subjects (geschiedenis, wiskunde, duits, engels, etc.)
- * by adding entries to SUBJECT_GAME_CONFIG with the same structure.
+ * Each subject has its own theme, ranks, XP settings, and power-ups.
+ * To add a new subject, add the key to SubjectKey type and add an entry here.
  */
 
-import type { SubjectKey, SubjectGameConfig } from "@/types/game";
+import type { SubjectKey, SubjectGameConfig, SubjectGameConfigMap } from "@/types/game";
 
 /**
  * Configuration map for all game-enabled subjects
+ *
+ * Each subject has its own:
+ * - Theme (colors, icon)
+ * - Rank progression system
+ * - XP and power-up settings
+ * - Time Rush mode configuration
  *
  * To add a new subject:
  * 1. Add the subject key to SubjectKey type in types/game.ts
  * 2. Add a config entry here with the same structure
  * 3. No code changes needed in game engine or components!
  */
-export const SUBJECT_GAME_CONFIG: Record<SubjectKey, SubjectGameConfig> = {
+export const SUBJECT_GAME_CONFIG: SubjectGameConfigMap = {
   aardrijkskunde: {
     subject: "aardrijkskunde",
     displayName: "HAVO 5 Aardrijkskunde",
@@ -59,25 +65,165 @@ export const SUBJECT_GAME_CONFIG: Record<SubjectKey, SubjectGameConfig> = {
     },
   },
 
-  // TODO: Add more subjects here following the same pattern
-  // Example for geschiedenis (commented out until implemented):
-  /*
   geschiedenis: {
     subject: "geschiedenis",
     displayName: "HAVO 5 Geschiedenis",
-    primaryColor: "#8b4513",
-    secondaryColor: "#f5e6d3",
+
+    // Theming (brown/sepia colors for history)
+    primaryColor: "#8b4513",       // Saddle brown
+    secondaryColor: "#f5e6d3",     // Papyrus/parchment
     icon: "📜",
-    rankLabels: ["Novice", "Leerling", "Scholar", "Historicus", "Tijdreiziger"],
+
+    // Rank system (history-themed progression)
+    rankLabels: [
+      "Novice",           // 0-99 XP
+      "Leerling",         // 100-299 XP
+      "Kenner",           // 300-599 XP
+      "Historicus",       // 600-999 XP
+      "Tijdreiziger",     // 1000+ XP
+    ],
     rankThresholds: [0, 100, 300, 600, 1000],
-    enableTimeRush: false,
+
+    // Game settings
+    enableTimeRush: false,        // No Time Rush for history (more thoughtful)
     baseXpPerQuestion: 10,
     streakBonusMultiplier: 1.5,
     timeRushBonusXp: 0,
+
+    // Time Rush settings (not used, but required)
+    timeRushSeconds: 12,
+    timeRushLevels: [],           // No Time Rush levels
+
+    // Lives system
     livesPerLevel: 3,
-    startingPowerups: { hint: 2, joker: 1, extra_life: 1 },
+
+    // Starting power-ups inventory
+    startingPowerups: {
+      hint: 2,
+      joker: 1,
+      extra_life: 1,
+    },
   },
-  */
+
+  wiskunde: {
+    subject: "wiskunde",
+    displayName: "HAVO 5 Wiskunde",
+
+    // Theming (blue colors for math/logic)
+    primaryColor: "#1a4b82",       // Dark blue
+    secondaryColor: "#e1ecf7",     // Light blue
+    icon: "➗",
+
+    // Rank system (math-themed progression)
+    rankLabels: [
+      "Beginner",         // 0-99 XP
+      "Rekenaar",         // 100-299 XP
+      "Analist",          // 300-599 XP
+      "Problem Solver",   // 600-999 XP
+      "Math Master",      // 1000+ XP
+    ],
+    rankThresholds: [0, 100, 300, 600, 1000],
+
+    // Game settings
+    enableTimeRush: true,         // Time Rush for speed calculations
+    baseXpPerQuestion: 10,
+    streakBonusMultiplier: 1.5,
+    timeRushBonusXp: 5,
+
+    // Time Rush settings
+    timeRushSeconds: 12,
+    timeRushLevels: [2],          // Level 2 is Time Rush
+
+    // Lives system
+    livesPerLevel: 3,
+
+    // Starting power-ups inventory (more jokers for math)
+    startingPowerups: {
+      hint: 1,          // Fewer hints (math is about solving)
+      joker: 2,         // More jokers (eliminate wrong formulas)
+      extra_life: 1,
+    },
+  },
+
+  duits: {
+    subject: "duits",
+    displayName: "HAVO 5 Duits",
+
+    // Theming (red/white colors for Germany)
+    primaryColor: "#b22222",       // Firebrick red
+    secondaryColor: "#fde2e1",     // Light red/pink
+    icon: "🇩🇪",
+
+    // Rank system (language proficiency levels)
+    rankLabels: [
+      "A1",               // 0-99 XP
+      "A2",               // 100-299 XP
+      "B1",               // 300-599 XP
+      "B2",               // 600-999 XP
+      "C1",               // 1000+ XP
+    ],
+    rankThresholds: [0, 100, 300, 600, 1000],
+
+    // Game settings
+    enableTimeRush: false,        // No Time Rush for language (need time to think)
+    baseXpPerQuestion: 10,
+    streakBonusMultiplier: 1.5,
+    timeRushBonusXp: 0,
+
+    // Time Rush settings (not used, but required)
+    timeRushSeconds: 12,
+    timeRushLevels: [],           // No Time Rush levels
+
+    // Lives system
+    livesPerLevel: 3,
+
+    // Starting power-ups inventory (more hints for vocabulary)
+    startingPowerups: {
+      hint: 3,          // More hints (helpful for vocabulary)
+      joker: 1,
+      extra_life: 0,    // No extra life (language is about learning)
+    },
+  },
+
+  engels: {
+    subject: "engels",
+    displayName: "HAVO 5 Engels",
+
+    // Theming (blue/red colors for UK)
+    primaryColor: "#004080",       // Royal blue
+    secondaryColor: "#e0f0ff",     // Light blue
+    icon: "🇬🇧",
+
+    // Rank system (language proficiency levels)
+    rankLabels: [
+      "A1",               // 0-99 XP
+      "A2",               // 100-299 XP
+      "B1",               // 300-599 XP
+      "B2",               // 600-999 XP
+      "C1",               // 1000+ XP
+    ],
+    rankThresholds: [0, 100, 300, 600, 1000],
+
+    // Game settings
+    enableTimeRush: true,         // Time Rush for quick vocab/grammar
+    baseXpPerQuestion: 10,
+    streakBonusMultiplier: 1.5,
+    timeRushBonusXp: 5,
+
+    // Time Rush settings
+    timeRushSeconds: 12,
+    timeRushLevels: [2],          // Level 2 is Time Rush
+
+    // Lives system
+    livesPerLevel: 3,
+
+    // Starting power-ups inventory
+    startingPowerups: {
+      hint: 2,
+      joker: 1,
+      extra_life: 1,
+    },
+  },
 };
 
 /**

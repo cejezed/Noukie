@@ -1,8 +1,8 @@
 /**
  * Game Layer Type Definitions
  *
- * For gameified quiz experience (starting with HAVO 5 Aardrijkskunde)
- * Designed to be extensible to other subjects via config
+ * For gameified quiz experience across multiple HAVO 5 subjects
+ * Config-driven architecture allows easy addition of new subjects
  */
 
 // ============================================
@@ -11,9 +11,14 @@
 
 /**
  * Supported subjects for game mode
- * TODO: Extend as new subjects are added (geschiedenis, wiskunde, etc.)
+ * Each subject has its own config in SUBJECT_GAME_CONFIG
  */
-export type SubjectKey = "aardrijkskunde";
+export type SubjectKey =
+  | "aardrijkskunde"
+  | "geschiedenis"
+  | "wiskunde"
+  | "duits"
+  | "engels";
 
 /**
  * Power-up types available in game mode
@@ -61,6 +66,12 @@ export interface SubjectGameConfig {
     extra_life: number;
   };
 }
+
+/**
+ * Map of all subject configs
+ * Used by SUBJECT_GAME_CONFIG
+ */
+export type SubjectGameConfigMap = Record<SubjectKey, SubjectGameConfig>;
 
 // ============================================
 // QUIZ TYPES (from existing system)
@@ -115,6 +126,9 @@ export interface GameScore {
  * Managed by useGameQuizEngine hook
  */
 export interface GameState {
+  // Subject
+  subject: SubjectKey;            // Which subject this game is for
+
   // Level system
   currentLevel: number;           // 1-based (Level 1, 2, 3...)
   totalLevels: number;

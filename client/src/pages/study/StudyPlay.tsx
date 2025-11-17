@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import GeoGameScreen from "@/components/game/GeoGameScreen";
 import { isGameEnabled } from "@/config/gameSubjects";
+import type { SubjectKey } from "@/types/game";
 
 function useUserId() {
   const [id, setId] = useState<string | null>(null);
@@ -42,13 +43,73 @@ function eq(a?: string | null, b?: string | null) {
   return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 }
 
+/**
+ * Map quiz subject/course field to SubjectKey
+ * Handles various formats from the database
+ */
+function mapQuizSubjectToSubjectKey(rawSubject: string | null | undefined): SubjectKey | null {
+  if (!rawSubject) return null;
+
+  const normalized = rawSubject.toLowerCase().trim();
+
+  // Direct matches
+  if (normalized === "aardrijkskunde" || normalized === "ak" || normalized.includes("aardrijkskunde")) {
+    return "aardrijkskunde";
+  }
+  if (normalized === "geschiedenis" || normalized === "ges" || normalized.includes("geschiedenis")) {
+    return "geschiedenis";
+  }
+  if (normalized === "wiskunde" || normalized === "wi" || normalized.includes("wiskunde")) {
+    return "wiskunde";
+  }
+  if (normalized === "duits" || normalized === "du" || normalized.includes("duits")) {
+    return "duits";
+  }
+  if (normalized === "engels" || normalized === "en" || normalized.includes("engels")) {
+    return "engels";
+  }
+
+  // HAVO 5 specific patterns (e.g., "havo5_ak", "HAVO 5 Aardrijkskunde")
+  if (normalized.includes("_ak") || (normalized.includes("havo") && normalized.includes("ak"))) {
+    return "aardrijkskunde";
+  }
+  if (normalized.includes("_ges") || (normalized.includes("havo") && normalized.includes("ges"))) {
+    return "geschiedenis";
+  }
+  if (normalized.includes("_wi") || (normalized.includes("havo") && normalized.includes("wi"))) {
+    return "wiskunde";
+  }
+  if (normalized.includes("_du") || (normalized.includes("havo") && normalized.includes("du"))) {
+    return "duits";
+  }
+  if (normalized.includes("_en") || (normalized.includes("havo") && normalized.includes("en"))) {
+    return "engels";
+  }
+
+  return null;
+}
+
 export default function StudyPlay() {
   const userId = useUserId();
   const quizId = getQueryParam("quiz");
 
   // Check if game mode is requested
   const mode = getQueryParam("mode");
-  const subject = getQueryParam("subject");
+  const subjectParam = getQueryParam("subject");
+
+  // Fetch quiz metadata to detect subject (if game mode)
+  const quizMeta = useQuery({
+    queryKey: ["quiz-meta", quizId],
+    enabled: !!quizId && mode === "game",
+    queryFn: async () => {
+      const res = await fetch(`/api/quizzes/meta?quiz_id=${encodeURIComponent(quizId!)}`, {
+        headers: userId ? { "x-user-id": userId } : {},
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json.data || null;
+    },
+  });
 
   // If userId not loaded yet, show loading
   if (!userId) {
@@ -59,11 +120,55 @@ export default function StudyPlay() {
     );
   }
 
-  // If game mode requested and subject is game-enabled, render game screen
-  const isGameMode = mode === "game" && subject && isGameEnabled(subject) && quizId;
+  // Determine subject for game mode
+  let detectedSubject: SubjectKey | null = null;
+
+  if (mode === "game") {
+    // 1. Check query param first
+    if (subjectParam && isGameEnabled(subjectParam)) {
+      detectedSubject = subjectParam as SubjectKey;
+    }
+    // 2. Try to detect from quiz metadata
+    else if (quizMeta.data) {
+      const mapped = mapQuizSubjectToSubjectKey(
+        quizMeta.data.subject || quizMeta.data.course || quizMeta.data.title
+      );
+      if (mapped && isGameEnabled(mapped)) {
+        detectedSubject = mapped;
+      }
+    }
+  }
+
+  // If game mode requested and subject detected, render game screen
+  const isGameMode = mode === "game" && detectedSubject && quizId;
 
   if (isGameMode) {
-    return <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />;
+    return <GeoGameScreen quizId={quizId} subject={detectedSubject} userId={userId} />;
+  }
+
+  // If game mode requested but subject detection failed, show info message
+  if (mode === "game" && !detectedSubject && quizMeta.isFetched) {
+    return (
+      <main className="p-8 text-center max-w-[600px] mx-auto">
+        <div className="rounded-xl border-2 border-yellow-300 bg-yellow-50 p-6">
+          <h2 className="text-xl font-semibold text-yellow-800 mb-2">
+            Game mode niet beschikbaar
+          </h2>
+          <p className="text-sm text-yellow-700 mb-4">
+            Deze toets ondersteunt nog geen game mode, of het vak is niet herkend.
+          </p>
+          <p className="text-xs text-yellow-600 mb-4">
+            Ondersteunde vakken: Aardrijkskunde, Geschiedenis, Wiskunde, Duits, Engels
+          </p>
+          <button
+            onClick={() => window.location.href = `/study/play?quiz=${quizId}`}
+            className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+          >
+            Ga naar klassieke modus
+          </button>
+        </div>
+      </main>
+    );
   }
 
   // Otherwise, continue with classic quiz mode below

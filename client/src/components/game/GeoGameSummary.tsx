@@ -1,8 +1,10 @@
 /**
- * GeoGameSummary Component
+ * GeoGameSummary Component (Multi-Subject Support)
  *
- * End screen after completing a gameified quiz.
+ * End screen after completing a gameified quiz for any subject.
  * Shows score, XP earned, rank progress, and navigation options.
+ *
+ * Supports: aardrijkskunde, geschiedenis, wiskunde, duits, engels
  */
 
 import React from "react";
@@ -37,7 +39,7 @@ export interface GeoGameSummaryProps {
 
 export default function GeoGameSummary(props: GeoGameSummaryProps) {
   const {
-    quizTitle = "HAVO 5 Aardrijkskunde Quiz",
+    quizTitle,
     totalQuestions,
     correctAnswers,
     xpEarned,

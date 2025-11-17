@@ -1,7 +1,8 @@
 /**
- * Game Session API
+ * Game Session API (Multi-Subject Support)
  *
  * POST /api/game/session - Save completed game session and update user stats
+ * Supports: aardrijkskunde, geschiedenis, wiskunde, duits, engels
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
@@ -11,6 +12,44 @@ const admin = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+/**
+ * Subject configurations (synced with client/src/config/gameSubjects.ts)
+ * Each subject has its own rank labels and thresholds
+ */
+type SubjectKey = "aardrijkskunde" | "geschiedenis" | "wiskunde" | "duits" | "engels";
+
+interface SubjectRankConfig {
+  rankLabels: string[];
+  rankThresholds: number[];
+}
+
+const SUBJECT_RANK_CONFIGS: Record<SubjectKey, SubjectRankConfig> = {
+  aardrijkskunde: {
+    rankLabels: ["Local", "Regionaal", "Nationaal", "Europees", "Mondiaal Expert"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  geschiedenis: {
+    rankLabels: ["Novice", "Leerling", "Kenner", "Historicus", "Tijdreiziger"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  wiskunde: {
+    rankLabels: ["Beginner", "Rekenaar", "Analist", "Problem Solver", "Math Master"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  duits: {
+    rankLabels: ["A1", "A2", "B1", "B2", "C1"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+  engels: {
+    rankLabels: ["A1", "A2", "B1", "B2", "C1"],
+    rankThresholds: [0, 100, 300, 600, 1000],
+  },
+};
+
+function getRankConfig(subject: string): SubjectRankConfig {
+  return SUBJECT_RANK_CONFIGS[subject as SubjectKey] || SUBJECT_RANK_CONFIGS.aardrijkskunde;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Auth check
@@ -118,10 +157,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       score_percentage || 0
     );
 
-    // Calculate new rank based on XP
-    // This is a simplified version - you can import computeRank logic or duplicate it here
-    const rankThresholds = [0, 100, 300, 600, 1000];
-    const rankLabels = ['Local', 'Regionaal', 'Nationaal', 'Europees', 'Mondiaal Expert'];
+    // Calculate new rank based on XP (using subject-specific config)
+    const rankConfig = getRankConfig(subject);
+    const { rankLabels, rankThresholds } = rankConfig;
     let newRankIndex = 0;
     for (let i = rankThresholds.length - 1; i >= 0; i--) {
       if (newSubjectXp >= rankThresholds[i]) {
