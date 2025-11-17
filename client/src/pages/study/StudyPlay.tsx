@@ -61,11 +61,21 @@ export default function StudyPlay() {
     userIdExists: !!userId,
   });
 
+  // ALWAYS SHOW DEBUG - even before userId check
+  const debugInfo = (
+    <div className="fixed top-0 left-0 right-0 z-50 bg-red-600 text-white p-2 text-xs">
+      <strong>DEBUG:</strong> mode={mode || 'null'} | subject={subject || 'null'} |
+      quizId={quizId ? '✓' : 'X'} | userId={userId ? '✓' : 'X'} |
+      isGameEnabled={String(subject ? isGameEnabled(subject) : false)}
+    </div>
+  );
+
   // Loading state while userId is being fetched
   if (!userId) {
     return (
       <main className="p-8">
-        <p className="text-sm text-gray-500">Inloggen vereist…</p>
+        {debugInfo}
+        <p className="text-sm text-gray-500 mt-12">Inloggen vereist…</p>
       </main>
     );
   }
@@ -76,7 +86,14 @@ export default function StudyPlay() {
   // If game mode requested and subject is game-enabled, render game screen
   if (isGameMode) {
     console.log("✅ Activating game mode!");
-    return <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />;
+    return (
+      <>
+        {debugInfo}
+        <div className="mt-12">
+          <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />
+        </div>
+      </>
+    );
   }
 
   console.log("⚠️ Game mode NOT activated, falling back to classic mode");
@@ -196,15 +213,26 @@ export default function StudyPlay() {
 
   // UI states
   if (!quizId) {
-    return <main className="p-8"><p className="text-red-600">Geen quiz geselecteerd.</p></main>;
+    return (
+      <main className="p-8">
+        {debugInfo}
+        <p className="text-red-600 mt-12">Geen quiz geselecteerd.</p>
+      </main>
+    );
   }
   if (questions.isLoading) {
-    return <main className="p-8"><p>Laden…</p></main>;
+    return (
+      <main className="p-8">
+        {debugInfo}
+        <p className="mt-12">Laden…</p>
+      </main>
+    );
   }
   if (questions.isError) {
     return (
       <main className="p-8">
-        <p className="text-red-600">Kon vragen niet laden.</p>
+        {debugInfo}
+        <p className="text-red-600 mt-12">Kon vragen niet laden.</p>
         <pre className="mt-2 text-xs bg-gray-50 p-2 rounded">{String((questions.error as Error)?.message)}</pre>
       </main>
     );
@@ -241,18 +269,20 @@ export default function StudyPlay() {
   const explanation: string = q.explanation ?? "";
 
   return (
-    <main className="mx-auto max-w-[800px] px-6 py-8">
-      {/* DEBUG BANNER */}
-      <div className="mb-4 p-4 bg-yellow-100 border-2 border-yellow-400 rounded">
-        <p className="text-sm font-bold">DEBUG MODE CHECK</p>
-        <p className="text-xs">mode={mode || 'null'}</p>
-        <p className="text-xs">subject={subject || 'null'}</p>
-        <p className="text-xs">quizId={quizId ? 'exists' : 'null'}</p>
-        <p className="text-xs">isGameEnabled={String(subject ? isGameEnabled(subject) : false)}</p>
-        <p className="text-xs font-bold">Result: CLASSIC MODE (Game mode not activated)</p>
-      </div>
+    <>
+      {debugInfo}
+      <main className="mx-auto max-w-[800px] px-6 py-8 mt-12">
+        {/* DEBUG BANNER */}
+        <div className="mb-4 p-4 bg-yellow-100 border-2 border-yellow-400 rounded">
+          <p className="text-sm font-bold">DEBUG MODE CHECK</p>
+          <p className="text-xs">mode={mode || 'null'}</p>
+          <p className="text-xs">subject={subject || 'null'}</p>
+          <p className="text-xs">quizId={quizId ? 'exists' : 'null'}</p>
+          <p className="text-xs">isGameEnabled={String(subject ? isGameEnabled(subject) : false)}</p>
+          <p className="text-xs font-bold">Result: CLASSIC MODE (Game mode not activated)</p>
+        </div>
 
-      {/* Voortgang + Score */}
+        {/* Voortgang + Score */}
       <div className="mb-4">
         <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
           <span>Voortgang</span>
@@ -357,6 +387,7 @@ export default function StudyPlay() {
       )}
 
       {uiError && <p className="mt-4 text-xs text-red-600">{uiError}</p>}
-    </main>
+      </main>
+    </>
   );
 }
