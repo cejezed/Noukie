@@ -43,6 +43,11 @@ function eq(a?: string | null, b?: string | null) {
 }
 
 export default function StudyPlay() {
+  // IMMEDIATE ALERT TO CONFIRM THIS FILE IS LOADED
+  if (typeof window !== 'undefined' && window.location.search.includes('mode=game')) {
+    alert('StudyPlay geladen! URL bevat mode=game');
+  }
+
   const userId = useUserId();
   const quizId = getQueryParam("quiz");
 
