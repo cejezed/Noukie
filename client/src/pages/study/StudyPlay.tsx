@@ -50,6 +50,17 @@ export default function StudyPlay() {
   const mode = getQueryParam("mode");
   const subject = getQueryParam("subject");
 
+  // DEBUG: Log parameters (remove after testing)
+  console.log("StudyPlay Debug:", { mode, subject, quizId, userId });
+  console.log("isGameEnabled check:", subject, isGameEnabled(subject || ""));
+  console.log("All conditions:", {
+    modeIsGame: mode === "game",
+    subjectExists: !!subject,
+    subjectEnabled: subject ? isGameEnabled(subject) : false,
+    quizIdExists: !!quizId,
+    userIdExists: !!userId,
+  });
+
   // Loading state while userId is being fetched
   if (!userId) {
     return (
@@ -61,8 +72,11 @@ export default function StudyPlay() {
 
   // If game mode requested and subject is game-enabled, render game screen
   if (mode === "game" && subject && isGameEnabled(subject) && quizId) {
+    console.log("✅ Activating game mode!");
     return <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />;
   }
+
+  console.log("⚠️ Game mode NOT activated, falling back to classic mode");
 
   // Otherwise, continue with classic quiz mode below
   const [resultId, setResultId] = useState<string | null>(null);
