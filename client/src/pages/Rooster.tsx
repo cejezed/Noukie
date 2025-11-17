@@ -188,12 +188,12 @@ export default function Rooster() {
   // === HANDLERS ===
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!userId) {
       toast({ title: "Niet ingelogd", description: "Je moet ingelogd zijn om een roosteritem toe te voegen.", variant: "destructive" });
       return;
     }
-    
+
     if (!formData.start_time || !formData.end_time) {
       toast({ title: "Incomplete gegevens", description: "Vul een start- en eindtijd in.", variant: "destructive" });
       return;
@@ -235,12 +235,12 @@ export default function Rooster() {
 
   const handleCourseSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!userId) {
       toast({ title: "Niet ingelogd", description: "Je moet ingelogd zijn om een vak toe te voegen.", variant: "destructive" });
       return;
     }
-    
+
     if (!courseFormData.name.trim()) {
       toast({ title: "Vak naam vereist", description: "Vul een vaknaam in.", variant: "destructive" });
       return;

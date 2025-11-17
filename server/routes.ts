@@ -183,7 +183,7 @@ function datesHaveWeekdayInRange(startISO: string, endISO: string, weekday1to7: 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date().toISOString() });
@@ -327,59 +327,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.file) {
         return res.status(400).json({ error: "No audio file provided" });
       }
-      
+
       const lang = req.body.lang || 'nl';
       console.log(`🎤 Transcribing audio (${lang}), size: ${req.file.size} bytes`);
-      
+
       let transcription;
-      
+
       if (req.file.buffer) {
         const file = new File(
-          [req.file.buffer], 
+          [req.file.buffer],
           'audio.webm',
           { type: req.file.mimetype || 'audio/webm' }
         );
-        
+
         transcription = await openai.audio.transcriptions.create({
           file: file,
           model: 'whisper-1',
           language: lang,
           response_format: 'json'
         });
-      } 
+      }
       else if (req.file.path) {
         const fileStream = fs.createReadStream(req.file.path);
-        
+
         transcription = await openai.audio.transcriptions.create({
           file: fileStream,
           model: 'whisper-1',
           language: lang,
           response_format: 'json'
         });
-        
+
         try {
           fs.unlinkSync(req.file.path);
         } catch (cleanupError) {
           console.warn('Could not delete temp file:', cleanupError);
         }
-      } 
+      }
       else {
         return res.status(400).json({ error: 'Invalid file upload' });
       }
 
       console.log(`✅ Transcription: "${transcription.text}"`);
 
-      res.json({ 
+      res.json({
         transcript: transcription.text,
         text: transcription.text,
-        lang: lang 
+        lang: lang
       });
 
     } catch (error: any) {
       console.error('❌ ASR error:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Transcriptie mislukt',
-        details: error?.message 
+        details: error?.message
       });
     }
   });
