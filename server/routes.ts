@@ -877,16 +877,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "userId is verplicht" });
       }
 
-      const geminiApiKey = process.env.GEMINI_API_KEY;
-      if (!geminiApiKey) {
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      if (!openaiApiKey) {
         fs.unlinkSync(req.file.path);
-        return res.status(500).json({ error: "GEMINI_API_KEY niet geconfigureerd" });
+        return res.status(500).json({ error: "OPENAI_API_KEY niet geconfigureerd" });
       }
 
       console.log(`📸 Processing schedule screenshot for user ${userId}`);
 
-      // Process the screenshot with OCR and AI
-      const result = await processScheduleScreenshot(req.file.path, geminiApiKey);
+      // Process the screenshot with OpenAI Vision
+      const result = await processScheduleScreenshot(req.file.path, openaiApiKey);
 
       // Clean up the uploaded file
       fs.unlinkSync(req.file.path);

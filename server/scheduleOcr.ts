@@ -1,9 +1,9 @@
-import Tesseract from "tesseract.js";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
+import fs from "fs";
 
 /**
  * Schedule OCR Service
- * Extracts schedule data from screenshots using OCR and AI pattern recognition
+ * Extracts schedule data from screenshots using OpenAI Vision API
  */
 
 export interface DetectedLesson {
@@ -25,59 +25,39 @@ export interface ScheduleOcrResult {
 }
 
 /**
- * Extracts text from an image using Tesseract OCR
+ * Uses OpenAI Vision API to analyze schedule screenshot and extract structured lesson data
  */
-async function extractTextFromImage(imagePath: string): Promise<string> {
-  const worker = await Tesseract.createWorker("nld", 1, {
-    logger: (m: any) => {
-      if (m.status === "recognizing text") {
-        console.log(`OCR Progress: ${Math.round(m.progress * 100)}%`);
-      }
-    },
-  });
-
-  try {
-    const {
-      data: { text },
-    } = await worker.recognize(imagePath);
-    return text;
-  } finally {
-    await worker.terminate();
-  }
-}
-
-/**
- * Uses Gemini AI to parse schedule text into structured lesson data
- */
-async function parseScheduleWithAI(
-  rawText: string,
+async function analyzeScheduleWithVision(
+  imagePath: string,
   apiKey: string
-): Promise<{ lessons: DetectedLesson[]; warnings: string[] }> {
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-exp" });
+): Promise<{ lessons: DetectedLesson[]; warnings: string[]; rawDescription: string }> {
+  const openai = new OpenAI({ apiKey });
 
-  const prompt = `Je bent een expert in het herkennen van Nederlandse schoolroosters uit OCR tekst.
-Analyseer de volgende OCR-tekst die afkomstig is van een screenshot van een schoolrooster (Somtoday).
+  // Read image and convert to base64
+  const imageBuffer = fs.readFileSync(imagePath);
+  const base64Image = imageBuffer.toString("base64");
+  const mimeType = imagePath.endsWith(".png") ? "image/png" : "image/jpeg";
 
-OCR TEKST:
-${rawText}
+  const prompt = `Je bent een expert in het analyseren van Nederlandse schoolroosters.
+Analyseer deze screenshot van een schoolrooster (Somtoday) en extraheer alle lessen.
 
 BELANGRIJKE INSTRUCTIES:
 1. Identificeer alle lessen met hun tijden, vakken en dagen
 2. Herken Nederlandse weekdagen (maandag=1, dinsdag=2, woensdag=3, donderdag=4, vrijdag=5, zaterdag=6, zondag=7)
 3. Detecteer tijden in formaat HH:mm (bijvoorbeeld 08:30, 13:15)
-4. Herken vakken (Nederlands, Wiskunde, Engels, etc.)
+4. Herken vakken (Nederlands, Wiskunde, Engels, Biologie, Scheikunde, etc.)
 5. Bepaal het type activiteit:
    - "les" voor normale lessen
    - "toets" als het een toets/test/examen is
-   - "sport" voor gym/lichamelijke opvoeding
+   - "sport" voor gym/lichamelijke opvoeding/bewegingsonderwijs
    - "werk" voor stages/werk
-   - "afspraak" voor afspraken
+   - "afspraak" voor afspraken/mentorgesprekken
    - "hobby" voor hobby's
    - "anders" voor overige activiteiten
 
-6. Geef elke les een "confidence" score tussen 0 en 1 (hoe zeker je bent)
-7. Als tijden ontbreken of onduidelijk zijn, gebruik standaard lesuren (bijv. 08:30-09:20, 09:30-10:20, etc.)
+6. Geef elke les een "confidence" score tussen 0 en 1 (hoe zeker je bent van de detectie)
+7. Als je een rooster in tabelformaat ziet, lees dan elke dag en elk tijdslot zorgvuldig
+8. Als tijden niet expliciet vermeld staan, gebruik dan standaard lesuren (08:30-09:20, 09:30-10:20, 10:40-11:30, 11:40-12:30, 13:00-13:50, 14:00-14:50, 15:00-15:50)
 
 OUTPUT FORMAT (JSON):
 Retourneer ALLEEN een JSON object in dit exacte formaat, zonder extra tekst:
@@ -93,18 +73,42 @@ Retourneer ALLEEN een JSON object in dit exacte formaat, zonder extra tekst:
       "confidence": 0.95
     }
   ],
-  "warnings": ["Eventuele waarschuwingen of onduidelijkheden"]
+  "warnings": ["Eventuele waarschuwingen of onduidelijkheden"],
+  "description": "Korte beschrijving van wat je ziet in de afbeelding"
 }
 
 Let op: Als je GEEN rooster kunt herkennen, retourneer dan:
 {
   "lessons": [],
-  "warnings": ["Kon geen roosterinformatie herkennen in de tekst"]
+  "warnings": ["Kon geen roosterinformatie herkennen in de afbeelding"],
+  "description": "Beschrijving van wat je wel ziet"
 }`;
 
   try {
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text();
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: prompt,
+            },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ],
+      max_tokens: 4000,
+      temperature: 0.1, // Low temperature for more consistent parsing
+    });
+
+    const responseText = response.choices[0]?.message?.content || "";
 
     // Extract JSON from response (might be wrapped in markdown code blocks)
     let jsonText = responseText.trim();
@@ -119,49 +123,39 @@ Let op: Als je GEEN rooster kunt herkennen, retourneer dan:
     return {
       lessons: parsed.lessons || [],
       warnings: parsed.warnings || [],
+      rawDescription: parsed.description || "",
     };
   } catch (error) {
-    console.error("AI parsing error:", error);
+    console.error("OpenAI Vision parsing error:", error);
     return {
       lessons: [],
       warnings: [
-        `AI kon de roostertekst niet verwerken: ${error instanceof Error ? error.message : "Onbekende fout"}`,
+        `AI kon het rooster niet verwerken: ${error instanceof Error ? error.message : "Onbekende fout"}`,
       ],
+      rawDescription: "",
     };
   }
 }
 
 /**
- * Process a schedule screenshot and extract lesson data
+ * Process a schedule screenshot and extract lesson data using OpenAI Vision
  */
 export async function processScheduleScreenshot(
   imagePath: string,
-  geminiApiKey: string
+  openaiApiKey: string
 ): Promise<ScheduleOcrResult> {
   try {
-    // Step 1: OCR to extract text
-    console.log("🔍 Starting OCR for schedule...");
-    const rawText = await extractTextFromImage(imagePath);
+    console.log("🔍 Analyzing schedule screenshot with OpenAI Vision...");
 
-    if (!rawText || rawText.trim().length < 10) {
-      return {
-        success: false,
-        error: "Geen tekst gevonden in de afbeelding. Zorg voor een duidelijke, scherpe screenshot.",
-        lessons: [],
-        warnings: [],
-      };
-    }
-
-    console.log("📝 OCR text extracted:", rawText.substring(0, 200) + "...");
-
-    // Step 2: Use AI to parse schedule structure
-    console.log("🤖 Parsing schedule with AI...");
-    const { lessons, warnings } = await parseScheduleWithAI(rawText, geminiApiKey);
+    const { lessons, warnings, rawDescription } = await analyzeScheduleWithVision(
+      imagePath,
+      openaiApiKey
+    );
 
     if (lessons.length === 0) {
       return {
         success: false,
-        rawText,
+        rawText: rawDescription,
         error: "Geen roosterinformatie gevonden. Controleer of de screenshot een rooster toont.",
         lessons: [],
         warnings,
@@ -172,12 +166,12 @@ export async function processScheduleScreenshot(
 
     return {
       success: true,
-      rawText,
+      rawText: rawDescription,
       lessons,
       warnings,
     };
   } catch (error) {
-    console.error("Schedule OCR error:", error);
+    console.error("Schedule analysis error:", error);
     return {
       success: false,
       error: `Fout bij verwerken: ${error instanceof Error ? error.message : "Onbekende fout"}`,
