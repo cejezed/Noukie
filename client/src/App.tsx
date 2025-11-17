@@ -27,6 +27,10 @@ import AdminQuiz from "./pages/study/AdminQuiz";
 import { ErrorBoundary } from "./components/dev/ErrorBoundary";
 import Compliments from "./pages/Compliments";
 
+// Vocab trainer (WRTS-style)
+import StudyWordsOverview from "./pages/study/vocab/StudyWordsOverview";
+import StudyWordsList from "./pages/study/vocab/StudyWordsList";
+
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
 
@@ -106,6 +110,10 @@ function AuthenticatedApp() {
         {/* Admin voor toetsen (voor jou); beide paden werken */}
         <Route path="/study/admin" component={AdminQuiz} />
         <Route path="/toets/admin" component={AdminQuiz} />
+
+        {/* Vocab trainer (WRTS-style) */}
+        <Route path="/study/words" component={StudyWordsOverview} />
+        <Route path="/study/words/list/:id" component={StudyWordsList} />
 
         {/* Compliments feature */}
         <Route path="/compliments" component={Compliments} />
