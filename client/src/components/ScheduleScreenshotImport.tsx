@@ -102,20 +102,32 @@ export default function ScheduleScreenshotImport() {
 
   // Process screenshot with OCR
   const processScreenshot = async () => {
-    if (!file || !user?.id) return;
+    if (!file || !user?.id) {
+      console.error("Cannot process: missing file or user ID", { hasFile: !!file, hasUserId: !!user?.id });
+      toast({
+        title: "Kan niet verwerken",
+        description: "Geen bestand of gebruiker gevonden",
+        variant: "destructive",
+      });
+      return;
+    }
 
+    console.log("Starting screenshot processing...", { fileName: file.name, fileSize: file.size, userId: user.id });
     setProcessing(true);
     try {
       const formData = new FormData();
       formData.append("screenshot", file);
       formData.append("userId", user.id);
 
+      console.log("Sending request to /api/schedule/import-screenshot...");
       const response = await fetch("/api/schedule/import-screenshot", {
         method: "POST",
         body: formData,
       });
 
+      console.log("Response received:", { status: response.status, ok: response.ok });
       const data = await response.json();
+      console.log("Response data:", data);
 
       if (!response.ok) {
         throw new Error(data.error || "Fout bij verwerken screenshot");
