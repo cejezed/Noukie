@@ -1,24 +1,21 @@
 /**
- * useGameQuizEngine Hook (MVP Version)
+ * useGameQuizEngine Hook (DEEL 3 Version)
  *
  * Core game state machine for gameified quiz experience.
- * Manages levels, questions, XP, lives, and streaks.
+ * Manages levels, questions, XP, lives, streaks, power-ups, and Time Rush mode.
  *
- * MVP Features:
+ * Features:
  * - Split questions into levels
  * - Track XP, lives, streak
  * - Navigation: next question, next level
  * - Answer validation
- *
- * TODO (later iterations):
- * - Power-ups (hint, joker, extra_life)
- * - Time Rush mode
- * - Supabase persistence
+ * - Power-ups: Hint, Joker, Extra Life
+ * - Time Rush mode with timer and bonus XP
  * - Callbacks for level/quiz completion
  */
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import type { QuizItem, GameState, SubjectGameConfig, GameScore } from "@/types/game";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import type { QuizItem, GameState, SubjectGameConfig, GameScore, PowerUpType } from "@/types/game";
 import { calculateXP } from "@/config/gameSubjects";
 
 // ============================================
@@ -45,6 +42,7 @@ interface GameEngineAPI {
   nextQuestion: () => void;
   nextLevel: () => void;
   resetLevel: () => void;
+  usePowerUp: (type: PowerUpType) => boolean;
 
   // Status checks
   isLevelComplete: boolean;
@@ -118,17 +116,21 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
       streak: 0,
       bestStreak: 0,
 
-      // Power-ups (not implemented in MVP)
+      // Power-ups
       powerUps: {
         hint: config.startingPowerups.hint,
         joker: config.startingPowerups.joker,
         extra_life: config.startingPowerups.extra_life,
       },
       activePowerUps: [],
+      weakenedOptionIndexes: [],
+      hiddenOptionIndexes: [],
 
-      // Special modes (not implemented in MVP)
+      // Time Rush mode
       mode: "normal",
+      isTimeRushMode: false,
       timeRushTimer: null,
+      questionStartedAt: null,
 
       // Progress
       completedLevels: [],
@@ -164,6 +166,7 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
   /**
    * Answer current question
    * Returns whether answer was correct and XP earned
+   * Handles Time Rush bonuses for quick answers
    */
   const answerQuestion = useCallback(
     (givenAnswer: string): { isCorrect: boolean; xpEarned: number } => {
@@ -174,6 +177,8 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
       const correctAnswer = currentQuestion.answer;
       const isCorrect = normalizeAnswer(givenAnswer) === normalizeAnswer(correctAnswer);
 
+      let actualXpEarned = 0;
+
       setState((prev) => {
         let newXP = prev.xp;
         let newStreak = prev.streak;
@@ -182,13 +187,20 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
         let xpEarned = 0;
 
         if (isCorrect) {
+          // Check if answered quickly in Time Rush mode
+          const answeredQuickly = prev.isTimeRushMode && prev.timeRushTimer !== null && prev.timeRushTimer > 0;
+
           // Correct answer: award XP, increment streak
           xpEarned = calculateXP({
             baseXP: config.baseXpPerQuestion,
             streak: prev.streak,
             streakMultiplier: config.streakBonusMultiplier,
+            isTimeRush: prev.isTimeRushMode,
+            timeRushBonus: config.timeRushBonusXp,
+            answeredQuickly,
           });
 
+          actualXpEarned = xpEarned;
           newXP = prev.xp + xpEarned;
           newStreak = prev.streak + 1;
           newBestStreak = Math.max(prev.bestStreak, newStreak);
@@ -214,29 +226,40 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
         };
       });
 
-      return { isCorrect, xpEarned: isCorrect ? config.baseXpPerQuestion : 0 };
+      return { isCorrect, xpEarned: actualXpEarned };
     },
     [currentQuestion, config]
   );
 
   /**
    * Move to next question in current level
+   * Resets power-up effects and starts timer for Time Rush
    */
   const nextQuestion = useCallback(() => {
     setState((prev) => ({
       ...prev,
       currentQuestionIndex: prev.currentQuestionIndex + 1,
+      // Reset power-up effects for new question
+      weakenedOptionIndexes: [],
+      hiddenOptionIndexes: [],
+      // Start timer for Time Rush mode
+      questionStartedAt: prev.isTimeRushMode ? Date.now() : null,
+      timeRushTimer: prev.isTimeRushMode ? config.timeRushSeconds : null,
     }));
-  }, []);
+  }, [config]);
 
   /**
    * Move to next level
    * Resets lives and loads next level's questions
+   * Detects Time Rush mode for new level
    */
   const nextLevel = useCallback(() => {
     setState((prev) => {
       const newLevelNumber = prev.currentLevel + 1;
       const newLevelQuestions = allLevels[newLevelNumber - 1] || [];
+
+      // Check if new level is Time Rush mode
+      const isTimeRush = config.timeRushLevels.includes(newLevelNumber);
 
       return {
         ...prev,
@@ -246,6 +269,14 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
         lives: config.livesPerLevel, // Reset lives for new level
         completedLevels: [...prev.completedLevels, prev.currentLevel],
         currentLevelStartedAt: Date.now(),
+        // Time Rush detection
+        isTimeRushMode: isTimeRush,
+        mode: isTimeRush ? "timeRush" : "normal",
+        questionStartedAt: isTimeRush ? Date.now() : null,
+        timeRushTimer: isTimeRush ? config.timeRushSeconds : null,
+        // Reset power-up effects
+        weakenedOptionIndexes: [],
+        hiddenOptionIndexes: [],
       };
     });
 
@@ -264,13 +295,108 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
    * Reloads current level questions and resets lives
    */
   const resetLevel = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      currentQuestionIndex: 0,
-      lives: config.livesPerLevel,
-      currentLevelStartedAt: Date.now(),
-    }));
+    setState((prev) => {
+      const isTimeRush = config.timeRushLevels.includes(prev.currentLevel);
+
+      return {
+        ...prev,
+        currentQuestionIndex: 0,
+        lives: config.livesPerLevel,
+        currentLevelStartedAt: Date.now(),
+        // Reset Time Rush timer
+        questionStartedAt: isTimeRush ? Date.now() : null,
+        timeRushTimer: isTimeRush ? config.timeRushSeconds : null,
+        // Reset power-up effects
+        weakenedOptionIndexes: [],
+        hiddenOptionIndexes: [],
+      };
+    });
   }, [config]);
+
+  /**
+   * Use a power-up
+   * Returns true if power-up was used successfully, false if unavailable
+   */
+  const usePowerUp = useCallback(
+    (type: PowerUpType): boolean => {
+      if (!currentQuestion) return false;
+
+      // Check if user has this power-up available
+      if (state.powerUps[type] <= 0) return false;
+
+      // Get current question's choices (need to normalize them)
+      const rawChoices = currentQuestion.choices;
+      let choices: string[] = [];
+
+      if (Array.isArray(rawChoices)) {
+        choices = rawChoices.map(String);
+      } else if (typeof rawChoices === "string") {
+        try {
+          const parsed = JSON.parse(rawChoices);
+          choices = Array.isArray(parsed) ? parsed.map(String) : [rawChoices];
+        } catch {
+          choices = rawChoices.split("\n").map((s) => s.trim()).filter(Boolean);
+        }
+      }
+
+      if (choices.length === 0) return false;
+
+      const correctAnswer = normalizeAnswer(currentQuestion.answer);
+
+      setState((prev) => {
+        const updates: Partial<GameState> = {
+          powerUps: {
+            ...prev.powerUps,
+            [type]: prev.powerUps[type] - 1,
+          },
+        };
+
+        // HINT: Weaken one wrong option (gray it out)
+        if (type === "hint") {
+          const wrongIndexes = choices
+            .map((choice, i) => ({ choice, i }))
+            .filter(({ choice }) => normalizeAnswer(choice) !== correctAnswer)
+            .filter(({ i }) => !prev.weakenedOptionIndexes.includes(i))
+            .filter(({ i }) => !prev.hiddenOptionIndexes.includes(i))
+            .map(({ i }) => i);
+
+          if (wrongIndexes.length > 0) {
+            const randomWrongIndex = wrongIndexes[Math.floor(Math.random() * wrongIndexes.length)];
+            updates.weakenedOptionIndexes = [...prev.weakenedOptionIndexes, randomWrongIndex];
+          }
+        }
+
+        // JOKER: Hide two wrong options (50/50)
+        if (type === "joker") {
+          const wrongIndexes = choices
+            .map((choice, i) => ({ choice, i }))
+            .filter(({ choice }) => normalizeAnswer(choice) !== correctAnswer)
+            .filter(({ i }) => !prev.hiddenOptionIndexes.includes(i))
+            .map(({ i }) => i);
+
+          if (wrongIndexes.length >= 2) {
+            // Shuffle and take first 2
+            const shuffled = wrongIndexes.sort(() => Math.random() - 0.5);
+            const toHide = shuffled.slice(0, 2);
+            updates.hiddenOptionIndexes = [...prev.hiddenOptionIndexes, ...toHide];
+          } else if (wrongIndexes.length === 1) {
+            // Only 1 wrong option left, hide it
+            updates.hiddenOptionIndexes = [...prev.hiddenOptionIndexes, wrongIndexes[0]];
+          }
+        }
+
+        // EXTRA LIFE: Add one life (max: maxLives + 1)
+        if (type === "extra_life") {
+          updates.lives = Math.min(prev.lives + 1, prev.maxLives + 1);
+        }
+
+        return { ...prev, ...updates };
+      });
+
+      return true;
+    },
+    [currentQuestion, state.powerUps]
+  );
 
   // ============================================
   // EFFECTS
@@ -284,6 +410,9 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
       // Questions just loaded - reinitialize state
       const newLevels = splitIntoLevels(questions, questionsPerLevel);
       const firstLevel = newLevels[0] || [];
+
+      // Check if level 1 is Time Rush mode
+      const isTimeRush = config.timeRushLevels.includes(1);
 
       setState({
         currentLevel: 1,
@@ -303,8 +432,12 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
           extra_life: config.startingPowerups.extra_life,
         },
         activePowerUps: [],
-        mode: "normal",
-        timeRushTimer: null,
+        weakenedOptionIndexes: [],
+        hiddenOptionIndexes: [],
+        mode: isTimeRush ? "timeRush" : "normal",
+        isTimeRushMode: isTimeRush,
+        timeRushTimer: isTimeRush ? config.timeRushSeconds : null,
+        questionStartedAt: isTimeRush ? Date.now() : null,
         completedLevels: [],
         score: { correct: 0, total: 0, percentage: 0 },
         sessionStartedAt: Date.now(),
@@ -334,6 +467,48 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
     }
   }, [isQuizComplete]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Time Rush countdown timer
+   * Decrements timer every second, auto-fails when time runs out
+   */
+  useEffect(() => {
+    if (!state.isTimeRushMode || state.timeRushTimer === null || state.timeRushTimer <= 0) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setState((prev) => {
+        if (!prev.isTimeRushMode || prev.timeRushTimer === null || prev.timeRushTimer <= 0) {
+          return prev;
+        }
+
+        const newTimer = prev.timeRushTimer - 1;
+
+        // If timer hits 0, auto-fail the question
+        if (newTimer <= 0) {
+          // Lose life and reset streak
+          const newLives = Math.max(0, prev.lives - 1);
+          const newScore = calculateScore(prev.score.correct, prev.score.total + 1);
+
+          return {
+            ...prev,
+            timeRushTimer: 0,
+            lives: newLives,
+            streak: 0,
+            score: newScore,
+          };
+        }
+
+        return {
+          ...prev,
+          timeRushTimer: newTimer,
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [state.isTimeRushMode, state.timeRushTimer]);
+
   // ============================================
   // RETURN API
   // ============================================
@@ -347,6 +522,7 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
     nextQuestion,
     nextLevel,
     resetLevel,
+    usePowerUp,
 
     // Status
     isLevelComplete,

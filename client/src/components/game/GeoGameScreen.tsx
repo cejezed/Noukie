@@ -10,10 +10,11 @@ import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { GeoGameHUD } from "./GeoGameHUD";
 import GeoGameSummary from "./GeoGameSummary";
+import PowerUpButton from "./PowerUpButton";
 import { useGameQuizEngine } from "@/hooks/useGameQuizEngine";
 import { getSubjectConfig, computeRank } from "@/config/gameSubjects";
 import { saveGameSession } from "@/api/game";
-import type { QuizItem, RankInfo, SaveGameSessionResponse } from "@/types/game";
+import type { QuizItem, RankInfo, SaveGameSessionResponse, PowerUpType } from "@/types/game";
 
 // ============================================
 // HELPER FUNCTIONS
@@ -95,6 +96,9 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   const [isCorrect, setIsCorrect] = useState(false);
   const [xpEarned, setXpEarned] = useState(0);
 
+  // Power-up feedback state
+  const [powerUpMessage, setPowerUpMessage] = useState<string | null>(null);
+
   // Backend persistence state
   const [isSaving, setIsSaving] = useState(false);
   const [savedData, setSavedData] = useState<SaveGameSessionResponse | null>(null);
@@ -149,7 +153,7 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
     },
   });
 
-  const { state, currentQuestion, isLevelComplete, isQuizComplete, answerQuestion, nextQuestion, nextLevel, resetLevel } = engine;
+  const { state, currentQuestion, isLevelComplete, isQuizComplete, answerQuestion, nextQuestion, nextLevel, resetLevel, usePowerUp } = engine;
 
   // Reset feedback when question changes
   useEffect(() => {
@@ -157,6 +161,7 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
     setSelectedAnswer("");
     setIsCorrect(false);
     setXpEarned(0);
+    setPowerUpMessage(null);
   }, [currentQuestion?.id]);
 
   // Auto-progress to next level when current level is complete
@@ -169,6 +174,28 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
       return () => clearTimeout(timer);
     }
   }, [isLevelComplete, isQuizComplete, nextLevel]);
+
+  // Handle Time Rush timer expiration
+  useEffect(() => {
+    if (state.isTimeRushMode && state.timeRushTimer === 0 && !showFeedback) {
+      // Timer expired - show feedback and auto-progress
+      setShowFeedback(true);
+      setSelectedAnswer("");
+      setIsCorrect(false);
+      setXpEarned(0);
+
+      // Auto-progress after showing timeout message
+      const timer = setTimeout(() => {
+        if (state.lives <= 0) {
+          resetLevel();
+        } else {
+          nextQuestion();
+        }
+      }, 2000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [state.isTimeRushMode, state.timeRushTimer, showFeedback, state.lives, nextQuestion, resetLevel]);
 
   // ============================================
   // HANDLERS
@@ -201,6 +228,25 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
 
   const handleBackToOverview = () => {
     window.location.href = "/toets";
+  };
+
+  const handlePowerUpUse = (type: PowerUpType) => {
+    const success = usePowerUp(type);
+
+    if (success) {
+      const messages: Record<PowerUpType, string> = {
+        hint: "💡 Hint gebruikt! Één fout antwoord is nu grijs.",
+        joker: "🎯 Joker gebruikt! Twee foute antwoorden zijn verwijderd.",
+        extra_life: "❤️ Extra Leben gebruikt! Je hebt een hart erbij gekregen.",
+      };
+
+      setPowerUpMessage(messages[type]);
+
+      // Auto-hide message after 3 seconds
+      setTimeout(() => {
+        setPowerUpMessage(null);
+      }, 3000);
+    }
   };
 
   // ============================================
@@ -388,6 +434,37 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
           Vraag {state.currentQuestionIndex + 1} van {state.questionsInLevel.length}
         </div>
 
+        {/* Power-ups */}
+        {!showFeedback && (
+          <div className="mb-4 flex gap-3">
+            <PowerUpButton
+              type="hint"
+              amount={state.powerUps.hint}
+              onUse={() => handlePowerUpUse("hint")}
+              disabled={showFeedback}
+            />
+            <PowerUpButton
+              type="joker"
+              amount={state.powerUps.joker}
+              onUse={() => handlePowerUpUse("joker")}
+              disabled={showFeedback}
+            />
+            <PowerUpButton
+              type="extra_life"
+              amount={state.powerUps.extra_life}
+              onUse={() => handlePowerUpUse("extra_life")}
+              disabled={showFeedback}
+            />
+          </div>
+        )}
+
+        {/* Power-up feedback message */}
+        {powerUpMessage && (
+          <div className="mb-4 p-3 rounded-xl bg-blue-50 border border-blue-300 text-blue-800 text-sm font-medium animate-pulse">
+            {powerUpMessage}
+          </div>
+        )}
+
         {/* Question prompt */}
         <h1
           className="text-2xl font-semibold mb-6 p-4 rounded-xl"
@@ -402,6 +479,11 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
             {choices.map((choice: string, i: number) => {
               const isChosen = showFeedback && choice === selectedAnswer;
               const isRight = showFeedback && answersMatch(choice, correctAnswer);
+              const isWeakened = state.weakenedOptionIndexes.includes(i);
+              const isHidden = state.hiddenOptionIndexes.includes(i);
+
+              // Skip rendering hidden options (from Joker power-up)
+              if (isHidden) return null;
 
               // Styling logic
               const base = "text-left border-2 rounded-xl p-4 transition-all font-medium";
@@ -410,8 +492,9 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
               const chosenWrong = isChosen && !isRight ? " border-red-600 bg-red-50" : "";
               const notChosenButRight = !isChosen && isRight ? " border-emerald-500 bg-emerald-50" : "";
               const defaultBorder = !showFeedback ? " border-gray-300" : "";
+              const weakenedStyle = isWeakened ? " opacity-40 bg-gray-100" : "";
 
-              const classes = [base, hover, chosenRight, chosenWrong, notChosenButRight, defaultBorder]
+              const classes = [base, hover, chosenRight, chosenWrong, notChosenButRight, defaultBorder, weakenedStyle]
                 .join(" ")
                 .trim();
 
@@ -425,7 +508,7 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
                   <div className="flex items-start gap-3">
                     {showFeedback && isRight && <span className="text-2xl">✅</span>}
                     {showFeedback && isChosen && !isRight && <span className="text-2xl">❌</span>}
-                    <span>{choice}</span>
+                    <span className={isWeakened ? "line-through text-gray-500" : ""}>{choice}</span>
                   </div>
                 </button>
               );
@@ -441,7 +524,19 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
         {showFeedback && (
           <div className="rounded-xl border-2 p-6 bg-white space-y-4">
             {/* Feedback message */}
-            {isCorrect ? (
+            {state.isTimeRushMode && state.timeRushTimer === 0 && !isCorrect ? (
+              // Time Rush timeout
+              <div className="flex items-center gap-2">
+                <span className="text-3xl">⏱️</span>
+                <div>
+                  <p className="text-red-700 font-bold text-lg">Tijd is op!</p>
+                  <p className="text-sm text-red-600">-1 leven</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Juiste antwoord: <span className="font-semibold">{correctAnswer}</span>
+                  </p>
+                </div>
+              </div>
+            ) : isCorrect ? (
               <div className="flex items-center gap-2">
                 <span className="text-3xl">✅</span>
                 <div>
@@ -450,6 +545,11 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
                   {state.streak >= 3 && (
                     <p className="text-sm text-orange-600 flex items-center gap-1">
                       <span>⚡</span> Streak Bonus! ({state.streak} op rij)
+                    </p>
+                  )}
+                  {state.isTimeRushMode && xpEarned > config.baseXpPerQuestion && (
+                    <p className="text-sm text-blue-600 flex items-center gap-1">
+                      <span>⚡</span> Time Rush Bonus! (+{config.timeRushBonusXp} XP)
                     </p>
                   )}
                 </div>

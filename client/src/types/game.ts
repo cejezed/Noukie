@@ -47,6 +47,10 @@ export interface SubjectGameConfig {
   streakBonusMultiplier: number;  // XP multiplier at 3+ streak
   timeRushBonusXp: number;        // Extra XP for fast answers in Time Rush mode
 
+  // Time Rush settings
+  timeRushSeconds: number;      // Seconds per question in Time Rush mode
+  timeRushLevels: number[];     // Which level numbers are Time Rush (e.g., [2, 4])
+
   // Lives
   livesPerLevel: number;
 
@@ -132,9 +136,15 @@ export interface GameState {
   powerUps: PowerUpsInventory;
   activePowerUps: ActivePowerUp[];
 
+  // Power-up effects on current question
+  weakenedOptionIndexes: number[];  // Hint: which options are grayed out
+  hiddenOptionIndexes: number[];    // Joker: which options are hidden
+
   // Special modes
   mode: GameMode;
-  timeRushTimer: number | null;   // Seconds remaining (null = no timer)
+  isTimeRushMode: boolean;          // Is current level in Time Rush mode
+  timeRushTimer: number | null;     // Seconds remaining (null = no timer)
+  questionStartedAt: number | null; // Timestamp when current question started (for Time Rush)
 
   // Progress
   completedLevels: number[];      // Level numbers that are completed

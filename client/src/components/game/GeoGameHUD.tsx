@@ -24,6 +24,10 @@ interface GeoGameHUDProps {
 export function GeoGameHUD(props: GeoGameHUDProps) {
   const { currentLevel, totalLevels, lives, maxLives, streak, xp, timer } = props;
 
+  // Time Rush warning: show red background when timer <= 3 seconds
+  const isTimerWarning = timer !== null && timer !== undefined && timer <= 3 && timer > 0;
+  const isTimeRushMode = timer !== null && timer !== undefined;
+
   return (
     <div className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm sticky top-0 z-10">
       <div className="max-w-[800px] mx-auto">
@@ -33,6 +37,12 @@ export function GeoGameHUD(props: GeoGameHUDProps) {
             <span className="font-semibold text-gray-700">
               Level {currentLevel}/{totalLevels}
             </span>
+            {/* Time Rush badge */}
+            {isTimeRushMode && (
+              <span className="px-2 py-0.5 rounded-full bg-red-600 text-white text-xs font-bold">
+                TIME RUSH
+              </span>
+            )}
           </div>
 
           {/* Center: Lives */}
@@ -48,7 +58,7 @@ export function GeoGameHUD(props: GeoGameHUDProps) {
             ))}
           </div>
 
-          {/* Right: Streak & XP */}
+          {/* Right: Streak, XP, Timer */}
           <div className="flex items-center gap-4">
             {/* Streak */}
             {streak > 0 && (
@@ -65,10 +75,19 @@ export function GeoGameHUD(props: GeoGameHUDProps) {
             </div>
 
             {/* Timer (Time Rush mode) */}
-            {timer !== null && timer !== undefined && (
-              <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-100 text-red-700">
+            {isTimeRushMode && (
+              <div
+                className={`
+                  flex items-center gap-1 px-2 py-1 rounded-full font-semibold
+                  ${
+                    isTimerWarning
+                      ? "bg-red-600 text-white animate-pulse"
+                      : "bg-red-100 text-red-700"
+                  }
+                `}
+              >
                 <span className="text-base">⏱️</span>
-                <span className="font-semibold">{timer}s</span>
+                <span>{timer}s</span>
               </div>
             )}
           </div>

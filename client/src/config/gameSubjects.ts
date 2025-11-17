@@ -44,6 +44,10 @@ export const SUBJECT_GAME_CONFIG: Record<SubjectKey, SubjectGameConfig> = {
     streakBonusMultiplier: 1.5,   // XP multiplier when streak >= 3
     timeRushBonusXp: 5,           // Extra XP for answering within time limit
 
+    // Time Rush settings
+    timeRushSeconds: 12,          // 12 seconds per question in Time Rush mode
+    timeRushLevels: [2],          // Level 2 is Time Rush (can add more: [2, 4])
+
     // Lives system
     livesPerLevel: 3,             // Start each level with 3 hearts
 
