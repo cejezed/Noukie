@@ -152,6 +152,8 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
   }, [state.currentQuestionIndex, state.questionsInLevel.length]);
 
   const isQuizComplete = useMemo(() => {
+    // Quiz is only complete if we have levels AND we've passed the last one
+    if (state.totalLevels === 0) return false;
     return state.currentLevel > state.totalLevels;
   }, [state.currentLevel, state.totalLevels]);
 
@@ -273,6 +275,43 @@ export function useGameQuizEngine(options: UseGameQuizEngineOptions): GameEngine
   // ============================================
   // EFFECTS
   // ============================================
+
+  /**
+   * Reset game state when questions change (e.g., when data loads)
+   */
+  useEffect(() => {
+    if (questions.length > 0 && state.totalLevels === 0) {
+      // Questions just loaded - reinitialize state
+      const newLevels = splitIntoLevels(questions, questionsPerLevel);
+      const firstLevel = newLevels[0] || [];
+
+      setState({
+        currentLevel: 1,
+        totalLevels: newLevels.length,
+        questionsPerLevel,
+        currentQuestionIndex: 0,
+        questionsInLevel: firstLevel,
+        allLevels: newLevels,
+        xp: 0,
+        lives: config.livesPerLevel,
+        maxLives: config.livesPerLevel,
+        streak: 0,
+        bestStreak: 0,
+        powerUps: {
+          hint: config.startingPowerups.hint,
+          joker: config.startingPowerups.joker,
+          extra_life: config.startingPowerups.extra_life,
+        },
+        activePowerUps: [],
+        mode: "normal",
+        timeRushTimer: null,
+        completedLevels: [],
+        score: { correct: 0, total: 0, percentage: 0 },
+        sessionStartedAt: Date.now(),
+        currentLevelStartedAt: Date.now(),
+      });
+    }
+  }, [questions, questionsPerLevel, config, state.totalLevels]);
 
   /**
    * Trigger quiz complete callback when all levels done

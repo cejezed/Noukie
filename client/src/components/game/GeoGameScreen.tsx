@@ -105,9 +105,12 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   const [isCorrect, setIsCorrect] = useState(false);
   const [xpEarned, setXpEarned] = useState(0);
 
-  // Initialize game engine
+  // Get questions data (wait for it to load)
+  const questionsData = questionsQuery.data || [];
+
+  // Initialize game engine ONLY when questions are loaded
   const engine = useGameQuizEngine({
-    questions: questionsQuery.data || [],
+    questions: questionsData,
     config,
     questionsPerLevel: 4,
     onLevelComplete: (level, stats) => {
