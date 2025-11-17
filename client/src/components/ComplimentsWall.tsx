@@ -16,15 +16,14 @@ import { nl } from "date-fns/locale";
  * - Empty state when no compliments
  */
 export default function ComplimentsWall() {
-  const { user } = useAuth();
+  const { user, getAuthHeaders } = useAuth();
 
   // Fetch received compliments
   const { data: compliments = [], isLoading } = useQuery<any[]>({
     queryKey: ["compliments-received", user?.id],
     queryFn: async () => {
-      const response = await fetch("/api/compliments/mine", {
-        headers: { "x-user-id": user?.id || "" },
-      });
+      const headers = await getAuthHeaders();
+      const response = await fetch("/api/compliments/mine", { headers });
       if (!response.ok) throw new Error("Failed to fetch compliments");
       return response.json();
     },

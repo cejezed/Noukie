@@ -14,15 +14,14 @@ import { TrendingUp, Users, Heart, Calendar, Award } from "lucide-react";
  * - No personal identifiers (for privacy)
  */
 export default function ClassMoodMeter() {
-  const { user } = useAuth();
+  const { user, getAuthHeaders } = useAuth();
 
   // Fetch classroom stats
   const { data: stats, isLoading } = useQuery<any>({
     queryKey: ["compliments-stats", user?.id],
     queryFn: async () => {
-      const response = await fetch("/api/compliments/stats", {
-        headers: { "x-user-id": user?.id || "" },
-      });
+      const headers = await getAuthHeaders();
+      const response = await fetch("/api/compliments/stats", { headers });
       if (!response.ok) throw new Error("Failed to fetch stats");
       return response.json();
     },

@@ -22,7 +22,7 @@ import { Badge } from "@/components/ui/badge";
  * - Badge display
  */
 export default function ComplimentDailyGive() {
-  const { user } = useAuth();
+  const { user, getAuthHeaders } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -48,9 +48,8 @@ export default function ComplimentDailyGive() {
   const { data: classmates = [] } = useQuery<any[]>({
     queryKey: ["classmates", user?.id],
     queryFn: async () => {
-      const response = await fetch("/api/compliments/classmates", {
-        headers: { "x-user-id": user?.id || "" },
-      });
+      const headers = await getAuthHeaders();
+      const response = await fetch("/api/compliments/classmates", { headers });
       if (!response.ok) throw new Error("Failed to fetch classmates");
       return response.json();
     },
@@ -61,9 +60,8 @@ export default function ComplimentDailyGive() {
   const { data: streak } = useQuery<any>({
     queryKey: ["compliment-streak", user?.id],
     queryFn: async () => {
-      const response = await fetch("/api/compliments/streak", {
-        headers: { "x-user-id": user?.id || "" },
-      });
+      const headers = await getAuthHeaders();
+      const response = await fetch("/api/compliments/streak", { headers });
       if (!response.ok) throw new Error("Failed to fetch streak");
       return response.json();
     },
@@ -73,12 +71,10 @@ export default function ComplimentDailyGive() {
   // Send compliment mutation
   const sendCompliment = useMutation({
     mutationFn: async (data: { to_user: string; message: string }) => {
+      const headers = await getAuthHeaders();
       const response = await fetch("/api/compliments", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-user-id": user?.id || "",
-        },
+        headers,
         body: JSON.stringify(data),
       });
 
