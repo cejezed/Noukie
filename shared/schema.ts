@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, uuid, time, date, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, uuid, time, date, boolean, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   // Student-specific fields
   education_level: text("education_level", { enum: ["vmbo", "havo", "vwo", "mbo"] }), // null for parents
   grade: integer("grade"), // 1-6 for all levels, null for parents
+  classroom_id: uuid("classroom_id"), // References classrooms table
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
@@ -109,6 +110,39 @@ export const imported_events = pgTable("imported_events", {
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
+// Compliments feature tables
+export const classrooms = pgTable("classrooms", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  education_level: text("education_level", { enum: ["vmbo", "havo", "vwo", "mbo"] }).notNull(),
+  grade: integer("grade").notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const compliments = pgTable("compliments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  from_user: uuid("from_user"), // NULL for anonymous
+  to_user: uuid("to_user").notNull(), // References auth.users
+  classroom_id: uuid("classroom_id").references(() => classrooms.id).notNull(),
+  message: text("message").notNull(),
+  toxicity_score: real("toxicity_score").default(0),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const compliment_streaks = pgTable("compliment_streaks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid("user_id").notNull(), // References auth.users
+  current_streak: integer("current_streak").default(0),
+  longest_streak: integer("longest_streak").default(0),
+  last_sent_date: date("last_sent_date"),
+  total_sent: integer("total_sent").default(0),
+  total_received: integer("total_received").default(0),
+  points: integer("points").default(0),
+  badges: jsonb("badges").default(sql`'[]'::jsonb`),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   created_at: true,
@@ -156,6 +190,22 @@ export const insertImportedEventSchema = createInsertSchema(imported_events).omi
   created_at: true,
 });
 
+export const insertClassroomSchema = createInsertSchema(classrooms).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertComplimentSchema = createInsertSchema(compliments).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertComplimentStreakSchema = createInsertSchema(compliment_streaks).omit({
+  id: true,
+  created_at: true,
+  updated_at: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -177,3 +227,9 @@ export type CalendarIntegration = typeof calendar_integrations.$inferSelect;
 export type InsertCalendarIntegration = z.infer<typeof insertCalendarIntegrationSchema>;
 export type ImportedEvent = typeof imported_events.$inferSelect;
 export type InsertImportedEvent = z.infer<typeof insertImportedEventSchema>;
+export type Classroom = typeof classrooms.$inferSelect;
+export type InsertClassroom = z.infer<typeof insertClassroomSchema>;
+export type Compliment = typeof compliments.$inferSelect;
+export type InsertCompliment = z.infer<typeof insertComplimentSchema>;
+export type ComplimentStreak = typeof compliment_streaks.$inferSelect;
+export type InsertComplimentStreak = z.infer<typeof insertComplimentStreakSchema>;

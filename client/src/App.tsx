@@ -25,6 +25,7 @@ import Toets from "./pages/Toets";
 import StudyPlay from "./pages/study/StudyPlay";
 import AdminQuiz from "./pages/study/AdminQuiz";
 import { ErrorBoundary } from "./components/dev/ErrorBoundary";
+import Compliments from "./pages/Compliments";
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
@@ -105,6 +106,9 @@ function AuthenticatedApp() {
         {/* Admin voor toetsen (voor jou); beide paden werken */}
         <Route path="/study/admin" component={AdminQuiz} />
         <Route path="/toets/admin" component={AdminQuiz} />
+
+        {/* Compliments feature */}
+        <Route path="/compliments" component={Compliments} />
 
         {/* 6) Instellingen */}
         <Route path="/instellingen" component={Instellingen} />

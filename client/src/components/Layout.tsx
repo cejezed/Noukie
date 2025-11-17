@@ -15,6 +15,7 @@ export default function Layout({ children }: LayoutProps) {
     { id: "vandaag", label: "", icon: Icons.Home, path: "/" },
     { id: "planning", label: "Planning", icon: Icons.Calendar, path: "/planning" },
     { id: "mental", label: "Mentaal", icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
+    { id: "compliments", label: "💌", icon: Icons.Heart, path: "/compliments" },
     // ✅ Uitleg pad gecorrigeerd naar lowercase
     { id: "uitleg", label: "Uitleg", icon: Icons.HelpCircle, path: "/leerchat" },
     { id: "leren", label: "Leren", icon: Icons.BookOpen, path: "/leren" },
@@ -81,7 +82,7 @@ export default function Layout({ children }: LayoutProps) {
           data-testid="bottom-navigation"
         >
           <div className={`${containerWidths}`}>
-            <div className="grid grid-cols-7 gap-0">
+            <div className="grid grid-cols-8 gap-0">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = location === tab.path;
