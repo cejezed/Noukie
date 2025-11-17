@@ -269,7 +269,39 @@ export interface UserGeoCard {
 export interface SaveGameSessionRequest {
   quiz_id: string;
   subject: SubjectKey;
-  stats: GameSessionStats;
+  total_questions: number;
+  correct_answers: number;
+  xp_earned: number;
+  best_streak: number;
+  levels_completed: number;
+  duration: number;  // in seconds
+  score_percentage: number;
+}
+
+/**
+ * Response after saving game session
+ */
+export interface SaveGameSessionResponse {
+  session: GameSessionRecord;
+  updatedProfile: UserGameProfile;
+  updatedSubjectStats: UserSubjectStats;
+  rankInfo: RankInfo;
+}
+
+/**
+ * Request to get user's game profile
+ */
+export interface GetGameProfileRequest {
+  subject?: SubjectKey;  // Optional: filter by subject
+}
+
+/**
+ * Response with user's current game profile
+ */
+export interface GetGameProfileResponse {
+  profile: UserGameProfile;
+  subjectStats: UserSubjectStats[];
+  rankInfo?: RankInfo;  // For specific subject if requested
 }
 
 /**
@@ -282,10 +314,26 @@ export interface UpdatePowerUpsRequest {
 }
 
 /**
- * Response with user's current game progress
+ * Response with user's current game progress (legacy, for backwards compat)
  */
 export interface UserGameProgress {
   profile: UserGameProfile;
   subjectStats: UserSubjectStats[];
   powerUps: UserPowerUp[];
+}
+
+// ============================================
+// RANK TYPES
+// ============================================
+
+/**
+ * Computed rank information
+ */
+export interface RankInfo {
+  rankLabel: string;      // "Regionaal", "Nationaal", etc.
+  rankIndex: number;      // 0-based index in rankLabels array
+  currentXp: number;      // User's current XP for this subject
+  nextRankXp: number | null;  // XP needed for next rank (null = max rank)
+  xpToNextRank: number | null;  // XP remaining to next rank
+  progressPercent: number;  // % progress to next rank (0-100)
 }

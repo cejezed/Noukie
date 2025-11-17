@@ -147,3 +147,52 @@ export function calculateXP(params: {
 
   return xp;
 }
+
+/**
+ * Compute complete rank information for a subject
+ *
+ * @param subjectXp - User's current XP for this subject
+ * @param config - Subject configuration
+ * @returns Complete rank info including progress to next rank
+ */
+export function computeRank(
+  subjectXp: number,
+  config: SubjectGameConfig
+): import("@/types/game").RankInfo {
+  const { rankLabels, rankThresholds } = config;
+
+  // Find current rank index
+  let rankIndex = 0;
+  for (let i = rankThresholds.length - 1; i >= 0; i--) {
+    if (subjectXp >= rankThresholds[i]) {
+      rankIndex = i;
+      break;
+    }
+  }
+
+  const rankLabel = rankLabels[rankIndex] || rankLabels[0];
+  const currentThreshold = rankThresholds[rankIndex];
+  const nextRankXp = rankIndex < rankThresholds.length - 1 ? rankThresholds[rankIndex + 1] : null;
+
+  let xpToNextRank: number | null = null;
+  let progressPercent = 0;
+
+  if (nextRankXp !== null) {
+    xpToNextRank = nextRankXp - subjectXp;
+    const xpInCurrentRank = subjectXp - currentThreshold;
+    const xpNeededForRank = nextRankXp - currentThreshold;
+    progressPercent = Math.min(100, Math.round((xpInCurrentRank / xpNeededForRank) * 100));
+  } else {
+    // Max rank reached
+    progressPercent = 100;
+  }
+
+  return {
+    rankLabel,
+    rankIndex,
+    currentXp: subjectXp,
+    nextRankXp,
+    xpToNextRank,
+    progressPercent,
+  };
+}

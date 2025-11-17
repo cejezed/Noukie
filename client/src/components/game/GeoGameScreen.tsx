@@ -1,29 +1,19 @@
 /**
- * GeoGameScreen Component (MVP Version)
+ * GeoGameScreen Component (with Backend Persistence)
  *
  * Core game UI that renders questions in gameified format.
  * Uses useGameQuizEngine hook for state management.
- *
- * MVP Features:
- * - Display questions with game HUD
- * - Multiple choice answers
- * - XP/streak feedback
- * - Level progression
- * - Lives system
- *
- * TODO (future):
- * - Power-ups UI
- * - Time Rush mode
- * - Level transition animations
- * - Summary screen integration
+ * Saves session to backend and shows GeoGameSummary on completion.
  */
 
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { GeoGameHUD } from "./GeoGameHUD";
+import GeoGameSummary from "./GeoGameSummary";
 import { useGameQuizEngine } from "@/hooks/useGameQuizEngine";
-import { getSubjectConfig } from "@/config/gameSubjects";
-import type { QuizItem } from "@/types/game";
+import { getSubjectConfig, computeRank } from "@/config/gameSubjects";
+import { saveGameSession } from "@/api/game";
+import type { QuizItem, RankInfo, SaveGameSessionResponse } from "@/types/game";
 
 // ============================================
 // HELPER FUNCTIONS
@@ -105,6 +95,10 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   const [isCorrect, setIsCorrect] = useState(false);
   const [xpEarned, setXpEarned] = useState(0);
 
+  // Backend persistence state
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedData, setSavedData] = useState<SaveGameSessionResponse | null>(null);
+
   // Get questions data (wait for it to load)
   const questionsData = questionsQuery.data || [];
 
@@ -117,9 +111,41 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
       console.log("Level complete:", level, stats);
       // TODO: Show level summary modal
     },
-    onQuizComplete: (stats) => {
+    onQuizComplete: async (stats) => {
       console.log("Quiz complete:", stats);
-      // TODO: Navigate to summary screen
+
+      // Save session to backend
+      setIsSaving(true);
+      try {
+        const duration = Math.floor((Date.now() - state.sessionStartedAt) / 1000);
+
+        const response = await saveGameSession({
+          quiz_id: quizId,
+          subject,
+          total_questions: stats.totalQuestions,
+          correct_answers: stats.correctAnswers,
+          xp_earned: stats.totalXpEarned,
+          best_streak: stats.bestStreak,
+          levels_completed: stats.levelsCompleted,
+          duration,
+          score_percentage: stats.scorePercentage,
+        });
+
+        setSavedData(response);
+        console.log("✅ Session saved:", response);
+      } catch (error) {
+        console.error("❌ Failed to save session:", error);
+        // Graceful fallback: compute rank locally
+        const fallbackRankInfo = computeRank(state.xp, config);
+        setSavedData({
+          session: {} as any,
+          updatedProfile: {} as any,
+          updatedSubjectStats: {} as any,
+          rankInfo: fallbackRankInfo,
+        });
+      } finally {
+        setIsSaving(false);
+      }
     },
   });
 
@@ -169,6 +195,14 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
     }
   };
 
+  const handleRestart = () => {
+    window.location.reload();
+  };
+
+  const handleBackToOverview = () => {
+    window.location.href = "/toets";
+  };
+
   // ============================================
   // RENDER: LOADING & ERROR STATES
   // ============================================
@@ -212,15 +246,45 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   }
 
   // ============================================
-  // RENDER: QUIZ COMPLETE
+  // RENDER: QUIZ COMPLETE (with Summary)
   // ============================================
 
   if (isQuizComplete) {
+    // Show loading while saving
+    if (isSaving) {
+      return (
+        <main className="mx-auto max-w-[800px] px-6 py-8">
+          <div className="text-center space-y-6">
+            <div className="animate-spin w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full mx-auto" />
+            <p className="text-gray-600">Je resultaten worden opgeslagen...</p>
+          </div>
+        </main>
+      );
+    }
+
+    // Show summary with saved data
+    if (savedData) {
+      return (
+        <GeoGameSummary
+          quizTitle="HAVO 5 Aardrijkskunde Quiz"
+          totalQuestions={state.score.total}
+          correctAnswers={state.score.correct}
+          xpEarned={state.xp}
+          bestStreak={state.bestStreak}
+          scorePercentage={state.score.percentage}
+          rankInfo={savedData.rankInfo}
+          config={config}
+          onRestart={handleRestart}
+          onBackToOverview={handleBackToOverview}
+        />
+      );
+    }
+
+    // Fallback: show basic complete screen if save failed
     return (
       <main className="mx-auto max-w-[800px] px-6 py-8">
         <div className="text-center space-y-6">
           <h1 className="text-3xl font-bold">🎉 Quiz Voltooid!</h1>
-
           <div className="bg-white border rounded-2xl p-6 space-y-4">
             <div className="grid grid-cols-2 gap-4 text-center">
               <div>
@@ -231,29 +295,14 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
                 <div className="text-3xl font-bold text-purple-600">{state.xp} XP</div>
                 <div className="text-sm text-gray-600">Verdiend</div>
               </div>
-              <div>
-                <div className="text-3xl font-bold text-orange-600">{state.bestStreak}</div>
-                <div className="text-sm text-gray-600">Beste Streak</div>
-              </div>
-              <div>
-                <div className="text-3xl font-bold text-green-600">{state.completedLevels.length}</div>
-                <div className="text-sm text-gray-600">Levels</div>
-              </div>
             </div>
           </div>
-
-          <div className="space-y-2">
-            <button
-              onClick={() => window.location.reload()}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-blue-500 text-white font-semibold hover:opacity-90"
-            >
-              Speel Opnieuw
-            </button>
-            <br />
-            <a className="text-sky-700 underline" href="/toets">
-              Terug naar Toetsen
-            </a>
-          </div>
+          <button
+            onClick={handleBackToOverview}
+            className="px-6 py-3 rounded-xl bg-teal-600 text-white font-semibold hover:opacity-90"
+          >
+            Terug naar Toetsen
+          </button>
         </div>
       </main>
     );
