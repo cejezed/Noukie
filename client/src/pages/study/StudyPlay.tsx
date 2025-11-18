@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { usePlaytime } from "@/hooks/usePlaytime";
 
 function useUserId() {
   const [id, setId] = useState<string | null>(null);
@@ -43,11 +44,18 @@ function eq(a?: string | null, b?: string | null) {
 export default function StudyPlay() {
   const userId = useUserId();
   const quizId = getQueryParam("quiz");
+  const mode = getQueryParam("mode") || "practice"; // 'practice' or 'game'
 
   const [resultId, setResultId] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<{
+    xpAwarded: number;
+    playtimeAwarded: number;
+    leveledUp: boolean;
+    newLevel: number;
+  } | null>(null);
 
   // Feedback state
   const [showFb, setShowFb] = useState(false);
@@ -59,6 +67,15 @@ export default function StudyPlay() {
   const answeredSet = useRef<Set<number>>(new Set());
   const [answeredCount, setAnsweredCount] = useState(0);
   const [correctCount, setCorrectCount] = useState(0);
+
+  // Game mode: playtime & timer
+  const isGameMode = mode === "game";
+  const GAME_COST_MINUTES = 2;
+  const GAME_DURATION_SECONDS = 120;
+  const { balanceMinutes, usePlaytime: deductPlaytime, isUsing } = usePlaytime();
+  const [timeRemaining, setTimeRemaining] = useState(GAME_DURATION_SECONDS);
+  const [gameStarted, setGameStarted] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const questions = useQuery({
     queryKey: ["quiz-questions", quizId, userId],
@@ -86,17 +103,65 @@ export default function StudyPlay() {
     onError: (e: any) => setUiError(String(e?.message || e)),
   });
 
-  // Start poging
+  // Start quiz (with playtime deduction for game mode)
   useEffect(() => {
     if (!userId || !quizId) return;
     let cancelled = false;
-    play.mutate(
-      { action: "start", quiz_id: quizId },
-      { onSuccess: (r) => { if (!cancelled) setResultId(r?.result?.id ?? null); } }
-    );
+
+    const startQuiz = async () => {
+      // If game mode, deduct playtime first
+      if (isGameMode) {
+        if ((balanceMinutes ?? 0) < GAME_COST_MINUTES) {
+          setUiError(`Je hebt ${GAME_COST_MINUTES} minuten speeltijd nodig voor game mode.`);
+          return;
+        }
+
+        try {
+          await deductPlaytime(GAME_COST_MINUTES);
+          setGameStarted(true);
+        } catch (e) {
+          setUiError("Kon speeltijd niet aftrekken. Probeer het opnieuw.");
+          return;
+        }
+      } else {
+        setGameStarted(true);
+      }
+
+      // Start the quiz
+      play.mutate(
+        { action: "start", quiz_id: quizId },
+        { onSuccess: (r) => { if (!cancelled) setResultId(r?.result?.id ?? null); } }
+      );
+    };
+
+    startQuiz();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, quizId]);
+
+  // Timer countdown for game mode
+  useEffect(() => {
+    if (!isGameMode || !gameStarted || done) return;
+
+    timerRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          // Time's up! Force finish
+          setDone(true);
+          if (resultId) {
+            play.mutate({ action: "finish", result_id: resultId });
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isGameMode, gameStarted, done, resultId, play]);
 
   const list = questions.data ?? [];
   const q = list[index];
@@ -108,11 +173,20 @@ export default function StudyPlay() {
     if (allAnswered && resultId && !finishedRef.current) {
       finishedRef.current = true;
       play.mutate(
-        { action: "finish", result_id: resultId },
-        { onSuccess: () => setDone(true), onError: () => setDone(true) }
+        { action: "finish", result_id: resultId, mode: mode, time_remaining: timeRemaining },
+        {
+          onSuccess: (data) => {
+            setDone(true);
+            // Save rewards data if available
+            if (data?.rewards) {
+              setRewards(data.rewards);
+            }
+          },
+          onError: () => setDone(true)
+        }
       );
     }
-  }, [index, list.length, resultId, play]);
+  }, [index, list.length, resultId, play, mode, timeRemaining]);
 
   const resetFeedback = () => {
     setShowFb(false);
@@ -180,9 +254,77 @@ export default function StudyPlay() {
     const pctDone = list.length ? Math.round((correctCount / list.length) * 100) : 0;
     return (
       <main className="mx-auto max-w-[800px] px-6 py-8">
-        <h1 className="text-2xl font-semibold mb-4">Klaar!</h1>
+        {isGameMode && (
+          <div className="mb-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl p-4 text-center">
+            <div className="text-4xl mb-2">🎮</div>
+            <div className="text-xl font-bold">Game Mode Voltooid!</div>
+            {timeRemaining > 0 ? (
+              <div className="text-sm opacity-90 mt-1">Met nog {formatTime(timeRemaining)} over</div>
+            ) : (
+              <div className="text-sm opacity-90 mt-1">Tijd is op!</div>
+            )}
+          </div>
+        )}
+        <h1 className="text-2xl font-semibold mb-4">Klaar! 🎉</h1>
         <p className="mb-2">Je antwoorden zijn opgeslagen.</p>
         <p className="mb-6">Score: <b>{correctCount}</b> / {list.length} ({pctDone}%)</p>
+
+        {/* StudyPlay Rewards Display */}
+        {rewards && (rewards.xpAwarded > 0 || rewards.playtimeAwarded > 0) && (
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-bold text-purple-900 mb-4">✨ Beloningen verdiend!</h2>
+
+            {rewards.xpAwarded > 0 && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">⭐</span>
+                <div>
+                  <p className="font-semibold text-purple-800">+{rewards.xpAwarded} XP</p>
+                  <p className="text-sm text-gray-600">
+                    {isGameMode
+                      ? `Ervaring verdiend! (inclusief game mode bonus ${rewards.xpAwarded > 75 ? '+speed bonus' : ''})`
+                      : 'Ervaring verdiend!'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {rewards.playtimeAwarded > 0 && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">🎮</span>
+                <div>
+                  <p className="font-semibold text-blue-800">+{rewards.playtimeAwarded} minuten</p>
+                  <p className="text-sm text-gray-600">
+                    {isGameMode
+                      ? `Speeltijd verdiend! (netto +${rewards.playtimeAwarded - GAME_COST_MINUTES} na kosten)`
+                      : 'Speeltijd verdiend!'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {rewards.leveledUp && (
+              <div className="mt-4 bg-gradient-to-r from-yellow-100 to-yellow-200 border-2 border-yellow-400 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl">🎊</span>
+                  <div>
+                    <p className="font-bold text-yellow-900 text-lg">Level Up!</p>
+                    <p className="text-yellow-800">Je bent nu level {rewards.newLevel}!</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-purple-200">
+              <a
+                className="inline-block bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-all"
+                href="/study/games"
+              >
+                🎮 Ga naar Games →
+              </a>
+            </div>
+          </div>
+        )}
+
         <a className="text-sky-700 underline" href="/toets">Terug naar Toetsen</a>
       </main>
     );
@@ -205,8 +347,48 @@ export default function StudyPlay() {
   const choices = normalizeChoices(q.choices);
   const explanation: string = q.explanation ?? "";
 
+  // Format timer display
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <main className="mx-auto max-w-[800px] px-6 py-8">
+      {/* Game Mode Header */}
+      {isGameMode && (
+        <div className={`mb-4 rounded-xl p-4 transition-all ${
+          timeRemaining <= 30
+            ? 'bg-gradient-to-r from-red-500 to-orange-500 animate-pulse'
+            : 'bg-gradient-to-r from-purple-500 to-pink-500'
+        } text-white`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">{timeRemaining <= 30 ? '⏰' : '🎮'}</span>
+              <div>
+                <div className="font-bold text-lg">Game Mode</div>
+                <div className="text-sm opacity-90">
+                  {timeRemaining <= 30 ? 'Snel! Tijd loopt af!' : 'Race tegen de klok!'}
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-3xl font-bold font-mono">{formatTime(timeRemaining)}</div>
+              <div className="text-xs opacity-75">Tijd over</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Practice Mode Indicator */}
+      {!isGameMode && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl p-3 text-sm flex items-center gap-2">
+          <span>📚</span>
+          <span>Oefen modus - Neem de tijd!</span>
+        </div>
+      )}
+
       {/* Voortgang + Score */}
       <div className="mb-4">
         <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
@@ -215,7 +397,7 @@ export default function StudyPlay() {
         </div>
         <div className="h-2 rounded bg-gray-200 overflow-hidden">
           <div
-            className="h-full bg-sky-600 transition-all"
+            className={`h-full transition-all ${isGameMode ? 'bg-gradient-to-r from-purple-600 to-pink-600' : 'bg-sky-600'}`}
             style={{ width: `${pct}%` }}
           />
         </div>

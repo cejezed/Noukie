@@ -21,6 +21,8 @@ export default function Layout({ children }: LayoutProps) {
 
     // ✅ Archief vervangen door Toets (quizlijst)
     { id: "toets", label: "Toets", icon: Icons.ClipboardList, path: "/toets" },
+    // ✅ Games Hub
+    { id: "games", label: "Games", icon: Icons.Gamepad2, path: "/study/games" },
     { id: "instellingen", label: "", icon: Icons.Settings, path: "/instellingen" },
   ];
 
@@ -81,7 +83,7 @@ export default function Layout({ children }: LayoutProps) {
           data-testid="bottom-navigation"
         >
           <div className={`${containerWidths}`}>
-            <div className="grid grid-cols-7 gap-0">
+            <div className="grid grid-cols-8 gap-0">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = location === tab.path;

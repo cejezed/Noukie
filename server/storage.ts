@@ -20,6 +20,24 @@ import {
   type InsertCalendarIntegration,
   type ImportedEvent,
   type InsertImportedEvent,
+  type MentalCheckin,
+  type InsertMentalCheckin,
+  type AppEvent,
+  type InsertAppEvent,
+  type RewardPoints,
+  type InsertRewardPoints,
+  type Reward,
+  type InsertReward,
+  type StudyPlaytime,
+  type InsertStudyPlaytime,
+  type StudyPlaytimeLog,
+  type InsertStudyPlaytimeLog,
+  type StudyProfile,
+  type InsertStudyProfile,
+  type StudyXpLog,
+  type InsertStudyXpLog,
+  type StudyScore,
+  type InsertStudyScore,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -76,6 +94,89 @@ export interface IStorage {
   getImportedEvent(userId: string, externalId: string): Promise<ImportedEvent | undefined>;
   createImportedEvent(event: InsertImportedEvent): Promise<ImportedEvent>;
   getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]>;
+
+  // Mental Checkins
+  getMentalCheckinsByStudentId(studentId: string, days?: number): Promise<MentalCheckin[]>;
+  getMentalMetrics(studentId: string): Promise<{
+    checkinsLast7d: number;
+    avgSleepLast7d: number;
+    avgStressLast7d: number;
+    avgEnergyLast7d: number;
+    daysNotFeelingWellLast30d: number;
+    helpNowCountLast30d: number;
+    funWithTopList: Array<{ label: string; count: number }>;
+  }>;
+  upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin>;
+
+  // Quiz Metrics
+  getQuizMetrics(studentId: string): Promise<{
+    quizzesCompletedLast7d: number;
+    avgQuizScoreLast7d: number;
+    bestQuizScoreLast7d: number;
+    retakesCountLast30d: number;
+    subjectsMostPracticedLast30d: Array<{ subject: string; count: number }>;
+  }>;
+
+  // Study Metrics
+  getStudyMetrics(studentId: string): Promise<{
+    vocabSessionsLast7d: number;
+    vocabWordsReviewedLast7d: number;
+    studySessionsLast7d: number;
+  }>;
+
+  // Usage Metrics
+  getUsageMetrics(studentId: string): Promise<{
+    loginsLast7d: number;
+    activeDaysLast7d: number;
+    lastActiveAt: string | null;
+    dailyActivityLast30d: Array<{ date: string; count: number }>;
+  }>;
+  createAppEvent(event: InsertAppEvent): Promise<AppEvent>;
+
+  // Rewards & Points
+  getRewardPoints(studentId: string): Promise<RewardPoints | undefined>;
+  upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints>;
+  getRewardsByParentId(parentId: string): Promise<Reward[]>;
+  getRewardsOverview(studentId: string, parentId: string): Promise<{
+    pointsTotal: number;
+    nextReward: { id: string; label: string; pointsRequired: number } | null;
+    rewards: Array<{
+      id: string;
+      label: string;
+      pointsRequired: number;
+      progressPercent: number;
+      isActive: boolean;
+    }>;
+  }>;
+  createReward(reward: InsertReward): Promise<Reward>;
+  updateReward(rewardId: string, updates: Partial<Reward>): Promise<void>;
+  deleteReward(rewardId: string): Promise<void>;
+
+  // StudyPlay Playtime System
+  getPlaytime(userId: string): Promise<StudyPlaytime | undefined>;
+  addPlaytime(userId: string, delta: number, reason: string, meta?: any): Promise<void>;
+  usePlaytime(userId: string, costMinutes: number): Promise<boolean>;
+  getPlaytimeLog(userId: string, days?: number): Promise<StudyPlaytimeLog[]>;
+  getTodayPlaytimeEarned(userId: string): Promise<number>;
+
+  // StudyPlay Profile & XP System
+  getProfile(userId: string): Promise<StudyProfile | undefined>;
+  awardXp(userId: string, delta: number, reason: string, meta?: any): Promise<{ newLevel: number; leveledUp: boolean }>;
+  incrementGamesPlayed(userId: string): Promise<void>;
+  incrementTestsCompleted(userId: string): Promise<void>;
+  updateStreak(userId: string): Promise<void>;
+
+  // StudyPlay Scores & Leaderboards
+  submitScore(score: InsertStudyScore): Promise<StudyScore>;
+  getLeaderboard(gameId: string, limit?: number): Promise<Array<{
+    userId: string;
+    displayName: string;
+    score: number;
+    rank: number;
+    levelReached?: number;
+  }>>;
+  getUserHighScore(userId: string, gameId: string): Promise<number>;
+  getUserScores(userId: string, gameId?: string): Promise<StudyScore[]>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -343,6 +444,765 @@ export class PostgresStorage implements IStorage {
 
   async getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]> {
     const { data, error } = await supabase.from("imported_events").select("*").eq("user_id", userId);
+    if (error) throw error;
+    return data || [];
+  }
+
+  // Mental Checkins
+  async getMentalCheckinsByStudentId(studentId: string, days: number = 30): Promise<MentalCheckin[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await supabase
+      .from("mental_checkins")
+      .select("*")
+      .eq("student_id", studentId)
+      .gte("date", startDate.toISOString().split('T')[0])
+      .order("date", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getMentalMetrics(studentId: string): Promise<{
+    checkinsLast7d: number;
+    avgSleepLast7d: number;
+    avgStressLast7d: number;
+    avgEnergyLast7d: number;
+    daysNotFeelingWellLast30d: number;
+    helpNowCountLast30d: number;
+    funWithTopList: Array<{ label: string; count: number }>;
+  }> {
+    // Get last 30 days of checkins
+    const checkins30d = await this.getMentalCheckinsByStudentId(studentId, 30);
+
+    // Get last 7 days of checkins
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const checkins7d = checkins30d.filter(c => new Date(c.date) >= sevenDaysAgo);
+
+    // Calculate averages for last 7 days
+    const avgSleepLast7d = checkins7d.length > 0
+      ? checkins7d.reduce((sum, c) => sum + (c.sleep_score || 0), 0) / checkins7d.length
+      : 0;
+
+    const avgStressLast7d = checkins7d.length > 0
+      ? checkins7d.reduce((sum, c) => sum + (c.stress_score || 0), 0) / checkins7d.length
+      : 0;
+
+    const avgEnergyLast7d = checkins7d.length > 0
+      ? checkins7d.reduce((sum, c) => sum + (c.energy_score || 0), 0) / checkins7d.length
+      : 0;
+
+    // Count "niet lekker" and "hulp nu" in last 30 days
+    const daysNotFeelingWellLast30d = checkins30d.filter(c => c.mood === 'niet_lekker').length;
+    const helpNowCountLast30d = checkins30d.filter(c => c.mood === 'hulp_nu').length;
+
+    // Build fun_with frequency list
+    const funWithCounts: Record<string, number> = {};
+    checkins30d.forEach(c => {
+      if (c.fun_with && c.fun_with.trim()) {
+        const items = c.fun_with.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        items.forEach((item: string) => {
+          funWithCounts[item] = (funWithCounts[item] || 0) + 1;
+        });
+      }
+    });
+
+    const funWithTopList = Object.entries(funWithCounts)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Top 10
+
+    return {
+      checkinsLast7d: checkins7d.length,
+      avgSleepLast7d: Math.round(avgSleepLast7d * 10) / 10,
+      avgStressLast7d: Math.round(avgStressLast7d * 10) / 10,
+      avgEnergyLast7d: Math.round(avgEnergyLast7d * 10) / 10,
+      daysNotFeelingWellLast30d,
+      helpNowCountLast30d,
+      funWithTopList,
+    };
+  }
+
+  async upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin> {
+    const { data, error} = await supabase
+      .from("mental_checkins")
+      .upsert(checkin, { onConflict: 'student_id,date' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  // Quiz Metrics
+  async getQuizMetrics(studentId: string): Promise<{
+    quizzesCompletedLast7d: number;
+    avgQuizScoreLast7d: number;
+    bestQuizScoreLast7d: number;
+    retakesCountLast30d: number;
+    subjectsMostPracticedLast30d: Array<{ subject: string; count: number }>;
+  }> {
+    // Get quiz results from last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: quizzes30d, error } = await supabase
+      .from("quiz_results")
+      .select("*, courses(name)")
+      .eq("user_id", studentId)
+      .gte("created_at", thirtyDaysAgo.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const results = quizzes30d || [];
+
+    // Filter last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const quizzes7d = results.filter((q: any) => new Date(q.created_at) >= sevenDaysAgo);
+
+    // Calculate metrics
+    const quizzesCompletedLast7d = quizzes7d.length;
+
+    const scoresLast7d = quizzes7d.filter((q: any) => q.score !== null).map((q: any) => q.score);
+    const avgQuizScoreLast7d = scoresLast7d.length > 0
+      ? Math.round((scoresLast7d.reduce((sum: number, score: number) => sum + score, 0) / scoresLast7d.length) * 10) / 10
+      : 0;
+
+    const bestQuizScoreLast7d = scoresLast7d.length > 0 ? Math.max(...scoresLast7d) : 0;
+
+    // Count retakes (same course_id + material_id combination)
+    const quizKeys = new Set<string>();
+    let retakesCountLast30d = 0;
+    results.forEach((q: any) => {
+      const key = `${q.course_id || 'none'}-${q.material_id || 'none'}`;
+      if (quizKeys.has(key)) {
+        retakesCountLast30d++;
+      } else {
+        quizKeys.add(key);
+      }
+    });
+
+    // Subject frequency
+    const subjectCounts: Record<string, number> = {};
+    results.forEach((q: any) => {
+      const courseName = q.courses?.name || 'Onbekend';
+      subjectCounts[courseName] = (subjectCounts[courseName] || 0) + 1;
+    });
+
+    const subjectsMostPracticedLast30d = Object.entries(subjectCounts)
+      .map(([subject, count]) => ({ subject, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // Top 5
+
+    return {
+      quizzesCompletedLast7d,
+      avgQuizScoreLast7d,
+      bestQuizScoreLast7d,
+      retakesCountLast30d,
+      subjectsMostPracticedLast30d,
+    };
+  }
+
+  // Study Metrics
+  async getStudyMetrics(studentId: string): Promise<{
+    vocabSessionsLast7d: number;
+    vocabWordsReviewedLast7d: number;
+    studySessionsLast7d: number;
+  }> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Get sessions from last 7 days
+    const { data: sessions, error } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("user_id", studentId)
+      .gte("happened_at", sevenDaysAgo.toISOString());
+
+    if (error) throw error;
+
+    const studySessionsLast7d = sessions?.length || 0;
+
+    // For vocab, we would need a separate vocab table
+    // For now, return placeholder values
+    // TODO: Implement vocab tracking when vocab table is created
+    const vocabSessionsLast7d = 0;
+    const vocabWordsReviewedLast7d = 0;
+
+    return {
+      vocabSessionsLast7d,
+      vocabWordsReviewedLast7d,
+      studySessionsLast7d,
+    };
+  }
+
+  // Usage Metrics
+  async getUsageMetrics(studentId: string): Promise<{
+    loginsLast7d: number;
+    activeDaysLast7d: number;
+    lastActiveAt: string | null;
+    dailyActivityLast30d: Array<{ date: string; count: number }>;
+  }> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Get app events from last 30 days
+    const { data: events, error } = await supabase
+      .from("app_events")
+      .select("*")
+      .eq("user_id", studentId)
+      .gte("created_at", thirtyDaysAgo.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error && error.code !== "PGRST116") throw error;
+
+    const allEvents = events || [];
+
+    // Count logins in last 7 days
+    const events7d = allEvents.filter((e: any) => new Date(e.created_at) >= sevenDaysAgo);
+    const loginsLast7d = events7d.filter((e: any) => e.event_type === 'login').length;
+
+    // Count unique active days in last 7 days
+    const activeDates7d = new Set<string>();
+    events7d.forEach((e: any) => {
+      const dateStr = new Date(e.created_at).toISOString().split('T')[0];
+      activeDates7d.add(dateStr);
+    });
+    const activeDaysLast7d = activeDates7d.size;
+
+    // Get last active timestamp
+    const lastActiveAt = allEvents.length > 0 ? allEvents[0].created_at : null;
+
+    // Build daily activity array for last 30 days
+    const dailyCountsMap: Record<string, number> = {};
+    allEvents.forEach((e: any) => {
+      const dateStr = new Date(e.created_at).toISOString().split('T')[0];
+      dailyCountsMap[dateStr] = (dailyCountsMap[dateStr] || 0) + 1;
+    });
+
+    // Fill in all 30 days (including zeros)
+    const dailyActivityLast30d: Array<{ date: string; count: number }> = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      dailyActivityLast30d.push({
+        date: dateStr,
+        count: dailyCountsMap[dateStr] || 0,
+      });
+    }
+
+    return {
+      loginsLast7d,
+      activeDaysLast7d,
+      lastActiveAt,
+      dailyActivityLast30d,
+    };
+  }
+
+  async createAppEvent(event: InsertAppEvent): Promise<AppEvent> {
+    const { data, error } = await supabase
+      .from("app_events")
+      .insert(event)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  // Rewards & Points
+  async getRewardPoints(studentId: string): Promise<RewardPoints | undefined> {
+    const { data, error } = await supabase
+      .from("reward_points")
+      .select("*")
+      .eq("student_id", studentId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || undefined;
+  }
+
+  async upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints> {
+    const { data, error } = await supabase
+      .from("reward_points")
+      .upsert(
+        {
+          ...points,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'student_id' }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  async getRewardsByParentId(parentId: string): Promise<Reward[]> {
+    const { data, error } = await supabase
+      .from("rewards")
+      .select("*")
+      .eq("parent_id", parentId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getRewardsOverview(studentId: string, parentId: string): Promise<{
+    pointsTotal: number;
+    nextReward: { id: string; label: string; pointsRequired: number } | null;
+    rewards: Array<{
+      id: string;
+      label: string;
+      pointsRequired: number;
+      progressPercent: number;
+      isActive: boolean;
+    }>;
+  }> {
+    // Get student's points
+    const pointsData = await this.getRewardPoints(studentId);
+    const pointsTotal = pointsData?.points_total || 0;
+
+    // Get parent's rewards
+    const rewardsData = await this.getRewardsByParentId(parentId);
+
+    // Calculate progress for each reward
+    const rewards = rewardsData.map((r) => ({
+      id: r.id,
+      label: r.label,
+      pointsRequired: r.points_required,
+      progressPercent: Math.min(100, Math.round((pointsTotal / r.points_required) * 100)),
+      isActive: r.is_active || false,
+    }));
+
+    // Find next achievable reward (lowest points required that student hasn't reached yet)
+    const nextReward = rewardsData
+      .filter((r) => r.points_required > pointsTotal && r.is_active)
+      .sort((a, b) => a.points_required - b.points_required)[0];
+
+    return {
+      pointsTotal,
+      nextReward: nextReward
+        ? {
+            id: nextReward.id,
+            label: nextReward.label,
+            pointsRequired: nextReward.points_required,
+          }
+        : null,
+      rewards,
+    };
+  }
+
+  async createReward(reward: InsertReward): Promise<Reward> {
+    const { data, error } = await supabase
+      .from("rewards")
+      .insert(reward)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  async updateReward(rewardId: string, updates: Partial<Reward>): Promise<void> {
+    const { error } = await supabase
+      .from("rewards")
+      .update(updates)
+      .eq("id", rewardId);
+
+    if (error) throw error;
+  }
+
+  async deleteReward(rewardId: string): Promise<void> {
+    // Soft delete by setting is_active to false
+    const { error } = await supabase
+      .from("rewards")
+      .update({ is_active: false })
+      .eq("id", rewardId);
+
+    if (error) throw error;
+  }
+
+  // ============================================================================
+  // STUDYPLAY PLAYTIME SYSTEM
+  // ============================================================================
+
+  async getPlaytime(userId: string): Promise<StudyPlaytime | undefined> {
+    const { data, error } = await supabase
+      .from("study_playtime")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || undefined;
+  }
+
+  async addPlaytime(userId: string, delta: number, reason: string, meta?: any): Promise<void> {
+    // Check today's earned playtime (max 15 minutes per day for focus events)
+    const focusReasons = ['quiz_completed', 'test_completed', 'mental_checkin', 'compliment_given', 'streak_bonus'];
+    if (focusReasons.includes(reason)) {
+      const todayEarned = await this.getTodayPlaytimeEarned(userId);
+      if (todayEarned >= 15) {
+        // Already earned max for today, skip adding more
+        return;
+      }
+      // Cap delta so we don't exceed 15 minutes total for today
+      if (todayEarned + delta > 15) {
+        delta = 15 - todayEarned;
+      }
+    }
+
+    if (delta <= 0) return;
+
+    // Get current balance
+    const current = await this.getPlaytime(userId);
+    const currentBalance = current?.balance_minutes || 0;
+    const newBalance = Math.max(0, currentBalance + delta);
+
+    // Upsert playtime balance
+    const { error: balanceError } = await supabase
+      .from("study_playtime")
+      .upsert(
+        {
+          user_id: userId,
+          balance_minutes: newBalance,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (balanceError) throw balanceError;
+
+    // Log the transaction
+    const { error: logError } = await supabase
+      .from("study_playtime_log")
+      .insert({
+        user_id: userId,
+        delta,
+        reason,
+        meta: meta ? JSON.stringify(meta) : null,
+      });
+
+    if (logError) throw logError;
+  }
+
+  async usePlaytime(userId: string, costMinutes: number): Promise<boolean> {
+    const current = await this.getPlaytime(userId);
+    const currentBalance = current?.balance_minutes || 0;
+
+    if (currentBalance < costMinutes) {
+      return false; // Not enough playtime
+    }
+
+    // Deduct playtime
+    await this.addPlaytime(userId, -costMinutes, 'game_session');
+    return true;
+  }
+
+  async getPlaytimeLog(userId: string, days: number = 30): Promise<StudyPlaytimeLog[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await supabase
+      .from("study_playtime_log")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("created_at", startDate.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getTodayPlaytimeEarned(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from("study_playtime_log")
+      .select("delta")
+      .eq("user_id", userId)
+      .gte("created_at", todayStart.toISOString())
+      .gt("delta", 0); // Only earned, not spent
+
+    if (error) throw error;
+
+    const total = (data || []).reduce((sum, log) => sum + log.delta, 0);
+    return total;
+  }
+
+  // ============================================================================
+  // STUDYPLAY PROFILE & XP SYSTEM
+  // ============================================================================
+
+  async getProfile(userId: string): Promise<StudyProfile | undefined> {
+    const { data, error } = await supabase
+      .from("study_profile")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || undefined;
+  }
+
+  async awardXp(userId: string, delta: number, reason: string, meta?: any): Promise<{ newLevel: number; leveledUp: boolean }> {
+    // Get current profile
+    const current = await this.getProfile(userId);
+    const oldXp = current?.xp_total || 0;
+    const oldLevel = current?.level || 1;
+
+    const newXp = oldXp + delta;
+
+    // Calculate new level: floor(sqrt(xp_total / 10)) with minimum 1
+    const newLevel = Math.max(1, Math.floor(Math.sqrt(newXp / 10)));
+    const leveledUp = newLevel > oldLevel;
+
+    // Upsert profile with new XP and level
+    const { error: profileError } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: newXp,
+          level: newLevel,
+          games_played: current?.games_played || 0,
+          tests_completed: current?.tests_completed || 0,
+          streak_days: current?.streak_days || 0,
+          last_activity_date: current?.last_activity_date || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (profileError) throw profileError;
+
+    // Log XP transaction
+    const { error: logError } = await supabase
+      .from("study_xp_log")
+      .insert({
+        user_id: userId,
+        delta,
+        reason,
+        meta: meta ? JSON.stringify(meta) : null,
+      });
+
+    if (logError) throw logError;
+
+    return { newLevel, leveledUp };
+  }
+
+  async incrementGamesPlayed(userId: string): Promise<void> {
+    const current = await this.getProfile(userId);
+    const gamesPlayed = (current?.games_played || 0) + 1;
+
+    const { error } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: current?.xp_total || 0,
+          level: current?.level || 1,
+          games_played: gamesPlayed,
+          tests_completed: current?.tests_completed || 0,
+          streak_days: current?.streak_days || 0,
+          last_activity_date: current?.last_activity_date || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (error) throw error;
+  }
+
+  async incrementTestsCompleted(userId: string): Promise<void> {
+    const current = await this.getProfile(userId);
+    const testsCompleted = (current?.tests_completed || 0) + 1;
+
+    const { error } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: current?.xp_total || 0,
+          level: current?.level || 1,
+          games_played: current?.games_played || 0,
+          tests_completed: testsCompleted,
+          streak_days: current?.streak_days || 0,
+          last_activity_date: current?.last_activity_date || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (error) throw error;
+  }
+
+  async updateStreak(userId: string): Promise<void> {
+    const current = await this.getProfile(userId);
+    const today = new Date().toISOString().split('T')[0];
+    const lastActivityDate = current?.last_activity_date;
+
+    let newStreakDays = current?.streak_days || 0;
+
+    if (!lastActivityDate) {
+      // First activity ever
+      newStreakDays = 1;
+    } else {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      if (lastActivityDate === yesterdayStr) {
+        // Consecutive day
+        newStreakDays += 1;
+      } else if (lastActivityDate !== today) {
+        // Streak broken
+        newStreakDays = 1;
+      }
+      // If lastActivityDate === today, keep current streak
+    }
+
+    const { error } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: current?.xp_total || 0,
+          level: current?.level || 1,
+          games_played: current?.games_played || 0,
+          tests_completed: current?.tests_completed || 0,
+          streak_days: newStreakDays,
+          last_activity_date: today,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (error) throw error;
+
+    // Award bonus playtime for streak milestones
+    if (newStreakDays % 3 === 0 && newStreakDays > 0) {
+      await this.addPlaytime(userId, 2, 'streak_bonus', { streakDays: newStreakDays });
+    }
+  }
+
+  // ============================================================================
+  // STUDYPLAY SCORES & LEADERBOARDS
+  // ============================================================================
+
+  async submitScore(score: InsertStudyScore): Promise<StudyScore> {
+    const { data, error } = await supabase
+      .from("study_scores")
+      .insert(score)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  async getLeaderboard(gameId: string, limit: number = 50): Promise<Array<{
+    userId: string;
+    displayName: string;
+    score: number;
+    rank: number;
+    levelReached?: number;
+  }>> {
+    // Get top scores for this game (best score per user)
+    const { data, error } = await supabase
+      .from("study_scores")
+      .select("user_id, score, level_reached")
+      .eq("game_id", gameId)
+      .order("score", { ascending: false })
+      .limit(limit * 3); // Get more than needed to filter duplicates
+
+    if (error) throw error;
+
+    // Group by user and keep only best score per user
+    const userBestScores = new Map<string, { score: number; levelReached?: number }>();
+    (data || []).forEach(entry => {
+      const existing = userBestScores.get(entry.user_id);
+      if (!existing || entry.score > existing.score) {
+        userBestScores.set(entry.user_id, {
+          score: entry.score,
+          levelReached: entry.level_reached || undefined,
+        });
+      }
+    });
+
+    // Get user names and create leaderboard entries
+    const userIds = Array.from(userBestScores.keys());
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("id, name")
+      .in("id", userIds);
+
+    if (usersError) throw usersError;
+
+    const leaderboard = Array.from(userBestScores.entries())
+      .map(([userId, { score, levelReached }]) => {
+        const user = (users || []).find(u => u.id === userId);
+        // Privacy: Use initials only
+        const displayName = user?.name
+          ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase()
+          : 'AN';
+
+        return {
+          userId,
+          displayName,
+          score,
+          levelReached,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((entry, index) => ({
+        ...entry,
+        rank: index + 1,
+      }));
+
+    return leaderboard;
+  }
+
+  async getUserHighScore(userId: string, gameId: string): Promise<number> {
+    const { data, error } = await supabase
+      .from("study_scores")
+      .select("score")
+      .eq("user_id", userId)
+      .eq("game_id", gameId)
+      .order("score", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data?.score || 0;
+  }
+
+  async getUserScores(userId: string, gameId?: string): Promise<StudyScore[]> {
+    let query = supabase
+      .from("study_scores")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (gameId) {
+      query = query.eq("game_id", gameId);
+    }
+
+    const { data, error } = await query;
+
     if (error) throw error;
     return data || [];
   }

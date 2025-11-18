@@ -74,6 +74,7 @@ export const quiz_results = pgTable("quiz_results", {
   material_id: uuid("material_id").references(() => materials.id),
   score: integer("score"),
   weak_points: text("weak_points"),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
 export const parent_child_relationships = pgTable("parent_child_relationships", {
@@ -109,6 +110,45 @@ export const imported_events = pgTable("imported_events", {
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
+export const mental_checkins = pgTable("mental_checkins", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  student_id: uuid("student_id").references(() => users.id).notNull(),
+  date: date("date").notNull(),
+  mood: text("mood", { enum: ["ok", "niet_lekker", "hulp_nu"] }).notNull(),
+  sleep_score: integer("sleep_score"), // 1-5
+  stress_score: integer("stress_score"), // 1-5
+  energy_score: integer("energy_score"), // 1-5
+  fun_with: text("fun_with"), // Vrije tekst: met wie had je vandaag lol
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const app_events = pgTable("app_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  event_type: text("event_type", {
+    enum: ["login", "logout", "task_completed", "quiz_completed", "mental_checkin", "study_session", "chat_session"]
+  }).notNull(),
+  metadata: text("metadata"), // JSON string for additional event data
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const reward_points = pgTable("reward_points", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  student_id: uuid("student_id").references(() => users.id).notNull().unique(),
+  points_total: integer("points_total").default(0).notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const rewards = pgTable("rewards", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  parent_id: uuid("parent_id").references(() => users.id).notNull(),
+  label: text("label").notNull(),
+  points_required: integer("points_required").notNull(),
+  sort_order: integer("sort_order").default(0),
+  is_active: boolean("is_active").default(true),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   created_at: true,
@@ -139,6 +179,7 @@ export const insertMaterialSchema = createInsertSchema(materials).omit({
 
 export const insertQuizResultSchema = createInsertSchema(quiz_results).omit({
   id: true,
+  created_at: true,
 });
 
 export const insertParentChildRelationshipSchema = createInsertSchema(parent_child_relationships).omit({
@@ -152,6 +193,103 @@ export const insertCalendarIntegrationSchema = createInsertSchema(calendar_integ
 });
 
 export const insertImportedEventSchema = createInsertSchema(imported_events).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertMentalCheckinSchema = createInsertSchema(mental_checkins).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertAppEventSchema = createInsertSchema(app_events).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertRewardPointsSchema = createInsertSchema(reward_points).omit({
+  id: true,
+  updated_at: true,
+});
+
+export const insertRewardSchema = createInsertSchema(rewards).omit({
+  id: true,
+  created_at: true,
+});
+
+// ============================================================================
+// STUDYPLAY GAME PLATFORM TABLES
+// ============================================================================
+
+// Study Playtime System (Focus → Fun)
+export const study_playtime = pgTable("study_playtime", {
+  user_id: uuid("user_id").primaryKey().references(() => users.id),
+  balance_minutes: integer("balance_minutes").default(0).notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`).notNull(),
+});
+
+export const study_playtime_log = pgTable("study_playtime_log", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  delta: integer("delta").notNull(), // positive = earned, negative = spent
+  reason: text("reason").notNull(), // 'quiz_completed', 'mental_checkin', 'game_session', etc.
+  meta: text("meta"), // JSON string for metadata
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
+});
+
+// Global XP + Level System
+export const study_profile = pgTable("study_profile", {
+  user_id: uuid("user_id").primaryKey().references(() => users.id),
+  xp_total: integer("xp_total").default(0).notNull(),
+  level: integer("level").default(1).notNull(),
+  games_played: integer("games_played").default(0).notNull(),
+  tests_completed: integer("tests_completed").default(0).notNull(),
+  streak_days: integer("streak_days").default(0).notNull(),
+  last_activity_date: date("last_activity_date"),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`).notNull(),
+});
+
+export const study_xp_log = pgTable("study_xp_log", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  delta: integer("delta").notNull(), // XP change
+  reason: text("reason").notNull(),
+  meta: text("meta"), // JSON string for metadata
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
+});
+
+// Scores & Leaderboards
+export const study_scores = pgTable("study_scores", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  game_id: text("game_id").notNull(), // 'snake', 'brickwall', 'flappy', '2048', 'geo_quiz', etc.
+  score: integer("score").notNull(),
+  level_reached: integer("level_reached"),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
+});
+
+// Insert schemas for StudyPlay tables
+export const insertStudyPlaytimeSchema = createInsertSchema(study_playtime).omit({
+  updated_at: true,
+});
+
+export const insertStudyPlaytimeLogSchema = createInsertSchema(study_playtime_log).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertStudyProfileSchema = createInsertSchema(study_profile).omit({
+  created_at: true,
+  updated_at: true,
+});
+
+export const insertStudyXpLogSchema = createInsertSchema(study_xp_log).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertStudyScoreSchema = createInsertSchema(study_scores).omit({
   id: true,
   created_at: true,
 });
@@ -177,3 +315,21 @@ export type CalendarIntegration = typeof calendar_integrations.$inferSelect;
 export type InsertCalendarIntegration = z.infer<typeof insertCalendarIntegrationSchema>;
 export type ImportedEvent = typeof imported_events.$inferSelect;
 export type InsertImportedEvent = z.infer<typeof insertImportedEventSchema>;
+export type MentalCheckin = typeof mental_checkins.$inferSelect;
+export type InsertMentalCheckin = z.infer<typeof insertMentalCheckinSchema>;
+export type AppEvent = typeof app_events.$inferSelect;
+export type InsertAppEvent = z.infer<typeof insertAppEventSchema>;
+export type RewardPoints = typeof reward_points.$inferSelect;
+export type InsertRewardPoints = z.infer<typeof insertRewardPointsSchema>;
+export type Reward = typeof rewards.$inferSelect;
+export type InsertReward = z.infer<typeof insertRewardSchema>;
+export type StudyPlaytime = typeof study_playtime.$inferSelect;
+export type InsertStudyPlaytime = z.infer<typeof insertStudyPlaytimeSchema>;
+export type StudyPlaytimeLog = typeof study_playtime_log.$inferSelect;
+export type InsertStudyPlaytimeLog = z.infer<typeof insertStudyPlaytimeLogSchema>;
+export type StudyProfile = typeof study_profile.$inferSelect;
+export type InsertStudyProfile = z.infer<typeof insertStudyProfileSchema>;
+export type StudyXpLog = typeof study_xp_log.$inferSelect;
+export type InsertStudyXpLog = z.infer<typeof insertStudyXpLogSchema>;
+export type StudyScore = typeof study_scores.$inferSelect;
+export type InsertStudyScore = z.infer<typeof insertStudyScoreSchema>;

@@ -25,6 +25,7 @@ import LerenAdmin from "./pages/LerenAdmin";
 // ✅ NIEUW
 import Toets from "./pages/Toets";
 import StudyPlay from "./pages/study/StudyPlay";
+import StudyGamesHub from "./pages/study/StudyGamesHub";
 import AdminQuiz from "./pages/study/AdminQuiz";
 import { ErrorBoundary } from "./components/dev/ErrorBoundary";
 
@@ -100,6 +101,9 @@ function AuthenticatedApp() {
 
         {/* 5b) Toetsspeler (deeplink) */}
         <Route path="/toets/spelen" component={StudyPlay} />
+
+        {/* 5c) StudyPlay Games Hub */}
+        <Route path="/study/games" component={StudyGamesHub} />
 
         {/* Admin voor toetsen (voor jou); beide paden werken */}
         <Route path="/study/admin" component={AdminQuiz} />

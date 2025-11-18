@@ -4,12 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Plus, User, Calendar, BookOpen, CheckCircle2, Info } from "lucide-react";
+import { Plus, User, Calendar, BookOpen, CheckCircle2, Info, Eye } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import ParentIntroModal from "@/components/ParentIntroModal";
+import ChildDashboard from "./ChildDashboard";
 
 export default function ParentDashboard() {
   const { user } = useAuth();
@@ -18,6 +19,7 @@ export default function ParentDashboard() {
   const [showAddChild, setShowAddChild] = useState(false);
   const [showIntroModal, setShowIntroModal] = useState(false);
   const [hasSeenIntro, setHasSeenIntro] = useState(false);
+  const [selectedChild, setSelectedChild] = useState<any>(null);
   const [childData, setChildData] = useState({
     email: "",
     name: "",
@@ -110,6 +112,16 @@ export default function ParentDashboard() {
       </Badge>
     );
   };
+
+  // If a child is selected, show the ChildDashboard
+  if (selectedChild) {
+    return (
+      <ChildDashboard
+        child={selectedChild}
+        onBack={() => setSelectedChild(null)}
+      />
+    );
+  }
 
   return (
     <div className="p-6 space-y-6" data-testid="parent-dashboard">
@@ -247,17 +259,11 @@ export default function ParentDashboard() {
                   <div className="mt-4 pt-4 border-t flex gap-2">
                     <Button
                       size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        // TODO: Navigate to child's tasks view
-                        toast({
-                          title: "Binnenkort beschikbaar",
-                          description: "Bekijk taken functionaliteit wordt nog ontwikkeld."
-                        });
-                      }}
+                      variant="default"
+                      onClick={() => setSelectedChild(childData)}
                     >
-                      <Calendar className="w-4 h-4 mr-2" />
-                      Taken bekijken
+                      <Eye className="w-4 h-4 mr-2" />
+                      Dashboard bekijken
                     </Button>
                   </div>
                 )}

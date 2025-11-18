@@ -1020,6 +1020,169 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Parent Mental Checkins Endpoints
+  app.get("/api/parent/child/:childId/mental-checkins", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const checkins = await storage.getMentalCheckinsByStudentId(childId, 30);
+
+      // Transform to camelCase and ensure complete time series
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const checkinsMap = new Map(
+        checkins.map(c => [c.date, {
+          date: c.date,
+          mood: c.mood,
+          sleepScore: c.sleep_score,
+          stressScore: c.stress_score,
+          energyScore: c.energy_score,
+          funWith: c.fun_with,
+        }])
+      );
+
+      // Fill in missing dates
+      const completeSeries = [];
+      const currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        completeSeries.push(checkinsMap.get(dateStr) || {
+          date: dateStr,
+          mood: null,
+          sleepScore: null,
+          stressScore: null,
+          energyScore: null,
+          funWith: null,
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      res.json(completeSeries);
+    } catch (error) {
+      console.error("Get child mental checkins error:", error);
+      res.status(500).json({ error: "Failed to get mental checkins" });
+    }
+  });
+
+  app.get("/api/parent/child/:childId/mental-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getMentalMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child mental metrics error:", error);
+      res.status(500).json({ error: "Failed to get mental metrics" });
+    }
+  });
+
+  // Parent Quiz Metrics Endpoint
+  app.get("/api/parent/child/:childId/quiz-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getQuizMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child quiz metrics error:", error);
+      res.status(500).json({ error: "Failed to get quiz metrics" });
+    }
+  });
+
+  // Parent Study Metrics Endpoint
+  app.get("/api/parent/child/:childId/study-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getStudyMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child study metrics error:", error);
+      res.status(500).json({ error: "Failed to get study metrics" });
+    }
+  });
+
+  // Parent Usage Metrics Endpoint
+  app.get("/api/parent/child/:childId/usage-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getUsageMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child usage metrics error:", error);
+      res.status(500).json({ error: "Failed to get usage metrics" });
+    }
+  });
+
+  // Parent Rewards Endpoints
+  app.get("/api/parent/child/:childId/rewards-overview", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const { parentId } = req.query;
+
+      if (!parentId || typeof parentId !== 'string') {
+        return res.status(400).json({ error: "Parent ID required" });
+      }
+
+      const overview = await storage.getRewardsOverview(childId, parentId);
+      res.json(overview);
+    } catch (error) {
+      console.error("Get rewards overview error:", error);
+      res.status(500).json({ error: "Failed to get rewards overview" });
+    }
+  });
+
+  app.post("/api/parent/rewards", async (req, res) => {
+    try {
+      const { parentId, label, pointsRequired, sortOrder } = req.body;
+
+      if (!parentId || !label || !pointsRequired) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const reward = await storage.createReward({
+        parent_id: parentId,
+        label,
+        points_required: pointsRequired,
+        sort_order: sortOrder || 0,
+        is_active: true,
+      });
+
+      res.json(reward);
+    } catch (error) {
+      console.error("Create reward error:", error);
+      res.status(500).json({ error: "Failed to create reward" });
+    }
+  });
+
+  app.put("/api/parent/rewards/:rewardId", async (req, res) => {
+    try {
+      const { rewardId } = req.params;
+      const { label, pointsRequired, sortOrder, isActive } = req.body;
+
+      const updates: any = {};
+      if (label !== undefined) updates.label = label;
+      if (pointsRequired !== undefined) updates.points_required = pointsRequired;
+      if (sortOrder !== undefined) updates.sort_order = sortOrder;
+      if (isActive !== undefined) updates.is_active = isActive;
+
+      await storage.updateReward(rewardId, updates);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Update reward error:", error);
+      res.status(500).json({ error: "Failed to update reward" });
+    }
+  });
+
+  app.delete("/api/parent/rewards/:rewardId", async (req, res) => {
+    try {
+      const { rewardId } = req.params;
+      await storage.deleteReward(rewardId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete reward error:", error);
+      res.status(500).json({ error: "Failed to delete reward" });
+    }
+  });
+
   app.get("/api/student/:studentId/parent-requests", async (req, res) => {
     try {
       const { studentId } = req.params;
@@ -1028,6 +1191,228 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get parent requests error:", error);
       res.status(500).json({ error: "Failed to get parent requests" });
+    }
+  });
+
+  /** ========= STUDYPLAY GAME PLATFORM ========= */
+
+  // Playtime System Endpoints
+  app.get("/api/playtime", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const playtime = await storage.getPlaytime(userId);
+      res.json({ balanceMinutes: playtime?.balance_minutes || 0 });
+    } catch (error) {
+      console.error("Get playtime error:", error);
+      res.status(500).json({ error: "Failed to get playtime" });
+    }
+  });
+
+  // Internal use only - called by server-side logic, not directly by client
+  app.post("/api/playtime/add", async (req, res) => {
+    try {
+      const { userId, delta, reason, meta } = req.body;
+
+      if (!userId || !delta || !reason) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      await storage.addPlaytime(userId, delta, reason, meta);
+      const updated = await storage.getPlaytime(userId);
+
+      res.json({
+        success: true,
+        balanceMinutes: updated?.balance_minutes || 0,
+        deltaAwarded: delta
+      });
+    } catch (error) {
+      console.error("Add playtime error:", error);
+      res.status(500).json({ error: "Failed to add playtime" });
+    }
+  });
+
+  app.post("/api/playtime/use", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const { costMinutes } = req.body;
+
+      if (!costMinutes || costMinutes <= 0) {
+        return res.status(400).json({ error: "Invalid cost minutes" });
+      }
+
+      const success = await storage.usePlaytime(userId, costMinutes);
+
+      if (!success) {
+        return res.status(400).json({ error: "Insufficient playtime minutes" });
+      }
+
+      const updated = await storage.getPlaytime(userId);
+      res.json({
+        success: true,
+        balanceMinutes: updated?.balance_minutes || 0
+      });
+    } catch (error) {
+      console.error("Use playtime error:", error);
+      res.status(500).json({ error: "Failed to use playtime" });
+    }
+  });
+
+  // Profile & XP System Endpoints
+  app.get("/api/profile", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const profile = await storage.getProfile(userId);
+
+      res.json({
+        xpTotal: profile?.xp_total || 0,
+        level: profile?.level || 1,
+        gamesPlayed: profile?.games_played || 0,
+        testsCompleted: profile?.tests_completed || 0,
+        streakDays: profile?.streak_days || 0,
+        lastActivityDate: profile?.last_activity_date || null,
+      });
+    } catch (error) {
+      console.error("Get profile error:", error);
+      res.status(500).json({ error: "Failed to get profile" });
+    }
+  });
+
+  // Internal use only - called by server-side logic
+  app.post("/api/profile/xp", async (req, res) => {
+    try {
+      const { userId, delta, reason, meta } = req.body;
+
+      if (!userId || !delta || !reason) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const result = await storage.awardXp(userId, delta, reason, meta);
+
+      // Update streak for all XP-earning activities
+      await storage.updateStreak(userId);
+
+      // If it's a quiz/test completion, increment tests_completed counter
+      if (reason === 'quiz_completed' || reason === 'test_completed') {
+        await storage.incrementTestsCompleted(userId);
+      }
+
+      const profile = await storage.getProfile(userId);
+
+      res.json({
+        success: true,
+        newLevel: result.newLevel,
+        leveledUp: result.leveledUp,
+        xpTotal: profile?.xp_total || 0,
+      });
+    } catch (error) {
+      console.error("Award XP error:", error);
+      res.status(500).json({ error: "Failed to award XP" });
+    }
+  });
+
+  // Scores & Leaderboard Endpoints
+  app.post("/api/score/submit", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const { gameId, score, levelReached } = req.body;
+
+      if (!gameId || score === undefined) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Submit score
+      await storage.submitScore({
+        user_id: userId,
+        game_id: gameId,
+        score,
+        level_reached: levelReached || null,
+      });
+
+      // Increment games played
+      await storage.incrementGamesPlayed(userId);
+
+      // Award XP based on score and game
+      let xpReward = 10; // Base XP
+      if (score > 100) xpReward = 15;
+      if (score > 500) xpReward = 20;
+      if (score > 1000) xpReward = 25;
+
+      const xpResult = await storage.awardXp(userId, xpReward, 'game_session', { gameId, score });
+
+      // Update streak
+      await storage.updateStreak(userId);
+
+      // Log game session event for parent portal
+      await storage.createAppEvent({
+        user_id: userId,
+        event_type: 'study_session',
+        metadata: JSON.stringify({ type: 'game', gameId, score }),
+      });
+
+      res.json({
+        success: true,
+        xpAwarded: xpReward,
+        newLevel: xpResult.newLevel,
+        leveledUp: xpResult.leveledUp,
+      });
+    } catch (error) {
+      console.error("Submit score error:", error);
+      res.status(500).json({ error: "Failed to submit score" });
+    }
+  });
+
+  app.get("/api/leaderboard", async (req, res) => {
+    try {
+      const { game, limit } = req.query;
+
+      if (!game || typeof game !== 'string') {
+        return res.status(400).json({ error: "Game ID required" });
+      }
+
+      const maxLimit = limit ? Math.min(parseInt(limit as string, 10), 100) : 50;
+      const leaderboard = await storage.getLeaderboard(game, maxLimit);
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Get leaderboard error:", error);
+      res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
+  app.get("/api/user/highscore", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const { gameId } = req.query;
+
+      if (!gameId || typeof gameId !== 'string') {
+        return res.status(400).json({ error: "Game ID required" });
+      }
+
+      const highScore = await storage.getUserHighScore(userId, gameId);
+      res.json({ highScore });
+    } catch (error) {
+      console.error("Get high score error:", error);
+      res.status(500).json({ error: "Failed to get high score" });
     }
   });
 
