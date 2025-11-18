@@ -96,19 +96,34 @@ export default function Toets() {
         ) : quizzes.data?.length ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {quizzes.data.map((q: any) => (
-              <button
+              <div
                 key={q.id}
-                onClick={() => navigate(`/toets/spelen?quiz=${q.id}`)}
-                className="text-left bg-white border rounded-2xl p-4 hover:shadow"
+                className="bg-white border rounded-2xl p-4 hover:shadow"
               >
                 <div className="text-sm text-gray-500">
                   {q.subject} · {q.chapter}
                 </div>
-                <div className="font-semibold">{q.title}</div>
+                <div className="font-semibold mb-2">{q.title}</div>
                 {q.description && (
-                  <div className="text-sm text-gray-600 line-clamp-2">{q.description}</div>
+                  <div className="text-sm text-gray-600 line-clamp-2 mb-3">{q.description}</div>
                 )}
-              </button>
+
+                {/* Mode keuze knoppen */}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => navigate(`/toets/spelen?quiz=${q.id}&mode=practice`)}
+                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    📚 Oefenen
+                  </button>
+                  <button
+                    onClick={() => navigate(`/toets/spelen?quiz=${q.id}&mode=game`)}
+                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    🎮 Game (2 min)
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         ) : (

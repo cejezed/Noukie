@@ -11,7 +11,7 @@ if (!userId) return res.status(401).json({ error: 'Missing x-user-id' });
 
 
 if (req.method === 'POST') {
-const body = req.body as { action: 'start'|'answer'|'finish'; quiz_id?: string; result_id?: string; question_id?: string; given_answer?: string };
+const body = req.body as { action: 'start'|'answer'|'finish'; quiz_id?: string; result_id?: string; question_id?: string; given_answer?: string; mode?: string; time_remaining?: number };
 
 
 if (body.action === 'start') {
@@ -77,39 +77,53 @@ try {
     ? `https://${process.env.VERCEL_URL}`
     : (req.headers.origin || 'http://localhost:5000');
 
-  // Award XP (50 XP for quiz completion)
+  // Calculate XP based on mode
+  // Game mode: +75 XP (bonus +25 for time pressure)
+  // Practice mode: +50 XP (standard)
+  const isGameMode = body.mode === 'game';
+  const baseXP = isGameMode ? 75 : 50;
+
+  // Bonus XP for finishing quickly in game mode (if more than 30 seconds remaining)
+  const timeRemaining = body.time_remaining || 0;
+  const speedBonus = isGameMode && timeRemaining > 30 ? 10 : 0;
+  const totalXP = baseXP + speedBonus;
+
+  // Award XP
   const xpResponse = await fetch(`${baseUrl}/api/profile/xp`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       userId,
-      delta: 50,
-      reason: 'quiz_completed',
-      meta: { quizId: body.quiz_id, resultId: body.result_id, score: percent }
+      delta: totalXP,
+      reason: isGameMode ? 'quiz_game_completed' : 'quiz_completed',
+      meta: { quizId: body.quiz_id, resultId: body.result_id, score: percent, mode: body.mode, timeRemaining }
     })
   });
 
   if (xpResponse.ok) {
     const xpData = await xpResponse.json();
-    xpAwarded = 50;
+    xpAwarded = totalXP;
     leveledUp = xpData.leveledUp || false;
     newLevel = xpData.newLevel || 1;
   }
 
-  // Award Playtime (3 minutes for quiz completion)
+  // Award Playtime
+  // Game mode: +4 minutes (net +2 after cost)
+  // Practice mode: +3 minutes
+  const playtimeAmount = isGameMode ? 4 : 3;
   const playtimeResponse = await fetch(`${baseUrl}/api/playtime/add`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       userId,
-      delta: 3,
-      reason: 'quiz_completed',
-      meta: { quizId: body.quiz_id, resultId: body.result_id }
+      delta: playtimeAmount,
+      reason: isGameMode ? 'quiz_game_completed' : 'quiz_completed',
+      meta: { quizId: body.quiz_id, resultId: body.result_id, mode: body.mode }
     })
   });
 
   if (playtimeResponse.ok) {
-    playtimeAwarded = 3;
+    playtimeAwarded = playtimeAmount;
   }
 
   // Note: Streak update and tests_completed increment happen automatically
