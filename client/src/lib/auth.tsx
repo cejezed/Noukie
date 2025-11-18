@@ -16,6 +16,7 @@ interface AuthContextType {
     grade?: string
   ) => Promise<void>;
   signOut: () => Promise<void>;
+  getAuthHeaders: () => Promise<HeadersInit>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -101,12 +102,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
+  /**
+   * Get authentication headers with JWT Bearer token for API calls
+   * Returns proper Authorization header for secure backend requests
+   */
+  const getAuthHeaders = async (): Promise<HeadersInit> => {
+    if (!supabase) {
+      // Dev mode fallback
+      return { "x-user-id": user?.id || "" };
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      throw new Error("No active session");
+    }
+
+    return {
+      "Authorization": `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    };
+  };
+
   const value: AuthContextType = {
     user,
     loading,
     signIn,
     signUp,
     signOut,
+    getAuthHeaders,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

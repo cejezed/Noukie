@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { usePlaytime } from "@/hooks/usePlaytime";
+import GeoGameScreen from "@/components/game/GeoGameScreen";
+import { isGameEnabled } from "@/config/gameSubjects";
 
 function useUserId() {
   const [id, setId] = useState<string | null>(null);
@@ -45,7 +47,30 @@ export default function StudyPlay() {
   const userId = useUserId();
   const quizId = getQueryParam("quiz");
   const mode = getQueryParam("mode") || "practice"; // 'practice' or 'game'
+  const subject = getQueryParam("subject");
 
+  // Check if this is a GeoGame subject (Aardrijkskunde with game mode)
+  const isGeoGame = mode === "game" && subject && isGameEnabled(subject) && quizId;
+
+  // Loading state
+  if (!userId) {
+    return (
+      <main className="p-8">
+        <p className="text-sm text-gray-500">Inloggen vereist…</p>
+      </main>
+    );
+  }
+
+  // If GeoGame mode, render specialized game screen
+  if (isGeoGame) {
+    return (
+      <main className="p-8">
+        <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />
+      </main>
+    );
+  }
+
+  // Otherwise continue with standard quiz/timer mode
   const [resultId, setResultId] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
@@ -195,59 +220,83 @@ export default function StudyPlay() {
     setCorrectAnswer("");
   };
 
-  const next = () => {
+  const handleAnswer = (ans: string) => {
+    if (showFb) return;
+    setSelected(ans);
+
+    const correct = eq(ans, q.answer);
+    setIsCorrect(correct);
+    setCorrectAnswer(q.answer ?? "");
+    setShowFb(true);
+
+    if (!answeredSet.current.has(index)) {
+      answeredSet.current.add(index);
+      setAnsweredCount((c) => c + 1);
+      if (correct) setCorrectCount((c) => c + 1);
+    }
+
+    if (resultId) {
+      play.mutate({
+        action: "answer",
+        result_id: resultId,
+        question_id: q.id,
+        given_answer: ans,
+      });
+    }
+  };
+
+  const advance = () => {
     resetFeedback();
     setIndex((i) => i + 1);
   };
 
-  function countThisAnswer(correct: boolean | null) {
-    if (!answeredSet.current.has(index)) {
-      answeredSet.current.add(index);
-      setAnsweredCount((c) => c + 1);
-      if (correct === true) setCorrectCount((c) => c + 1);
-    }
-  }
+  const pct = list.length ? Math.round((index / list.length) * 100) : 0;
 
-  const answerMC = (choice: string) => {
-    if (!q || !resultId) return;
-    const correct = eq(choice, q.answer);
-    setSelected(choice);
-    setIsCorrect(correct);
-    setCorrectAnswer(q.answer ?? "");
-    setShowFb(true);
-    countThisAnswer(correct);
-    play.mutate({ action: "answer", result_id: resultId, question_id: q.id, given_answer: choice });
-  };
-
-  const answerOpen = (value: string) => {
-    if (!q || !resultId) return;
-    const correct = q.answer ? eq(value, q.answer) : null;
-    setSelected(value);
-    setIsCorrect(correct);
-    setCorrectAnswer(q.answer ?? "");
-    setShowFb(true);
-    countThisAnswer(correct);
-    play.mutate({ action: "answer", result_id: resultId, question_id: q.id, given_answer: value });
-  };
-
-  // UI states
-  if (!quizId) {
-    return <main className="p-8"><p className="text-red-600">Geen quiz geselecteerd.</p></main>;
-  }
-  if (!userId) {
-    return <main className="p-8"><p className="text-sm text-gray-500">Inloggen vereist…</p></main>;
-  }
-  if (questions.isLoading) {
-    return <main className="p-8"><p>Laden…</p></main>;
-  }
-  if (questions.isError) {
+  // Error states
+  if (uiError) {
     return (
-      <main className="p-8">
-        <p className="text-red-600">Kon vragen niet laden.</p>
-        <pre className="mt-2 text-xs bg-gray-50 p-2 rounded">{String((questions.error as Error)?.message)}</pre>
+      <main className="mx-auto max-w-[800px] px-6 py-8">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-red-700">{uiError}</p>
+          <a href="/toets" className="text-blue-600 underline mt-2 inline-block">
+            Terug naar toetsen
+          </a>
+        </div>
       </main>
     );
   }
+
+  if (!quizId) {
+    return (
+      <main className="p-8">
+        <p className="text-red-600">Geen quiz geselecteerd.</p>
+        <a className="text-blue-600 underline" href="/toets">Ga naar Toetsen</a>
+      </main>
+    );
+  }
+
+  if (questions.isLoading) {
+    return (
+      <main className="p-8">
+        <p className="text-sm text-gray-500">Vragen laden…</p>
+      </main>
+    );
+  }
+
+  if (questions.isError) {
+    return (
+      <main className="p-8">
+        <p className="text-red-600">Fout bij laden: {String(questions.error)}</p>
+      </main>
+    );
+  }
+
+  // Format timer display
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
 
   // Klaar scherm
   if (done || (list.length > 0 && index >= list.length)) {
@@ -305,10 +354,10 @@ export default function StudyPlay() {
             {rewards.leveledUp && (
               <div className="mt-4 bg-gradient-to-r from-yellow-100 to-yellow-200 border-2 border-yellow-400 rounded-lg p-4">
                 <div className="flex items-center gap-3">
-                  <span className="text-4xl">🎊</span>
+                  <span className="text-4xl">🏆</span>
                   <div>
-                    <p className="font-bold text-yellow-900 text-lg">Level Up!</p>
-                    <p className="text-yellow-800">Je bent nu level {rewards.newLevel}!</p>
+                    <p className="font-bold text-yellow-800">Level Up!</p>
+                    <p className="text-sm text-yellow-700">Je bent nu level {rewards.newLevel}!</p>
                   </div>
                 </div>
               </div>
@@ -316,8 +365,8 @@ export default function StudyPlay() {
 
             <div className="mt-4 pt-4 border-t border-purple-200">
               <a
-                className="inline-block bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-all"
                 href="/study/games"
+                className="inline-block bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-all shadow-md hover:shadow-lg"
               >
                 🎮 Ga naar Games →
               </a>
@@ -325,34 +374,33 @@ export default function StudyPlay() {
           </div>
         )}
 
-        <a className="text-sky-700 underline" href="/toets">Terug naar Toetsen</a>
+        <div className="flex gap-3">
+          <a href="/toets" className="bg-gray-200 px-4 py-2 rounded">
+            Terug naar overzicht
+          </a>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-blue-600 text-white px-4 py-2 rounded"
+          >
+            Opnieuw proberen
+          </button>
+        </div>
       </main>
     );
   }
 
-  if (list.length === 0) {
+  if (!q) {
     return (
-      <main className="mx-auto max-w-[800px] px-6 py-8">
-        <h1 className="text-xl font-semibold mb-4">Deze toets heeft nog geen vragen.</h1>
-        <a className="text-sky-700 underline" href="/toets">Terug naar Toetsen</a>
+      <main className="p-8">
+        <p className="text-sm text-gray-500">Geen vragen gevonden.</p>
+        <a className="text-blue-600 underline" href="/toets">Ga naar Toetsen</a>
       </main>
     );
   }
 
-  // Header met voortgang + score
-  const pct = list.length ? Math.round((answeredCount / list.length) * 100) : 0;
-
-  const qtype: string = (q.qtype ?? "mc").toLowerCase();
   const prompt: string = q.prompt ?? "";
   const choices = normalizeChoices(q.choices);
   const explanation: string = q.explanation ?? "";
-
-  // Format timer display
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   return (
     <main className="mx-auto max-w-[800px] px-6 py-8">
@@ -411,89 +459,60 @@ export default function StudyPlay() {
       <div className="mb-2 text-sm text-gray-500">Vraag {index + 1} van {list.length}</div>
       <h1 className="text-xl font-semibold mb-4">{prompt}</h1>
 
-      {/* Vraag body */}
-      {qtype === "mc" ? (
-        choices.length ? (
-          <div className="grid gap-3">
-            {choices.map((c: string, i: number) => {
-              const isChosen = showFb && c === selected;
-              const isRight = showFb && eq(c, correctAnswer);
-
-              // duidelijke feedback:
-              // - gekozen + juist: stevig groen
-              // - gekozen + fout: stevig rood
-              // - niet gekozen maar juist: groene omlijning
-              const base = "text-left border rounded-xl p-3 transition-colors";
-              const hover = showFb ? "" : " hover:bg-gray-50";
-              const chosenRight = isChosen && isRight ? " border-emerald-600 bg-emerald-50" : "";
-              const chosenWrong = isChosen && !isRight ? " border-red-600 bg-red-50" : "";
-              const notChosenButRight = !isChosen && isRight ? " border-emerald-500" : "";
-              const classes = [base, hover, chosenRight, chosenWrong, notChosenButRight].join(" ").trim();
-
-              return (
-                <button
-                  key={i}
-                  onClick={() => (showFb ? undefined : answerMC(c))}
-                  className={classes}
-                  disabled={showFb}
-                >
-                  <div className="flex items-start gap-2">
-                    {showFb && isRight && <span aria-hidden>✅</span>}
-                    {showFb && isChosen && !isRight && <span aria-hidden>❌</span>}
-                    <span>{c}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-red-600">Deze meerkeuzevraag heeft geen opties.</p>
-        )
+      {choices.length > 0 ? (
+        <div className="space-y-2 mb-4">
+          {choices.map((ch, i) => {
+            let base = "w-full text-left px-4 py-3 border rounded-lg transition";
+            if (!showFb) {
+              base += " hover:bg-gray-100";
+            } else if (eq(ch, q.answer)) {
+              base += " bg-emerald-100 border-emerald-500";
+            } else if (ch === selected) {
+              base += " bg-red-100 border-red-500";
+            } else {
+              base += " opacity-50";
+            }
+            return (
+              <button key={i} onClick={() => handleAnswer(ch)} className={base} disabled={showFb}>
+                {ch}
+              </button>
+            );
+          })}
+        </div>
       ) : (
-        !showFb ? (
-          <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const inp = (e.target as HTMLFormElement).elements.namedItem("open") as HTMLInputElement;
-              answerOpen(inp.value);
-            }}
-          >
-            <input name="open" className="flex-1 border rounded-xl p-3" placeholder="Jouw antwoord" />
-            <button className="px-4 py-2 rounded-xl bg-sky-600 text-white">Bevestigen</button>
-          </form>
-        ) : null
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const input = (e.target as HTMLFormElement).elements.namedItem("ans") as HTMLInputElement;
+            if (input.value.trim()) handleAnswer(input.value.trim());
+          }}
+          className="mb-4"
+        >
+          <input
+            name="ans"
+            className="border rounded px-3 py-2 w-full"
+            placeholder="Typ je antwoord…"
+            autoFocus
+            disabled={showFb}
+          />
+          {!showFb && (
+            <button type="submit" className="mt-2 bg-blue-600 text-white px-4 py-2 rounded">
+              Bevestig
+            </button>
+          )}
+        </form>
       )}
 
-      {/* Feedback */}
       {showFb && (
-        <div className="mt-6 rounded-xl border p-4 bg-white">
-          {isCorrect === true && <p className="text-emerald-700 font-medium">✅ Goed!</p>}
-          {isCorrect === false && <p className="text-red-700 font-medium">❌ Niet helemaal. Het juiste antwoord is:</p>}
-          {isCorrect === null && <p className="text-sky-700 font-medium">📌 Antwoord geregistreerd.</p>}
-
-          <div className="mt-2 text-sm text-gray-800">
-            {selected && <div><span className="text-gray-500">Jouw antwoord:</span> {selected}</div>}
-            {correctAnswer && !eq(selected, correctAnswer) && (
-              <div><span className="text-gray-500">Juiste antwoord:</span> {correctAnswer}</div>
-            )}
-          </div>
-
-          {explanation && (
-            <div className="mt-3 text-sm text-gray-700">
-              <span className="text-gray-500">Uitleg:</span> {explanation}
-            </div>
-          )}
-
-          <div className="mt-4">
-            <button onClick={next} className="px-4 py-2 rounded-xl bg-sky-600 text-white">
-              Volgende
-            </button>
-          </div>
+        <div className={`p-4 rounded mb-4 ${isCorrect ? "bg-emerald-50" : "bg-red-50"}`}>
+          <p className="font-medium">{isCorrect ? "Goed! 🎉" : "Helaas, fout 😕"}</p>
+          {!isCorrect && <p className="text-sm mt-1">Het juiste antwoord was: <b>{correctAnswer}</b></p>}
+          {explanation && <p className="text-sm mt-2 text-gray-700">{explanation}</p>}
+          <button onClick={advance} className="mt-3 bg-sky-600 text-white px-4 py-2 rounded">
+            Volgende vraag →
+          </button>
         </div>
       )}
-
-      {uiError && <p className="mt-4 text-xs text-red-600">{uiError}</p>}
     </main>
   );
 }

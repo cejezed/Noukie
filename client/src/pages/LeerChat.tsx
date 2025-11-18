@@ -269,9 +269,9 @@ export default function LeerChat() {
     } catch (error: any) {
       console.error("OCR/Upload Error:", error);
       setOcrState({ status: "error", msg: error.message });
-      toast({ 
-        variant: "destructive", 
-        title: "Fout", 
+      toast({
+        variant: "destructive",
+        title: "Fout",
         description: error.message || "OCR kon niet starten"
       });
     } finally {

@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { createServer, type Server } from "http";
 import multer from "multer";
 import fs from "fs";
+import path from "path";
 import { storage } from "./storage";
 import {
   transcribeAudio,
@@ -16,14 +17,42 @@ import {
   signIn as supabaseSignIn,
   signOut as supabaseSignOut,
 } from "./services/supabase";
+import { processScheduleScreenshot, validateLesson } from "./scheduleOcr";
+import { setupComplimentsRoutes } from "./compliments-routes-improved";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } 
+  limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+// For file uploads that need to be saved to disk (OCR processing)
+const uploadToDisk = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      const uploadDir = path.join(process.cwd(), "uploads");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+      cb(null, uploadDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      cb(null, `${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB max
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ["image/jpeg", "image/png", "image/jpg", "image/webp"];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Alleen afbeeldingen (JPEG, PNG, WebP) zijn toegestaan"));
+    }
+  },
 });
 
 // === Coach helpers ===
@@ -154,7 +183,7 @@ function datesHaveWeekdayInRange(startISO: string, endISO: string, weekday1to7: 
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  
+
   // Health check
   app.get("/api/health", (req, res) => {
     res.json({ status: "OK", timestamp: new Date().toISOString() });
@@ -298,59 +327,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!req.file) {
         return res.status(400).json({ error: "No audio file provided" });
       }
-      
+
       const lang = req.body.lang || 'nl';
       console.log(`🎤 Transcribing audio (${lang}), size: ${req.file.size} bytes`);
-      
+
       let transcription;
-      
+
       if (req.file.buffer) {
         const file = new File(
-          [req.file.buffer], 
+          [req.file.buffer],
           'audio.webm',
           { type: req.file.mimetype || 'audio/webm' }
         );
-        
+
         transcription = await openai.audio.transcriptions.create({
           file: file,
           model: 'whisper-1',
           language: lang,
           response_format: 'json'
         });
-      } 
+      }
       else if (req.file.path) {
         const fileStream = fs.createReadStream(req.file.path);
-        
+
         transcription = await openai.audio.transcriptions.create({
           file: fileStream,
           model: 'whisper-1',
           language: lang,
           response_format: 'json'
         });
-        
+
         try {
           fs.unlinkSync(req.file.path);
         } catch (cleanupError) {
           console.warn('Could not delete temp file:', cleanupError);
         }
-      } 
+      }
       else {
         return res.status(400).json({ error: 'Invalid file upload' });
       }
 
       console.log(`✅ Transcription: "${transcription.text}"`);
 
-      res.json({ 
+      res.json({
         transcript: transcription.text,
         text: transcription.text,
-        lang: lang 
+        lang: lang
       });
 
     } catch (error: any) {
       console.error('❌ ASR error:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         error: 'Transcriptie mislukt',
-        details: error?.message 
+        details: error?.message
       });
     }
   });
@@ -657,6 +686,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to delete schedule item" });
     }
   });
+
+  // Delete all schedule items for a user
+  app.delete("/api/schedule/user/:userId/all", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      await storage.deleteAllScheduleItems(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Schedule bulk delete error:", error);
+      res.status(500).json({ error: "Failed to delete all schedule items" });
+    }
+  });
   // Cancel/restore schedule item
   app.patch("/api/schedule/:id/cancel", async (req, res) => {
     try {
@@ -819,6 +860,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("iCal import error:", error);
       res.status(500).json({
         error: "Failed to import iCal",
+        details: (error as Error).message,
+      });
+    }
+  });
+
+  app.post("/api/schedule/import-screenshot", uploadToDisk.single("screenshot"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Geen screenshot geüpload" });
+      }
+
+      const { userId } = req.body;
+      if (!userId) {
+        // Clean up uploaded file
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "userId is verplicht" });
+      }
+
+      const openaiApiKey = process.env.OPENAI_API_KEY;
+      if (!openaiApiKey) {
+        fs.unlinkSync(req.file.path);
+        return res.status(500).json({ error: "OPENAI_API_KEY niet geconfigureerd" });
+      }
+
+      console.log(`📸 Processing schedule screenshot for user ${userId}`);
+
+      // Process the screenshot with OpenAI Vision
+      const result = await processScheduleScreenshot(req.file.path, openaiApiKey);
+
+      // Clean up the uploaded file
+      fs.unlinkSync(req.file.path);
+
+      if (!result.success) {
+        return res.status(400).json({
+          error: result.error || "Kon rooster niet verwerken",
+          rawText: result.rawText,
+          warnings: result.warnings,
+        });
+      }
+
+      // Validate all lessons
+      const validatedLessons = result.lessons.map((lesson) => ({
+        ...lesson,
+        validation: validateLesson(lesson),
+      }));
+
+      const invalidLessons = validatedLessons.filter((l) => !l.validation.valid);
+      if (invalidLessons.length > 0) {
+        console.warn(`⚠️ ${invalidLessons.length} invalid lessons detected`);
+      }
+
+      res.json({
+        success: true,
+        rawText: result.rawText,
+        lessons: validatedLessons,
+        warnings: result.warnings,
+        stats: {
+          total: result.lessons.length,
+          valid: validatedLessons.filter((l) => l.validation.valid).length,
+          invalid: invalidLessons.length,
+        },
+      });
+    } catch (error) {
+      console.error("Screenshot import error:", error);
+      // Clean up file if it exists
+      if (req.file?.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      res.status(500).json({
+        error: "Fout bij verwerken screenshot",
         details: (error as Error).message,
       });
     }
@@ -1415,6 +1526,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ error: "Failed to get high score" });
     }
   });
+
+  /** ========= COMPLIMENTS ========= */
+  // Use improved compliments routes with JWT authentication
+  setupComplimentsRoutes(app);
 
   /** ========= GOOGLE CALENDAR (DISABLED) ========= */
   // DISABLED: All Google Calendar routes have been commented out

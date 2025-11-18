@@ -15,6 +15,7 @@ export default function Layout({ children }: LayoutProps) {
     { id: "vandaag", label: "", icon: Icons.Home, path: "/" },
     { id: "planning", label: "Planning", icon: Icons.Calendar, path: "/planning" },
     { id: "mental", label: "Mentaal", icon: Icons.Brain ?? Icons.HelpCircle, path: "/mental" },
+    { id: "compliments", label: "💌", icon: Icons.Heart, path: "/compliments" },
     // ✅ Uitleg pad gecorrigeerd naar lowercase
     { id: "uitleg", label: "Uitleg", icon: Icons.HelpCircle, path: "/leerchat" },
     { id: "leren", label: "Leren", icon: Icons.BookOpen, path: "/leren" },

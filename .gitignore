@@ -15,20 +15,16 @@ build/
 *.wav
 *.mp3
 *.mp4
-<<<<<<< HEAD
-=======
+
 # Binary archives
 *.tar
 *.tar.gz
 *.tgz
 *.zip
-.env
-.env.*
-client/.env.local
-client/.env.*
+
+# Uploads folder
 uploads/
-dist/
->>>>>>> voice-chat
+
 .vercel
 
 # Nooit committen

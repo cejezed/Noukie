@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/hooks/use-theme";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,16 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 import type { Course, Schedule } from "@shared/schema";
-
-// ✅ Stap 1: Kleurthema's bijgewerkt met Geel en Rood. Geel is de nieuwe standaard.
-const colorThemes = [
-  { id: "yellow", name: "Geel (Standaard)", primary: "hsl(47.9, 95.8%, 53.1%)", preview: "bg-yellow-500" },
-  { id: "blue", name: "Blauw", primary: "hsl(217.2, 91.2%, 59.8%)", preview: "bg-blue-500" },
-  { id: "green", name: "Groen", primary: "hsl(142.1, 76.2%, 36.3%)", preview: "bg-green-500" },
-  { id: "red", name: "Rood", primary: "hsl(0, 84.2%, 60.2%)", preview: "bg-red-500" },
-  { id: "purple", name: "Paars", primary: "hsl(262.1, 83.3%, 57.8%)", preview: "bg-purple-500" },
-  { id: "pink", name: "Roze", primary: "hsl(330.1, 81.2%, 60.4%)", preview: "bg-pink-500" },
-];
+import ScheduleScreenshotImport from "@/components/ScheduleScreenshotImport";
 
 // Jaargang opties
 const educationLevels = {
@@ -57,6 +49,7 @@ export default function Instellingen() {
   const userId = user?.id ?? "";
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { selectedTheme, themes, changeTheme, isUpdating } = useTheme();
 
   const displayName =
     (user?.user_metadata?.full_name as string) ||
@@ -66,7 +59,6 @@ export default function Instellingen() {
     (user?.email ? String(user.email).split("@")[0] : "—");
 
   // UI states
-  const [selectedTheme, setSelectedTheme] = useState("yellow"); // ✅ Standaard UI state is nu 'yellow'
   const [selectedEducation, setSelectedEducation] = useState("havo");
   const [selectedGrade, setSelectedGrade] = useState("havo 5");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -98,55 +90,6 @@ export default function Instellingen() {
   // Vakken beheren UI
   const [showCourseForm, setShowCourseForm] = useState(false);
   const [courseFormData, setCourseFormData] = useState({ name: "", color: "#4287f5" });
-
-  // ✅ Stap 2: Functie om het thema toe te passen (zowel UI als CSS variabele)
-  const applyTheme = (themeId: string) => {
-    const theme = colorThemes.find((t) => t.id === themeId) || colorThemes[0]; // Fallback naar de eerste (geel)
-    setSelectedTheme(theme.id);
-    if (typeof window !== "undefined") {
-      document.documentElement.style.setProperty('--primary', theme.primary);
-    }
-  };
-
-  // ✅ Stap 2: Laad de opgeslagen kleur van de gebruiker bij het laden van de component
-  useEffect(() => {
-    if (user?.user_metadata?.app_theme) {
-      applyTheme(user.user_metadata.app_theme);
-    } else {
-      applyTheme('yellow'); // Pas standaardthema toe als er geen is opgeslagen
-    }
-  }, [user]);
-
-  // ✅ Stap 3: Mutatie om gebruikersinstellingen (zoals thema) op te slaan
-  const updateProfileMutation = useMutation({
-    mutationFn: async (metadata: { app_theme: string }) => {
-      const { data, error } = await supabase.auth.updateUser({ data: metadata });
-      if (error) throw new Error(error.message);
-      return data.user;
-    },
-    onSuccess: (updatedUser) => {
-      // Vernieuw de user data in de app zodat de wijziging overal zichtbaar is
-      queryClient.invalidateQueries({ queryKey: ["user"] });
-      const themeName = colorThemes.find(t => t.id === updatedUser.user_metadata.app_theme)?.name || "Nieuw thema";
-      toast({
-        title: "Thema opgeslagen!",
-        description: `Je kleurvoorkeur is bijgewerkt naar ${themeName}.`,
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Fout bij opslaan",
-        description: `Kon het thema niet opslaan: ${error.message}`,
-        variant: "destructive",
-      });
-    },
-  });
-
-  // ✅ Stap 3: Functie om thema te wijzigen en op te slaan
-  const handleThemeChange = (themeId: string) => {
-    applyTheme(themeId); // Pas direct toe op de UI voor een snelle respons
-    updateProfileMutation.mutate({ app_theme: themeId }); // Sla op in de database
-  };
 
   // Courses
   const { data: courses = [], isLoading: coursesLoading } = useQuery<Course[]>({
@@ -367,6 +310,7 @@ export default function Instellingen() {
         <p className="text-sm text-muted-foreground">Pas je app aan naar jouw wensen</p>
       </div>
 
+
       {/* BOVENAAN: Rooster — Items toevoegen */}
       <Card>
         <CardHeader>
@@ -526,6 +470,9 @@ export default function Instellingen() {
         </CardContent>
       </Card>
 
+      {/* 🔹 Rooster — Screenshot Import */}
+      <ScheduleScreenshotImport />
+
       {/* 🔹 Rooster — Overzicht (zoals ingevoerd) */}
       <Card>
         <CardHeader>
@@ -645,12 +592,17 @@ export default function Instellingen() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3"> {/* ✅ Aangepast grid voor meer kleuren */}
-            {colorThemes.map((theme) => (
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {themes.map((theme) => (
               <button
                 key={theme.id}
-                onClick={() => handleThemeChange(theme.id)}
-                className={`p-3 rounded-lg border-2 transition-all ${selectedTheme === theme.id ? 'border-primary bg-primary/10' : 'border-border hover:border-primary/50'}`}
+                onClick={() => changeTheme(theme.id)}
+                disabled={isUpdating}
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  selectedTheme === theme.id
+                    ? "border-primary bg-primary/10"
+                    : "border-border hover:border-primary/50"
+                } ${isUpdating ? "opacity-50 cursor-not-allowed" : ""}`}
                 data-testid={`theme-${theme.id}`}
               >
                 <div className="flex items-center gap-3">
@@ -660,6 +612,9 @@ export default function Instellingen() {
               </button>
             ))}
           </div>
+          {isUpdating && (
+            <p className="text-sm text-muted-foreground text-center">Thema wordt opgeslagen...</p>
+          )}
         </CardContent>
       </Card>
 

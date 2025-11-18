@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, uuid, time, date, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, uuid, time, date, boolean, real, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ export const users = pgTable("users", {
   // Student-specific fields
   education_level: text("education_level", { enum: ["vmbo", "havo", "vwo", "mbo"] }), // null for parents
   grade: integer("grade"), // 1-6 for all levels, null for parents
+  classroom_id: uuid("classroom_id"), // References classrooms table
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
@@ -74,7 +75,6 @@ export const quiz_results = pgTable("quiz_results", {
   material_id: uuid("material_id").references(() => materials.id),
   score: integer("score"),
   weak_points: text("weak_points"),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
 export const parent_child_relationships = pgTable("parent_child_relationships", {
@@ -110,42 +110,101 @@ export const imported_events = pgTable("imported_events", {
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
+// Compliments feature tables
+export const classrooms = pgTable("classrooms", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  education_level: text("education_level", { enum: ["vmbo", "havo", "vwo", "mbo"] }).notNull(),
+  grade: integer("grade").notNull(),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const compliments = pgTable("compliments", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  from_user: uuid("from_user"), // NULL for anonymous
+  to_user: uuid("to_user").notNull(), // References auth.users
+  classroom_id: uuid("classroom_id").references(() => classrooms.id).notNull(),
+  message: text("message").notNull(),
+  toxicity_score: real("toxicity_score").default(0),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const compliment_streaks = pgTable("compliment_streaks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid("user_id").notNull(), // References auth.users
+  current_streak: integer("current_streak").default(0),
+  longest_streak: integer("longest_streak").default(0),
+  last_sent_date: date("last_sent_date"),
+  total_sent: integer("total_sent").default(0),
+  total_received: integer("total_received").default(0),
+  points: integer("points").default(0),
+  badges: jsonb("badges").default(sql`'[]'::jsonb`),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+});
+
+// Mental check-ins table
 export const mental_checkins = pgTable("mental_checkins", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  student_id: uuid("student_id").references(() => users.id).notNull(),
-  date: date("date").notNull(),
-  mood: text("mood", { enum: ["ok", "niet_lekker", "hulp_nu"] }).notNull(),
-  sleep_score: integer("sleep_score"), // 1-5
-  stress_score: integer("stress_score"), // 1-5
-  energy_score: integer("energy_score"), // 1-5
-  fun_with: text("fun_with"), // Vrije tekst: met wie had je vandaag lol
+  id: uuid("id").defaultRandom().primaryKey(),
+  user_id: uuid("user_id").notNull().references(() => users.id),
+  mood_score: integer("mood_score"),
+  energy_level: integer("energy_level"),
+  stress_level: integer("stress_level"),
+  notes: text("notes"),
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
-export const app_events = pgTable("app_events", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  user_id: uuid("user_id").references(() => users.id).notNull(),
-  event_type: text("event_type", {
-    enum: ["login", "logout", "task_completed", "quiz_completed", "mental_checkin", "study_session", "chat_session"]
-  }).notNull(),
-  metadata: text("metadata"), // JSON string for additional event data
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
-});
-
+// Rewards system tables
 export const reward_points = pgTable("reward_points", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  student_id: uuid("student_id").references(() => users.id).notNull().unique(),
-  points_total: integer("points_total").default(0).notNull(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  user_id: uuid("user_id").notNull().references(() => users.id),
+  balance: integer("balance").default(0),
+  total_earned: integer("total_earned").default(0),
+  total_spent: integer("total_spent").default(0),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
 });
 
 export const rewards = pgTable("rewards", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  parent_id: uuid("parent_id").references(() => users.id).notNull(),
-  label: text("label").notNull(),
-  points_required: integer("points_required").notNull(),
-  sort_order: integer("sort_order").default(0),
+  id: uuid("id").defaultRandom().primaryKey(),
+  parent_id: uuid("parent_id").notNull().references(() => users.id),
+  child_id: uuid("child_id").notNull().references(() => users.id),
+  name: text("name").notNull(),
+  description: text("description"),
+  point_cost: integer("point_cost").notNull(),
   is_active: boolean("is_active").default(true),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
+// StudyPlay game platform tables
+export const study_playtime = pgTable("study_playtime", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  user_id: uuid("user_id").notNull().references(() => users.id),
+  balance_minutes: integer("balance_minutes").default(0),
+  earned_today: integer("earned_today").default(0),
+  last_earned_date: timestamp("last_earned_date", { withTimezone: true }),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const study_profile = pgTable("study_profile", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  user_id: uuid("user_id").notNull().references(() => users.id),
+  xp_total: integer("xp_total").default(0),
+  level: integer("level").default(1),
+  streak_days: integer("streak_days").default(0),
+  last_activity_date: timestamp("last_activity_date", { withTimezone: true }),
+  tests_completed: integer("tests_completed").default(0),
+  games_played: integer("games_played").default(0),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const study_scores = pgTable("study_scores", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  user_id: uuid("user_id").notNull().references(() => users.id),
+  game_id: text("game_id").notNull(),
+  score: integer("score").notNull(),
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
@@ -179,7 +238,6 @@ export const insertMaterialSchema = createInsertSchema(materials).omit({
 
 export const insertQuizResultSchema = createInsertSchema(quiz_results).omit({
   id: true,
-  created_at: true,
 });
 
 export const insertParentChildRelationshipSchema = createInsertSchema(parent_child_relationships).omit({
@@ -197,18 +255,30 @@ export const insertImportedEventSchema = createInsertSchema(imported_events).omi
   created_at: true,
 });
 
-export const insertMentalCheckinSchema = createInsertSchema(mental_checkins).omit({
+export const insertClassroomSchema = createInsertSchema(classrooms).omit({
   id: true,
   created_at: true,
 });
 
-export const insertAppEventSchema = createInsertSchema(app_events).omit({
+export const insertComplimentSchema = createInsertSchema(compliments).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertComplimentStreakSchema = createInsertSchema(compliment_streaks).omit({
+  id: true,
+  created_at: true,
+  updated_at: true,
+});
+
+export const insertMentalCheckinSchema = createInsertSchema(mental_checkins).omit({
   id: true,
   created_at: true,
 });
 
 export const insertRewardPointsSchema = createInsertSchema(reward_points).omit({
   id: true,
+  created_at: true,
   updated_at: true,
 });
 
@@ -217,76 +287,16 @@ export const insertRewardSchema = createInsertSchema(rewards).omit({
   created_at: true,
 });
 
-// ============================================================================
-// STUDYPLAY GAME PLATFORM TABLES
-// ============================================================================
-
-// Study Playtime System (Focus → Fun)
-export const study_playtime = pgTable("study_playtime", {
-  user_id: uuid("user_id").primaryKey().references(() => users.id),
-  balance_minutes: integer("balance_minutes").default(0).notNull(),
-  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`).notNull(),
-});
-
-export const study_playtime_log = pgTable("study_playtime_log", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  user_id: uuid("user_id").references(() => users.id).notNull(),
-  delta: integer("delta").notNull(), // positive = earned, negative = spent
-  reason: text("reason").notNull(), // 'quiz_completed', 'mental_checkin', 'game_session', etc.
-  meta: text("meta"), // JSON string for metadata
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
-});
-
-// Global XP + Level System
-export const study_profile = pgTable("study_profile", {
-  user_id: uuid("user_id").primaryKey().references(() => users.id),
-  xp_total: integer("xp_total").default(0).notNull(),
-  level: integer("level").default(1).notNull(),
-  games_played: integer("games_played").default(0).notNull(),
-  tests_completed: integer("tests_completed").default(0).notNull(),
-  streak_days: integer("streak_days").default(0).notNull(),
-  last_activity_date: date("last_activity_date"),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
-  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`).notNull(),
-});
-
-export const study_xp_log = pgTable("study_xp_log", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  user_id: uuid("user_id").references(() => users.id).notNull(),
-  delta: integer("delta").notNull(), // XP change
-  reason: text("reason").notNull(),
-  meta: text("meta"), // JSON string for metadata
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
-});
-
-// Scores & Leaderboards
-export const study_scores = pgTable("study_scores", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  user_id: uuid("user_id").references(() => users.id).notNull(),
-  game_id: text("game_id").notNull(), // 'snake', 'brickwall', 'flappy', '2048', 'geo_quiz', etc.
-  score: integer("score").notNull(),
-  level_reached: integer("level_reached"),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`).notNull(),
-});
-
-// Insert schemas for StudyPlay tables
 export const insertStudyPlaytimeSchema = createInsertSchema(study_playtime).omit({
-  updated_at: true,
-});
-
-export const insertStudyPlaytimeLogSchema = createInsertSchema(study_playtime_log).omit({
   id: true,
   created_at: true,
+  updated_at: true,
 });
 
 export const insertStudyProfileSchema = createInsertSchema(study_profile).omit({
-  created_at: true,
-  updated_at: true,
-});
-
-export const insertStudyXpLogSchema = createInsertSchema(study_xp_log).omit({
   id: true,
   created_at: true,
+  updated_at: true,
 });
 
 export const insertStudyScoreSchema = createInsertSchema(study_scores).omit({
@@ -315,21 +325,9 @@ export type CalendarIntegration = typeof calendar_integrations.$inferSelect;
 export type InsertCalendarIntegration = z.infer<typeof insertCalendarIntegrationSchema>;
 export type ImportedEvent = typeof imported_events.$inferSelect;
 export type InsertImportedEvent = z.infer<typeof insertImportedEventSchema>;
-export type MentalCheckin = typeof mental_checkins.$inferSelect;
-export type InsertMentalCheckin = z.infer<typeof insertMentalCheckinSchema>;
-export type AppEvent = typeof app_events.$inferSelect;
-export type InsertAppEvent = z.infer<typeof insertAppEventSchema>;
-export type RewardPoints = typeof reward_points.$inferSelect;
-export type InsertRewardPoints = z.infer<typeof insertRewardPointsSchema>;
-export type Reward = typeof rewards.$inferSelect;
-export type InsertReward = z.infer<typeof insertRewardSchema>;
-export type StudyPlaytime = typeof study_playtime.$inferSelect;
-export type InsertStudyPlaytime = z.infer<typeof insertStudyPlaytimeSchema>;
-export type StudyPlaytimeLog = typeof study_playtime_log.$inferSelect;
-export type InsertStudyPlaytimeLog = z.infer<typeof insertStudyPlaytimeLogSchema>;
-export type StudyProfile = typeof study_profile.$inferSelect;
-export type InsertStudyProfile = z.infer<typeof insertStudyProfileSchema>;
-export type StudyXpLog = typeof study_xp_log.$inferSelect;
-export type InsertStudyXpLog = z.infer<typeof insertStudyXpLogSchema>;
-export type StudyScore = typeof study_scores.$inferSelect;
-export type InsertStudyScore = z.infer<typeof insertStudyScoreSchema>;
+export type Classroom = typeof classrooms.$inferSelect;
+export type InsertClassroom = z.infer<typeof insertClassroomSchema>;
+export type Compliment = typeof compliments.$inferSelect;
+export type InsertCompliment = z.infer<typeof insertComplimentSchema>;
+export type ComplimentStreak = typeof compliment_streaks.$inferSelect;
+export type InsertComplimentStreak = z.infer<typeof insertComplimentStreakSchema>;
