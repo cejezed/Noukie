@@ -3,6 +3,47 @@
 ## Overview
 This document provides a comprehensive test plan for the newly implemented Friends + Invite System feature in Noukie. The feature allows users to connect with friends outside their classroom using invite codes and send compliments to each other.
 
+## Security Features (Updated)
+
+This implementation includes enterprise-grade security hardening:
+
+### ✅ Rate Limiting
+- **10 attempts per 15 minutes** on invite code redemption
+- Per-user + per-IP rate limiting (combined key)
+- Automatic 429 response with Dutch error message
+- Rate limit info exposed in `RateLimit-*` headers
+
+### ✅ Timing Attack Prevention
+- **Constant-time error responses** (~200ms minimum)
+- All failed redemption attempts take similar time
+- Prevents attackers from determining:
+  - Whether a code exists
+  - Whether they're already friends
+  - Whether they're trying to add themselves
+
+### ✅ Information Leakage Prevention
+- **Generic error messages** for all redemption failures
+- Client receives: "De uitnodigingscode is ongeldig of kan niet worden gebruikt"
+- Specific errors only logged server-side for debugging
+- No hints about WHY the redemption failed
+
+### ✅ Failed Attempt Logging
+- All failed redemptions logged with:
+  - User ID and email
+  - IP address
+  - Partial code (first 4 chars + `****`)
+  - Failure reason (server-side only)
+  - Timestamp
+- Ready for integration with monitoring services (Sentry, DataDog, etc.)
+- Security alerts for rate limit violations
+
+### ✅ Other Security Measures
+- JWT authentication required on all endpoints
+- RLS policies prevent client-side inserts
+- Invite codes use safe character set (no 0, O, I, 1)
+- Symmetric friendship enforcement via CHECK constraint
+- Lexicographic ordering prevents duplicate friendships
+
 ---
 
 ## Test Environment Setup
@@ -553,16 +594,94 @@ curl -X POST http://localhost:5000/api/compliments \
 
 #### 5.5 Invite Code Brute Force Protection
 
-**Test**: Rate limiting on redeem endpoint (if implemented)
+**✅ IMPLEMENTED**: Rate limiting on redeem endpoint
+
+**Test A**: Rate limiting enforcement
 ```bash
-# Make 100 rapid requests with different codes
-for i in {1..100}; do
+# Make 15 rapid requests with different codes (limit is 10 per 15 minutes)
+for i in {1..15}; do
   curl -X POST http://localhost:5000/api/friends/redeem \
     -H "Authorization: Bearer <token>" \
-    -d "{\"code\": \"TEST-$i\"}"
+    -H "Content-Type: application/json" \
+    -d "{\"code\": \"TEST-CODE-$i\"}"
 done
 
-# Expected: Some requests return 429 Too Many Requests (if rate limiting enabled)
+# Expected:
+# - First 10 requests: 400 (invalid code) or 200 (if valid)
+# - Request 11-15: 429 Too Many Requests
+# - Response: { "error": "Too many attempts", "message": "Te veel pogingen. Probeer het over 15 minuten opnieuw." }
+```
+
+**Test B**: Rate limit headers
+```bash
+curl -i -X POST http://localhost:5000/api/friends/redeem \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "TEST-CODE"}'
+
+# Expected headers in response:
+# RateLimit-Limit: 10
+# RateLimit-Remaining: 9
+# RateLimit-Reset: <timestamp>
+```
+
+**Test C**: Failed attempt logging
+```bash
+# Check server logs after failed attempts
+tail -f server.log | grep "SECURITY"
+
+# Expected log entries:
+# [SECURITY] Failed invite code redemption: {"userId":"...","ip":"...","code":"TEST****","reason":"...","timestamp":"..."}
+# [SECURITY] Rate limit exceeded for redeem endpoint - IP: ..., User: ...
+```
+
+#### 5.6 Timing Attack Prevention
+
+**✅ IMPLEMENTED**: Constant-time error responses
+
+**Test**: Measure response times for different error types
+```bash
+# Test 1: Invalid code (code doesn't exist)
+time curl -X POST http://localhost:5000/api/friends/redeem \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "INVALID-CODE"}'
+
+# Test 2: Self-add attempt
+time curl -X POST http://localhost:5000/api/friends/redeem \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "YOUR-OWN-CODE"}'
+
+# Test 3: Already friends
+time curl -X POST http://localhost:5000/api/friends/redeem \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "ALREADY-FRIEND-CODE"}'
+
+# Expected:
+# - All three should return similar response times (~200ms minimum)
+# - All return same generic error: "De uitnodigingscode is ongeldig of kan niet worden gebruikt"
+# - No information leakage about WHY it failed
+```
+
+#### 5.7 Generic Error Messages (Information Leakage Prevention)
+
+**✅ IMPLEMENTED**: All failed redemptions return same generic error
+
+**Test**: Verify no information leakage
+```bash
+# All different error scenarios should return the SAME error message
+# This prevents attackers from determining:
+# - Whether a code exists
+# - Whether they're already friends with someone
+# - Whether they're trying to add themselves
+
+# Expected response for ALL failures:
+{
+  "error": "Ongeldige code",
+  "message": "De uitnodigingscode is ongeldig of kan niet worden gebruikt"
+}
 ```
 
 ---

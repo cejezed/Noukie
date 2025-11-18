@@ -16,12 +16,15 @@
  * - Invite codes are generated server-side only
  * - Friendships are created via database functions (RLS enforced)
  * - No client-side inserts allowed
+ * - Rate limiting on redeem endpoint (10 attempts per 15 minutes)
+ * - Failed attempt logging for security monitoring
  *
  * =====================================================
  */
 
 import { createClient } from "@supabase/supabase-js";
 import type { Express, Request, Response, NextFunction } from "express";
+import rateLimit from "express-rate-limit";
 
 // Initialize Supabase client with service role for admin operations
 const supabaseUrl = process.env.SUPABASE_URL!;
@@ -80,6 +83,60 @@ async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) 
 }
 
 // =====================================================
+// MIDDLEWARE: Rate Limiting for Redeem Endpoint
+// =====================================================
+// Prevents brute-force attacks on invite code redemption
+
+const redeemRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Max 10 attempts per window
+  message: {
+    error: "Too many attempts",
+    message: "Te veel pogingen. Probeer het over 15 minuten opnieuw."
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Skip successful requests from counting against limit
+  skipSuccessfulRequests: false,
+  // Key generator (per IP + user combination for better security)
+  keyGenerator: (req: AuthRequest) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const userId = req.user?.id || 'anonymous';
+    return `${ip}-${userId}`;
+  },
+  handler: (req: AuthRequest, res: Response) => {
+    const ip = req.ip || req.socket.remoteAddress || 'unknown';
+    const userId = req.user?.id || 'unknown';
+    console.warn(`[SECURITY] Rate limit exceeded for redeem endpoint - IP: ${ip}, User: ${userId}`);
+
+    res.status(429).json({
+      error: "Too many attempts",
+      message: "Te veel pogingen. Probeer het over 15 minuten opnieuw."
+    });
+  }
+});
+
+// =====================================================
+// HELPER: Log Failed Redemption Attempts
+// =====================================================
+
+interface FailedAttempt {
+  userId: string;
+  userEmail?: string;
+  ip: string;
+  code: string;
+  reason: string;
+  timestamp: string;
+}
+
+function logFailedRedemption(attempt: FailedAttempt) {
+  console.warn('[SECURITY] Failed invite code redemption:', JSON.stringify(attempt));
+
+  // TODO: In production, send to monitoring service (e.g., Sentry, DataDog)
+  // Example: Sentry.captureMessage('Failed invite code redemption', { extra: attempt });
+}
+
+// =====================================================
 // ROUTE 1: GET /api/friends/invite-code
 // =====================================================
 // Returns the user's invite code (generates one if it doesn't exist)
@@ -130,8 +187,11 @@ interface RedeemCodeBody {
 }
 
 async function redeemInviteCode(req: AuthRequest, res: Response) {
+  const startTime = Date.now(); // For timing-attack mitigation
+
   try {
     const userId = req.user?.id;
+    const userEmail = req.user?.email;
 
     if (!userId) {
       return res.status(401).json({
@@ -146,7 +206,7 @@ async function redeemInviteCode(req: AuthRequest, res: Response) {
     if (!code || typeof code !== "string" || code.trim().length === 0) {
       return res.status(400).json({
         error: "Bad request",
-        message: "Invite code is required"
+        message: "Uitnodigingscode is verplicht"
       });
     }
 
@@ -161,21 +221,52 @@ async function redeemInviteCode(req: AuthRequest, res: Response) {
 
     if (error) {
       console.error("Error redeeming invite code:", error);
+
+      // Log failed attempt
+      logFailedRedemption({
+        userId,
+        userEmail,
+        ip: req.ip || req.socket.remoteAddress || 'unknown',
+        code: normalizedCode.substring(0, 4) + '****', // Partial code for privacy
+        reason: 'database_error',
+        timestamp: new Date().toISOString()
+      });
+
       return res.status(500).json({
         error: "Database error",
-        message: "Failed to redeem invite code"
+        message: "Kon uitnodigingscode niet verwerken"
       });
     }
 
     // Check if redemption was successful
     if (!data.success) {
+      // Log failed attempt with specific reason
+      logFailedRedemption({
+        userId,
+        userEmail,
+        ip: req.ip || req.socket.remoteAddress || 'unknown',
+        code: normalizedCode.substring(0, 4) + '****', // Partial code for privacy
+        reason: data.error || 'unknown_error',
+        timestamp: new Date().toISOString()
+      });
+
+      // Add small delay to mitigate timing attacks (constant-time response)
+      const elapsedTime = Date.now() - startTime;
+      const targetTime = 200; // Target 200ms response time
+      if (elapsedTime < targetTime) {
+        await new Promise(resolve => setTimeout(resolve, targetTime - elapsedTime));
+      }
+
+      // Generic error message to prevent information leakage
       return res.status(400).json({
-        error: "Redemption failed",
-        message: data.error || "Unable to redeem invite code"
+        error: "Ongeldige code",
+        message: "De uitnodigingscode is ongeldig of kan niet worden gebruikt"
       });
     }
 
     // Success!
+    console.log(`[SUCCESS] Friendship created - User: ${userId}, Code: ${normalizedCode.substring(0, 4)}****`);
+
     return res.status(200).json({
       success: true,
       message: data.message || "Vriendschap succesvol aangemaakt!",
@@ -183,9 +274,20 @@ async function redeemInviteCode(req: AuthRequest, res: Response) {
     });
   } catch (error) {
     console.error("Redeem invite code error:", error);
+
+    // Log failed attempt
+    logFailedRedemption({
+      userId: req.user?.id || 'unknown',
+      userEmail: req.user?.email,
+      ip: req.ip || req.socket.remoteAddress || 'unknown',
+      code: 'error',
+      reason: 'exception',
+      timestamp: new Date().toISOString()
+    });
+
     return res.status(500).json({
       error: "Internal server error",
-      message: "Failed to process request"
+      message: "Kon uitnodigingscode niet verwerken"
     });
   }
 }
@@ -358,10 +460,13 @@ async function checkFriendship(req: AuthRequest, res: Response) {
 export function setupFriendsRoutes(app: Express) {
   // All routes require authentication
   app.get("/api/friends/invite-code", requireAuth, getInviteCode);
-  app.post("/api/friends/redeem", requireAuth, redeemInviteCode);
+
+  // Redeem endpoint with rate limiting for brute-force protection
+  app.post("/api/friends/redeem", requireAuth, redeemRateLimiter, redeemInviteCode);
+
   app.get("/api/friends", requireAuth, getFriends);
   app.delete("/api/friends/:friendId", requireAuth, removeFriend);
   app.get("/api/friends/check/:friendId", requireAuth, checkFriendship);
 
-  console.log("✅ Friends routes initialized");
+  console.log("✅ Friends routes initialized with security hardening");
 }

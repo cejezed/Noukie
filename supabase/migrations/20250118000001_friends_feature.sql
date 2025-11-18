@@ -220,6 +220,10 @@ $$;
 -- =====================================================
 -- Validates and redeems an invite code to create a friendship
 -- SECURITY DEFINER: Runs with owner privileges to bypass RLS
+--
+-- SECURITY NOTE: This function returns specific error messages for server-side
+-- logging and debugging. The Express API layer will convert these to generic
+-- error messages for clients to prevent information leakage and timing attacks.
 
 CREATE OR REPLACE FUNCTION public.redeem_invite_code(
   p_redeemer_id uuid,
