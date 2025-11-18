@@ -1,5 +1,5 @@
 /**
- * Vocab Progress API
+ * Vocab Progress API (UPDATED WITH REWARDS & COMPLIMENTS)
  *
  * POST /api/vocab/progress - Update user progress after answering (learn/test)
  *
@@ -10,15 +10,32 @@
  * - Level 3 → +3 days
  * - Level 4 → +7 days
  * - Level 5 → +14 days
+ *
+ * PHASE 2: Also tracks rewards and triggers compliments
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { checkMasteryMilestone, checkAccuracyBonus } from '../helpers/compliments';
 
 const admin = createClient(
   process.env.SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+// ============================================
+// REWARD CONFIGURATION
+// ============================================
+
+const REWARD_CONFIG = {
+  correctAnswerPoints: 1, // Points for each correct answer
+  masteredLevelThreshold: 3, // Level at which item is considered "mastered"
+  masteredBonusPoints: 5, // Extra bonus when reaching mastered level
+};
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
 
 /**
  * Calculate next due date based on mastery level
@@ -44,6 +61,35 @@ function calculateNextDueDate(masteryLevel: number): Date {
   }
 }
 
+/**
+ * Create a reward event for user
+ */
+async function createRewardEvent(
+  userId: string,
+  eventType: string,
+  points: number,
+  metadata: any = {}
+): Promise<void> {
+  try {
+    await admin.from('study_reward_events').insert([
+      {
+        user_id: userId,
+        source: 'vocab',
+        event_type: eventType,
+        points,
+        metadata,
+      },
+    ]);
+  } catch (error) {
+    console.error('Failed to create reward event:', error);
+    // Don't fail the main request if reward fails
+  }
+}
+
+// ============================================
+// MAIN HANDLER
+// ============================================
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Auth check
   const userId = (req.headers['x-user-id'] as string) || null;
@@ -57,7 +103,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { item_id, is_correct } = req.body;
+    const { item_id, is_correct, session_stats } = req.body;
 
     // Validation
     if (!item_id) {
@@ -79,10 +125,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    // Verify list ownership
+    // Verify list ownership and get list info
     const { data: list, error: listError } = await admin
       .from('vocab_lists')
-      .select('id, owner_id')
+      .select('id, owner_id, title')
       .eq('id', item.list_id)
       .single();
 
@@ -101,6 +147,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let newMasteryLevel: number;
     let newTimesCorrect: number;
     let newTimesIncorrect: number;
+    const oldMasteryLevel = existingProgress?.mastery_level ?? 0;
 
     if (existingProgress) {
       // Update existing progress
@@ -147,8 +194,66 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: progressError.message });
     }
 
+    // ============================================
+    // PHASE 2: REWARDS & COMPLIMENTS
+    // ============================================
+
+    let rewardInfo = {
+      points_earned: 0,
+      bonus_earned: 0,
+      mastery_milestone_reached: false,
+      compliment_created: false,
+    };
+
+    // 1. Award points for correct answer
+    if (is_correct) {
+      await createRewardEvent(userId, 'vocab_correct', REWARD_CONFIG.correctAnswerPoints, {
+        item_id,
+        list_id: item.list_id,
+        new_mastery: newMasteryLevel,
+      });
+      rewardInfo.points_earned = REWARD_CONFIG.correctAnswerPoints;
+    }
+
+    // 2. Award bonus for reaching mastered level
+    if (
+      is_correct &&
+      newMasteryLevel >= REWARD_CONFIG.masteredLevelThreshold &&
+      oldMasteryLevel < REWARD_CONFIG.masteredLevelThreshold
+    ) {
+      await createRewardEvent(userId, 'vocab_mastered', REWARD_CONFIG.masteredBonusPoints, {
+        item_id,
+        list_id: item.list_id,
+        mastered_level: newMasteryLevel,
+      });
+      rewardInfo.bonus_earned = REWARD_CONFIG.masteredBonusPoints;
+      rewardInfo.mastery_milestone_reached = true;
+
+      // Check if user deserves a mastery milestone compliment
+      const complimentCreated = await checkMasteryMilestone(userId, item.list_id, list.title);
+      rewardInfo.compliment_created = complimentCreated;
+    }
+
+    // 3. Check session accuracy bonus (if provided)
+    if (session_stats && typeof session_stats === 'object') {
+      const { total, correct, accuracy } = session_stats;
+
+      if (total && correct !== undefined && accuracy) {
+        const accuracyCompliment = await checkAccuracyBonus(userId, {
+          total,
+          correct,
+          accuracy,
+        });
+
+        if (accuracyCompliment && !rewardInfo.compliment_created) {
+          rewardInfo.compliment_created = true;
+        }
+      }
+    }
+
     return res.status(200).json({
       data: updatedProgress,
+      rewards: rewardInfo,
     });
   } catch (error: any) {
     console.error('Unexpected error updating vocab progress:', error);

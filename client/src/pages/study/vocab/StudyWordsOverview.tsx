@@ -11,6 +11,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import type { VocabList, DueVocabItem } from '@/types/vocab';
 import { formatDueDate } from '@/types/vocab';
+import RewardsBadge from '@/components/rewards/RewardsBadge';
+import ComplimentsBanner from '@/components/compliments/ComplimentsBanner';
 
 /** Get current user ID */
 async function getUid() {
@@ -56,7 +58,13 @@ export default function StudyWordsOverview() {
 
   return (
     <main className="mx-auto max-w-[1000px] px-6 py-8">
-      <h1 className="text-2xl font-semibold mb-6">Woordentrainer</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold">Woordentrainer</h1>
+        <RewardsBadge />
+      </div>
+
+      {/* Compliments banner */}
+      <ComplimentsBanner />
 
       {/* Due items banner */}
       {dueItems.data && dueItems.data.length > 0 && (
