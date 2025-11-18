@@ -28,6 +28,16 @@ import {
   type InsertRewardPoints,
   type Reward,
   type InsertReward,
+  type StudyPlaytime,
+  type InsertStudyPlaytime,
+  type StudyPlaytimeLog,
+  type InsertStudyPlaytimeLog,
+  type StudyProfile,
+  type InsertStudyProfile,
+  type StudyXpLog,
+  type InsertStudyXpLog,
+  type StudyScore,
+  type InsertStudyScore,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -141,6 +151,32 @@ export interface IStorage {
   createReward(reward: InsertReward): Promise<Reward>;
   updateReward(rewardId: string, updates: Partial<Reward>): Promise<void>;
   deleteReward(rewardId: string): Promise<void>;
+
+  // StudyPlay Playtime System
+  getPlaytime(userId: string): Promise<StudyPlaytime | undefined>;
+  addPlaytime(userId: string, delta: number, reason: string, meta?: any): Promise<void>;
+  usePlaytime(userId: string, costMinutes: number): Promise<boolean>;
+  getPlaytimeLog(userId: string, days?: number): Promise<StudyPlaytimeLog[]>;
+  getTodayPlaytimeEarned(userId: string): Promise<number>;
+
+  // StudyPlay Profile & XP System
+  getProfile(userId: string): Promise<StudyProfile | undefined>;
+  awardXp(userId: string, delta: number, reason: string, meta?: any): Promise<{ newLevel: number; leveledUp: boolean }>;
+  incrementGamesPlayed(userId: string): Promise<void>;
+  incrementTestsCompleted(userId: string): Promise<void>;
+  updateStreak(userId: string): Promise<void>;
+
+  // StudyPlay Scores & Leaderboards
+  submitScore(score: InsertStudyScore): Promise<StudyScore>;
+  getLeaderboard(gameId: string, limit?: number): Promise<Array<{
+    userId: string;
+    displayName: string;
+    score: number;
+    rank: number;
+    levelReached?: number;
+  }>>;
+  getUserHighScore(userId: string, gameId: string): Promise<number>;
+  getUserScores(userId: string, gameId?: string): Promise<StudyScore[]>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -795,6 +831,380 @@ export class PostgresStorage implements IStorage {
       .eq("id", rewardId);
 
     if (error) throw error;
+  }
+
+  // ============================================================================
+  // STUDYPLAY PLAYTIME SYSTEM
+  // ============================================================================
+
+  async getPlaytime(userId: string): Promise<StudyPlaytime | undefined> {
+    const { data, error } = await supabase
+      .from("study_playtime")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || undefined;
+  }
+
+  async addPlaytime(userId: string, delta: number, reason: string, meta?: any): Promise<void> {
+    // Check today's earned playtime (max 15 minutes per day for focus events)
+    const focusReasons = ['quiz_completed', 'test_completed', 'mental_checkin', 'compliment_given', 'streak_bonus'];
+    if (focusReasons.includes(reason)) {
+      const todayEarned = await this.getTodayPlaytimeEarned(userId);
+      if (todayEarned >= 15) {
+        // Already earned max for today, skip adding more
+        return;
+      }
+      // Cap delta so we don't exceed 15 minutes total for today
+      if (todayEarned + delta > 15) {
+        delta = 15 - todayEarned;
+      }
+    }
+
+    if (delta <= 0) return;
+
+    // Get current balance
+    const current = await this.getPlaytime(userId);
+    const currentBalance = current?.balance_minutes || 0;
+    const newBalance = Math.max(0, currentBalance + delta);
+
+    // Upsert playtime balance
+    const { error: balanceError } = await supabase
+      .from("study_playtime")
+      .upsert(
+        {
+          user_id: userId,
+          balance_minutes: newBalance,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (balanceError) throw balanceError;
+
+    // Log the transaction
+    const { error: logError } = await supabase
+      .from("study_playtime_log")
+      .insert({
+        user_id: userId,
+        delta,
+        reason,
+        meta: meta ? JSON.stringify(meta) : null,
+      });
+
+    if (logError) throw logError;
+  }
+
+  async usePlaytime(userId: string, costMinutes: number): Promise<boolean> {
+    const current = await this.getPlaytime(userId);
+    const currentBalance = current?.balance_minutes || 0;
+
+    if (currentBalance < costMinutes) {
+      return false; // Not enough playtime
+    }
+
+    // Deduct playtime
+    await this.addPlaytime(userId, -costMinutes, 'game_session');
+    return true;
+  }
+
+  async getPlaytimeLog(userId: string, days: number = 30): Promise<StudyPlaytimeLog[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await supabase
+      .from("study_playtime_log")
+      .select("*")
+      .eq("user_id", userId)
+      .gte("created_at", startDate.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getTodayPlaytimeEarned(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const { data, error } = await supabase
+      .from("study_playtime_log")
+      .select("delta")
+      .eq("user_id", userId)
+      .gte("created_at", todayStart.toISOString())
+      .gt("delta", 0); // Only earned, not spent
+
+    if (error) throw error;
+
+    const total = (data || []).reduce((sum, log) => sum + log.delta, 0);
+    return total;
+  }
+
+  // ============================================================================
+  // STUDYPLAY PROFILE & XP SYSTEM
+  // ============================================================================
+
+  async getProfile(userId: string): Promise<StudyProfile | undefined> {
+    const { data, error } = await supabase
+      .from("study_profile")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || undefined;
+  }
+
+  async awardXp(userId: string, delta: number, reason: string, meta?: any): Promise<{ newLevel: number; leveledUp: boolean }> {
+    // Get current profile
+    const current = await this.getProfile(userId);
+    const oldXp = current?.xp_total || 0;
+    const oldLevel = current?.level || 1;
+
+    const newXp = oldXp + delta;
+
+    // Calculate new level: floor(sqrt(xp_total / 10)) with minimum 1
+    const newLevel = Math.max(1, Math.floor(Math.sqrt(newXp / 10)));
+    const leveledUp = newLevel > oldLevel;
+
+    // Upsert profile with new XP and level
+    const { error: profileError } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: newXp,
+          level: newLevel,
+          games_played: current?.games_played || 0,
+          tests_completed: current?.tests_completed || 0,
+          streak_days: current?.streak_days || 0,
+          last_activity_date: current?.last_activity_date || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (profileError) throw profileError;
+
+    // Log XP transaction
+    const { error: logError } = await supabase
+      .from("study_xp_log")
+      .insert({
+        user_id: userId,
+        delta,
+        reason,
+        meta: meta ? JSON.stringify(meta) : null,
+      });
+
+    if (logError) throw logError;
+
+    return { newLevel, leveledUp };
+  }
+
+  async incrementGamesPlayed(userId: string): Promise<void> {
+    const current = await this.getProfile(userId);
+    const gamesPlayed = (current?.games_played || 0) + 1;
+
+    const { error } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: current?.xp_total || 0,
+          level: current?.level || 1,
+          games_played: gamesPlayed,
+          tests_completed: current?.tests_completed || 0,
+          streak_days: current?.streak_days || 0,
+          last_activity_date: current?.last_activity_date || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (error) throw error;
+  }
+
+  async incrementTestsCompleted(userId: string): Promise<void> {
+    const current = await this.getProfile(userId);
+    const testsCompleted = (current?.tests_completed || 0) + 1;
+
+    const { error } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: current?.xp_total || 0,
+          level: current?.level || 1,
+          games_played: current?.games_played || 0,
+          tests_completed: testsCompleted,
+          streak_days: current?.streak_days || 0,
+          last_activity_date: current?.last_activity_date || null,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (error) throw error;
+  }
+
+  async updateStreak(userId: string): Promise<void> {
+    const current = await this.getProfile(userId);
+    const today = new Date().toISOString().split('T')[0];
+    const lastActivityDate = current?.last_activity_date;
+
+    let newStreakDays = current?.streak_days || 0;
+
+    if (!lastActivityDate) {
+      // First activity ever
+      newStreakDays = 1;
+    } else {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      if (lastActivityDate === yesterdayStr) {
+        // Consecutive day
+        newStreakDays += 1;
+      } else if (lastActivityDate !== today) {
+        // Streak broken
+        newStreakDays = 1;
+      }
+      // If lastActivityDate === today, keep current streak
+    }
+
+    const { error } = await supabase
+      .from("study_profile")
+      .upsert(
+        {
+          user_id: userId,
+          xp_total: current?.xp_total || 0,
+          level: current?.level || 1,
+          games_played: current?.games_played || 0,
+          tests_completed: current?.tests_completed || 0,
+          streak_days: newStreakDays,
+          last_activity_date: today,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      );
+
+    if (error) throw error;
+
+    // Award bonus playtime for streak milestones
+    if (newStreakDays % 3 === 0 && newStreakDays > 0) {
+      await this.addPlaytime(userId, 2, 'streak_bonus', { streakDays: newStreakDays });
+    }
+  }
+
+  // ============================================================================
+  // STUDYPLAY SCORES & LEADERBOARDS
+  // ============================================================================
+
+  async submitScore(score: InsertStudyScore): Promise<StudyScore> {
+    const { data, error } = await supabase
+      .from("study_scores")
+      .insert(score)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  async getLeaderboard(gameId: string, limit: number = 50): Promise<Array<{
+    userId: string;
+    displayName: string;
+    score: number;
+    rank: number;
+    levelReached?: number;
+  }>> {
+    // Get top scores for this game (best score per user)
+    const { data, error } = await supabase
+      .from("study_scores")
+      .select("user_id, score, level_reached")
+      .eq("game_id", gameId)
+      .order("score", { ascending: false })
+      .limit(limit * 3); // Get more than needed to filter duplicates
+
+    if (error) throw error;
+
+    // Group by user and keep only best score per user
+    const userBestScores = new Map<string, { score: number; levelReached?: number }>();
+    (data || []).forEach(entry => {
+      const existing = userBestScores.get(entry.user_id);
+      if (!existing || entry.score > existing.score) {
+        userBestScores.set(entry.user_id, {
+          score: entry.score,
+          levelReached: entry.level_reached || undefined,
+        });
+      }
+    });
+
+    // Get user names and create leaderboard entries
+    const userIds = Array.from(userBestScores.keys());
+    const { data: users, error: usersError } = await supabase
+      .from("users")
+      .select("id, name")
+      .in("id", userIds);
+
+    if (usersError) throw usersError;
+
+    const leaderboard = Array.from(userBestScores.entries())
+      .map(([userId, { score, levelReached }]) => {
+        const user = (users || []).find(u => u.id === userId);
+        // Privacy: Use initials only
+        const displayName = user?.name
+          ? user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase()
+          : 'AN';
+
+        return {
+          userId,
+          displayName,
+          score,
+          levelReached,
+        };
+      })
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((entry, index) => ({
+        ...entry,
+        rank: index + 1,
+      }));
+
+    return leaderboard;
+  }
+
+  async getUserHighScore(userId: string, gameId: string): Promise<number> {
+    const { data, error } = await supabase
+      .from("study_scores")
+      .select("score")
+      .eq("user_id", userId)
+      .eq("game_id", gameId)
+      .order("score", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data?.score || 0;
+  }
+
+  async getUserScores(userId: string, gameId?: string): Promise<StudyScore[]> {
+    let query = supabase
+      .from("study_scores")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (gameId) {
+      query = query.eq("game_id", gameId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data || [];
   }
 }
 

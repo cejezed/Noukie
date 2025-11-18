@@ -1194,6 +1194,219 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  /** ========= STUDYPLAY GAME PLATFORM ========= */
+
+  // Playtime System Endpoints
+  app.get("/api/playtime", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const playtime = await storage.getPlaytime(userId);
+      res.json({ balanceMinutes: playtime?.balance_minutes || 0 });
+    } catch (error) {
+      console.error("Get playtime error:", error);
+      res.status(500).json({ error: "Failed to get playtime" });
+    }
+  });
+
+  // Internal use only - called by server-side logic, not directly by client
+  app.post("/api/playtime/add", async (req, res) => {
+    try {
+      const { userId, delta, reason, meta } = req.body;
+
+      if (!userId || !delta || !reason) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      await storage.addPlaytime(userId, delta, reason, meta);
+      const updated = await storage.getPlaytime(userId);
+
+      res.json({
+        success: true,
+        balanceMinutes: updated?.balance_minutes || 0,
+        deltaAwarded: delta
+      });
+    } catch (error) {
+      console.error("Add playtime error:", error);
+      res.status(500).json({ error: "Failed to add playtime" });
+    }
+  });
+
+  app.post("/api/playtime/use", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const { costMinutes } = req.body;
+
+      if (!costMinutes || costMinutes <= 0) {
+        return res.status(400).json({ error: "Invalid cost minutes" });
+      }
+
+      const success = await storage.usePlaytime(userId, costMinutes);
+
+      if (!success) {
+        return res.status(400).json({ error: "Insufficient playtime minutes" });
+      }
+
+      const updated = await storage.getPlaytime(userId);
+      res.json({
+        success: true,
+        balanceMinutes: updated?.balance_minutes || 0
+      });
+    } catch (error) {
+      console.error("Use playtime error:", error);
+      res.status(500).json({ error: "Failed to use playtime" });
+    }
+  });
+
+  // Profile & XP System Endpoints
+  app.get("/api/profile", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const profile = await storage.getProfile(userId);
+
+      res.json({
+        xpTotal: profile?.xp_total || 0,
+        level: profile?.level || 1,
+        gamesPlayed: profile?.games_played || 0,
+        testsCompleted: profile?.tests_completed || 0,
+        streakDays: profile?.streak_days || 0,
+        lastActivityDate: profile?.last_activity_date || null,
+      });
+    } catch (error) {
+      console.error("Get profile error:", error);
+      res.status(500).json({ error: "Failed to get profile" });
+    }
+  });
+
+  // Internal use only - called by server-side logic
+  app.post("/api/profile/xp", async (req, res) => {
+    try {
+      const { userId, delta, reason, meta } = req.body;
+
+      if (!userId || !delta || !reason) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const result = await storage.awardXp(userId, delta, reason, meta);
+      const profile = await storage.getProfile(userId);
+
+      res.json({
+        success: true,
+        newLevel: result.newLevel,
+        leveledUp: result.leveledUp,
+        xpTotal: profile?.xp_total || 0,
+      });
+    } catch (error) {
+      console.error("Award XP error:", error);
+      res.status(500).json({ error: "Failed to award XP" });
+    }
+  });
+
+  // Scores & Leaderboard Endpoints
+  app.post("/api/score/submit", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const { gameId, score, levelReached } = req.body;
+
+      if (!gameId || score === undefined) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      // Submit score
+      await storage.submitScore({
+        user_id: userId,
+        game_id: gameId,
+        score,
+        level_reached: levelReached || null,
+      });
+
+      // Increment games played
+      await storage.incrementGamesPlayed(userId);
+
+      // Award XP based on score and game
+      let xpReward = 10; // Base XP
+      if (score > 100) xpReward = 15;
+      if (score > 500) xpReward = 20;
+      if (score > 1000) xpReward = 25;
+
+      const xpResult = await storage.awardXp(userId, xpReward, 'game_session', { gameId, score });
+
+      // Update streak
+      await storage.updateStreak(userId);
+
+      // Log game session event for parent portal
+      await storage.createAppEvent({
+        user_id: userId,
+        event_type: 'study_session',
+        metadata: JSON.stringify({ type: 'game', gameId, score }),
+      });
+
+      res.json({
+        success: true,
+        xpAwarded: xpReward,
+        newLevel: xpResult.newLevel,
+        leveledUp: xpResult.leveledUp,
+      });
+    } catch (error) {
+      console.error("Submit score error:", error);
+      res.status(500).json({ error: "Failed to submit score" });
+    }
+  });
+
+  app.get("/api/leaderboard", async (req, res) => {
+    try {
+      const { game, limit } = req.query;
+
+      if (!game || typeof game !== 'string') {
+        return res.status(400).json({ error: "Game ID required" });
+      }
+
+      const maxLimit = limit ? Math.min(parseInt(limit as string, 10), 100) : 50;
+      const leaderboard = await storage.getLeaderboard(game, maxLimit);
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Get leaderboard error:", error);
+      res.status(500).json({ error: "Failed to get leaderboard" });
+    }
+  });
+
+  app.get("/api/user/highscore", async (req, res) => {
+    try {
+      const userId = req.headers['x-user-id'] as string;
+      if (!userId) {
+        return res.status(401).json({ error: "User not authenticated" });
+      }
+
+      const { gameId } = req.query;
+
+      if (!gameId || typeof gameId !== 'string') {
+        return res.status(400).json({ error: "Game ID required" });
+      }
+
+      const highScore = await storage.getUserHighScore(userId, gameId);
+      res.json({ highScore });
+    } catch (error) {
+      console.error("Get high score error:", error);
+      res.status(500).json({ error: "Failed to get high score" });
+    }
+  });
+
   /** ========= GOOGLE CALENDAR (DISABLED) ========= */
   // DISABLED: All Google Calendar routes have been commented out
   // Uncomment and restore the .disabled files to re-enable
