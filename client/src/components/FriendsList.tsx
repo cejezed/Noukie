@@ -27,7 +27,7 @@ interface Friend {
 
 /**
  * FriendsList Component
- * Displays a list of the user's friends with remove functionality
+ * Kid-friendly display of user's friends with ability to remove
  */
 export default function FriendsList() {
   const { user, getAuthHeaders } = useAuth();
@@ -64,8 +64,8 @@ export default function FriendsList() {
     },
     onSuccess: () => {
       toast({
-        title: "Vriend verwijderd",
-        description: "De vriendschap is beëindigd",
+        title: "✓ Vriend verwijderd",
+        description: "Jullie zijn nu geen vrienden meer in Noukie",
       });
 
       // Invalidate friends list to refresh
@@ -73,8 +73,8 @@ export default function FriendsList() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Verwijderen mislukt",
-        description: error.message,
+        title: "Oeps!",
+        description: "Probeer het nog een keer",
         variant: "destructive",
       });
     },
@@ -101,10 +101,13 @@ export default function FriendsList() {
 
   if (error) {
     return (
-      <Card className="border-red-200">
-        <CardContent className="py-4">
-          <p className="text-sm text-red-600">
-            Kon vriendenlijst niet laden. Probeer het later opnieuw.
+      <Card className="border-yellow-200 bg-yellow-50">
+        <CardContent className="py-4 text-center">
+          <p className="text-sm text-yellow-800">
+            Je vrienden kunnen nu niet worden geladen.
+          </p>
+          <p className="text-xs text-yellow-700 mt-1">
+            Probeer het later nog een keer.
           </p>
         </CardContent>
       </Card>
@@ -114,26 +117,27 @@ export default function FriendsList() {
   return (
     <Card className="border-purple-200 bg-gradient-to-br from-purple-50 to-pink-50">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Users className="w-5 h-5 text-purple-500" />
-          Mijn Vrienden
+        <CardTitle className="flex items-center gap-2 text-lg">
+          👥 Mijn vrienden
           {friends.length > 0 && (
             <span className="ml-auto text-sm font-normal text-muted-foreground">
               {friends.length} {friends.length === 1 ? "vriend" : "vrienden"}
             </span>
           )}
         </CardTitle>
-        <CardDescription>
+        <CardDescription className="text-sm">
           Vrienden met wie je complimenten kunt uitwisselen
         </CardDescription>
       </CardHeader>
       <CardContent>
         {friends.length === 0 ? (
-          <div className="text-center py-8">
-            <Users className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-muted-foreground mb-2">Je hebt nog geen vrienden toegevoegd</p>
-            <p className="text-sm text-muted-foreground">
-              Gebruik de uitnodigingscode van een vriend om te beginnen!
+          <div className="text-center py-8 px-4">
+            <div className="text-6xl mb-4">👥</div>
+            <p className="text-base font-medium text-muted-foreground mb-2">
+              Je hebt nog geen vrienden toegevoegd
+            </p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Vraag iemand om jouw geheime code te gebruiken of vul een code in die je kreeg
             </p>
           </div>
         ) : (
@@ -141,18 +145,18 @@ export default function FriendsList() {
             {friends.map((friend) => (
               <div
                 key={friend.id}
-                className="flex items-center justify-between p-3 bg-white rounded-lg border border-purple-100 hover:border-purple-200 transition-colors"
+                className="flex items-center justify-between p-3 bg-white rounded-lg border border-purple-100 hover:border-purple-200 transition-colors shadow-sm"
               >
                 <div className="flex items-center gap-3">
-                  <Avatar>
+                  <Avatar className="w-10 h-10">
                     <AvatarImage src={friend.avatar_url} alt={friend.name} />
                     <AvatarFallback className="bg-purple-100 text-purple-600">
                       {getInitials(friend.name)}
                     </AvatarFallback>
                   </Avatar>
                   <div>
-                    <p className="font-medium">{friend.name}</p>
-                    <p className="text-sm text-muted-foreground">{friend.email}</p>
+                    <p className="font-medium text-sm">{friend.name}</p>
+                    <p className="text-xs text-purple-600">💌 Kan complimenten van jou krijgen</p>
                   </div>
                 </div>
 
@@ -171,17 +175,17 @@ export default function FriendsList() {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Vriend verwijderen?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Weet je zeker dat je {friend.name} als vriend wilt verwijderen?
+                        Weet je zeker dat je {friend.name} wilt verwijderen als vriend?
                         Jullie kunnen dan geen complimenten meer naar elkaar sturen.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Annuleren</AlertDialogCancel>
+                      <AlertDialogCancel>Nee, toch niet</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={() => removeFriend.mutate(friend.id)}
                         className="bg-red-600 hover:bg-red-700"
                       >
-                        Verwijderen
+                        Ja, verwijder vriend
                       </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>

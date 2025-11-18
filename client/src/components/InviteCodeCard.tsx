@@ -8,7 +8,8 @@ import { Copy, Share2, Loader2 } from "lucide-react";
 
 /**
  * InviteCodeCard Component
- * Displays the user's invite code and provides sharing functionality
+ * Displays the user's invite code in a kid-friendly way
+ * Kids can share their secret code to make friends in Noukie
  */
 export default function InviteCodeCard() {
   const { user, getAuthHeaders } = useAuth();
@@ -35,13 +36,13 @@ export default function InviteCodeCard() {
       setCopied(true);
       toast({
         title: "Gekopieerd! 📋",
-        description: "Je uitnodigingscode is gekopieerd naar het klembord",
+        description: "Je geheime code is gekopieerd",
       });
       setTimeout(() => setCopied(false), 2000);
     } catch (error) {
       toast({
-        title: "Kopiëren mislukt",
-        description: "Probeer het opnieuw",
+        title: "Oeps!",
+        description: "Probeer het nog een keer",
         variant: "destructive",
       });
     }
@@ -50,13 +51,13 @@ export default function InviteCodeCard() {
   const handleShare = async () => {
     if (!inviteCode?.code) return;
 
-    const shareText = `Voeg mij toe als vriend op Noukie! Gebruik deze code: ${inviteCode.code}`;
+    const shareText = `Hé! Gebruik mijn geheime Noukie-code: ${inviteCode.code}\n\nDownload Noukie en vul deze code in bij "Vriend toevoegen" 😊`;
 
     // Check if Web Share API is available
     if (navigator.share) {
       try {
         await navigator.share({
-          title: "Noukie Uitnodiging",
+          title: "Kom ook naar Noukie!",
           text: shareText,
         });
       } catch (error) {
@@ -81,10 +82,13 @@ export default function InviteCodeCard() {
 
   if (error) {
     return (
-      <Card className="border-red-200">
-        <CardContent className="py-4">
-          <p className="text-sm text-red-600">
-            Kon uitnodigingscode niet laden. Probeer het later opnieuw.
+      <Card className="border-yellow-200 bg-yellow-50">
+        <CardContent className="py-4 text-center">
+          <p className="text-sm text-yellow-800">
+            Je geheime code kan nu niet worden geladen.
+          </p>
+          <p className="text-xs text-yellow-700 mt-1">
+            Probeer het later nog een keer.
           </p>
         </CardContent>
       </Card>
@@ -94,17 +98,21 @@ export default function InviteCodeCard() {
   return (
     <Card className="border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Share2 className="w-5 h-5 text-blue-500" />
-          Jouw Uitnodigingscode
+        <CardTitle className="flex items-center gap-2 text-lg">
+          🎟️ Nodig een vriend(in) uit
         </CardTitle>
-        <CardDescription>
-          Deel deze code met vrienden om ze toe te voegen
+        <CardDescription className="text-sm">
+          Deel je geheime code en word vrienden in Noukie
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Label above code */}
+        <p className="text-xs font-medium text-blue-700 text-center">
+          Jouw geheime code
+        </p>
+
         {/* Invite code display */}
-        <div className="bg-white p-4 rounded-lg border-2 border-blue-200 text-center">
+        <div className="bg-white p-4 rounded-lg border-2 border-blue-300 text-center shadow-sm">
           <p className="text-3xl font-mono font-bold text-blue-600 tracking-wider">
             {inviteCode?.code || "XXXX-XXXX-XXXX"}
           </p>
@@ -117,22 +125,22 @@ export default function InviteCodeCard() {
             variant="outline"
             className="w-full"
           >
-            <Copy className="w-4 h-4 mr-2" />
-            {copied ? "Gekopieerd!" : "Kopiëren"}
+            {copied ? "✓ Gekopieerd!" : "📋 Kopieer code"}
           </Button>
           <Button
             onClick={handleShare}
             className="w-full bg-blue-500 hover:bg-blue-600"
           >
-            <Share2 className="w-4 h-4 mr-2" />
-            Delen
+            📲 Deel code
           </Button>
         </div>
 
         {/* Help text */}
-        <p className="text-xs text-muted-foreground text-center">
-          Je vrienden kunnen deze code invoeren om jou als vriend toe te voegen
-        </p>
+        <div className="bg-blue-100 p-3 rounded-lg">
+          <p className="text-xs text-blue-800 text-center">
+            💡 <strong>Tip:</strong> Vertel erbij: "Download Noukie en vul deze code in bij Vriend toevoegen"
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
