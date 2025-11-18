@@ -149,7 +149,7 @@ export default function StudyWordsOverview() {
 
                   {/* View details link */}
                   <button
-                    onClick={() => navigate(`/study/words/list/${list.id}`)}
+                    onClick={() => navigate(`/study/words/list/${list.id}/detail`)}
                     className="mt-2 w-full text-center text-xs text-gray-500 hover:text-gray-700"
                   >
                     Details bekijken

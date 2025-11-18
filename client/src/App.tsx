@@ -30,6 +30,8 @@ import Compliments from "./pages/Compliments";
 // Vocab trainer (WRTS-style)
 import StudyWordsOverview from "./pages/study/vocab/StudyWordsOverview";
 import StudyWordsList from "./pages/study/vocab/StudyWordsList";
+import CreateVocabList from "./pages/study/vocab/CreateVocabList";
+import VocabListDetail from "./pages/study/vocab/VocabListDetail";
 
 function AuthenticatedApp() {
   const { user, loading } = useAuth();
@@ -112,8 +114,10 @@ function AuthenticatedApp() {
         <Route path="/toets/admin" component={AdminQuiz} />
 
         {/* Vocab trainer (WRTS-style) */}
-        <Route path="/study/words" component={StudyWordsOverview} />
+        <Route path="/study/words/create" component={CreateVocabList} />
+        <Route path="/study/words/list/:id/detail" component={VocabListDetail} />
         <Route path="/study/words/list/:id" component={StudyWordsList} />
+        <Route path="/study/words" component={StudyWordsOverview} />
 
         {/* Compliments feature */}
         <Route path="/compliments" component={Compliments} />
