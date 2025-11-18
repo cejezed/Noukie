@@ -1,4 +1,5 @@
 import { jsx as _jsx } from "react/jsx-runtime";
+import * as React from "react";
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "./supabase";
 const AuthContext = createContext(undefined);
