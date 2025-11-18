@@ -1112,6 +1112,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Parent Rewards Endpoints
+  app.get("/api/parent/child/:childId/rewards-overview", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const { parentId } = req.query;
+
+      if (!parentId || typeof parentId !== 'string') {
+        return res.status(400).json({ error: "Parent ID required" });
+      }
+
+      const overview = await storage.getRewardsOverview(childId, parentId);
+      res.json(overview);
+    } catch (error) {
+      console.error("Get rewards overview error:", error);
+      res.status(500).json({ error: "Failed to get rewards overview" });
+    }
+  });
+
+  app.post("/api/parent/rewards", async (req, res) => {
+    try {
+      const { parentId, label, pointsRequired, sortOrder } = req.body;
+
+      if (!parentId || !label || !pointsRequired) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+
+      const reward = await storage.createReward({
+        parent_id: parentId,
+        label,
+        points_required: pointsRequired,
+        sort_order: sortOrder || 0,
+        is_active: true,
+      });
+
+      res.json(reward);
+    } catch (error) {
+      console.error("Create reward error:", error);
+      res.status(500).json({ error: "Failed to create reward" });
+    }
+  });
+
+  app.put("/api/parent/rewards/:rewardId", async (req, res) => {
+    try {
+      const { rewardId } = req.params;
+      const { label, pointsRequired, sortOrder, isActive } = req.body;
+
+      const updates: any = {};
+      if (label !== undefined) updates.label = label;
+      if (pointsRequired !== undefined) updates.points_required = pointsRequired;
+      if (sortOrder !== undefined) updates.sort_order = sortOrder;
+      if (isActive !== undefined) updates.is_active = isActive;
+
+      await storage.updateReward(rewardId, updates);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Update reward error:", error);
+      res.status(500).json({ error: "Failed to update reward" });
+    }
+  });
+
+  app.delete("/api/parent/rewards/:rewardId", async (req, res) => {
+    try {
+      const { rewardId } = req.params;
+      await storage.deleteReward(rewardId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Delete reward error:", error);
+      res.status(500).json({ error: "Failed to delete reward" });
+    }
+  });
+
   app.get("/api/student/:studentId/parent-requests", async (req, res) => {
     try {
       const { studentId } = req.params;

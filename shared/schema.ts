@@ -132,6 +132,23 @@ export const app_events = pgTable("app_events", {
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
+export const reward_points = pgTable("reward_points", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  student_id: uuid("student_id").references(() => users.id).notNull().unique(),
+  points_total: integer("points_total").default(0).notNull(),
+  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+});
+
+export const rewards = pgTable("rewards", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  parent_id: uuid("parent_id").references(() => users.id).notNull(),
+  label: text("label").notNull(),
+  points_required: integer("points_required").notNull(),
+  sort_order: integer("sort_order").default(0),
+  is_active: boolean("is_active").default(true),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   created_at: true,
@@ -190,6 +207,16 @@ export const insertAppEventSchema = createInsertSchema(app_events).omit({
   created_at: true,
 });
 
+export const insertRewardPointsSchema = createInsertSchema(reward_points).omit({
+  id: true,
+  updated_at: true,
+});
+
+export const insertRewardSchema = createInsertSchema(rewards).omit({
+  id: true,
+  created_at: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -215,3 +242,7 @@ export type MentalCheckin = typeof mental_checkins.$inferSelect;
 export type InsertMentalCheckin = z.infer<typeof insertMentalCheckinSchema>;
 export type AppEvent = typeof app_events.$inferSelect;
 export type InsertAppEvent = z.infer<typeof insertAppEventSchema>;
+export type RewardPoints = typeof reward_points.$inferSelect;
+export type InsertRewardPoints = z.infer<typeof insertRewardPointsSchema>;
+export type Reward = typeof rewards.$inferSelect;
+export type InsertReward = z.infer<typeof insertRewardSchema>;

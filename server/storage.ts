@@ -24,6 +24,10 @@ import {
   type InsertMentalCheckin,
   type AppEvent,
   type InsertAppEvent,
+  type RewardPoints,
+  type InsertRewardPoints,
+  type Reward,
+  type InsertReward,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -118,6 +122,25 @@ export interface IStorage {
     dailyActivityLast30d: Array<{ date: string; count: number }>;
   }>;
   createAppEvent(event: InsertAppEvent): Promise<AppEvent>;
+
+  // Rewards & Points
+  getRewardPoints(studentId: string): Promise<RewardPoints | undefined>;
+  upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints>;
+  getRewardsByParentId(parentId: string): Promise<Reward[]>;
+  getRewardsOverview(studentId: string, parentId: string): Promise<{
+    pointsTotal: number;
+    nextReward: { id: string; label: string; pointsRequired: number } | null;
+    rewards: Array<{
+      id: string;
+      label: string;
+      pointsRequired: number;
+      progressPercent: number;
+      isActive: boolean;
+    }>;
+  }>;
+  createReward(reward: InsertReward): Promise<Reward>;
+  updateReward(rewardId: string, updates: Partial<Reward>): Promise<void>;
+  deleteReward(rewardId: string): Promise<void>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -656,6 +679,122 @@ export class PostgresStorage implements IStorage {
 
     if (error) throw error;
     return data!;
+  }
+
+  // Rewards & Points
+  async getRewardPoints(studentId: string): Promise<RewardPoints | undefined> {
+    const { data, error } = await supabase
+      .from("reward_points")
+      .select("*")
+      .eq("student_id", studentId)
+      .single();
+
+    if (error && error.code !== "PGRST116") throw error;
+    return data || undefined;
+  }
+
+  async upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints> {
+    const { data, error } = await supabase
+      .from("reward_points")
+      .upsert(
+        {
+          ...points,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'student_id' }
+      )
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  async getRewardsByParentId(parentId: string): Promise<Reward[]> {
+    const { data, error } = await supabase
+      .from("rewards")
+      .select("*")
+      .eq("parent_id", parentId)
+      .eq("is_active", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getRewardsOverview(studentId: string, parentId: string): Promise<{
+    pointsTotal: number;
+    nextReward: { id: string; label: string; pointsRequired: number } | null;
+    rewards: Array<{
+      id: string;
+      label: string;
+      pointsRequired: number;
+      progressPercent: number;
+      isActive: boolean;
+    }>;
+  }> {
+    // Get student's points
+    const pointsData = await this.getRewardPoints(studentId);
+    const pointsTotal = pointsData?.points_total || 0;
+
+    // Get parent's rewards
+    const rewardsData = await this.getRewardsByParentId(parentId);
+
+    // Calculate progress for each reward
+    const rewards = rewardsData.map((r) => ({
+      id: r.id,
+      label: r.label,
+      pointsRequired: r.points_required,
+      progressPercent: Math.min(100, Math.round((pointsTotal / r.points_required) * 100)),
+      isActive: r.is_active || false,
+    }));
+
+    // Find next achievable reward (lowest points required that student hasn't reached yet)
+    const nextReward = rewardsData
+      .filter((r) => r.points_required > pointsTotal && r.is_active)
+      .sort((a, b) => a.points_required - b.points_required)[0];
+
+    return {
+      pointsTotal,
+      nextReward: nextReward
+        ? {
+            id: nextReward.id,
+            label: nextReward.label,
+            pointsRequired: nextReward.points_required,
+          }
+        : null,
+      rewards,
+    };
+  }
+
+  async createReward(reward: InsertReward): Promise<Reward> {
+    const { data, error } = await supabase
+      .from("rewards")
+      .insert(reward)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  async updateReward(rewardId: string, updates: Partial<Reward>): Promise<void> {
+    const { error } = await supabase
+      .from("rewards")
+      .update(updates)
+      .eq("id", rewardId);
+
+    if (error) throw error;
+  }
+
+  async deleteReward(rewardId: string): Promise<void> {
+    // Soft delete by setting is_active to false
+    const { error } = await supabase
+      .from("rewards")
+      .update({ is_active: false })
+      .eq("id", rewardId);
+
+    if (error) throw error;
   }
 }
 
