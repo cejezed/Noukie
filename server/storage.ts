@@ -22,6 +22,8 @@ import {
   type InsertImportedEvent,
   type MentalCheckin,
   type InsertMentalCheckin,
+  type AppEvent,
+  type InsertAppEvent,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -91,6 +93,31 @@ export interface IStorage {
     funWithTopList: Array<{ label: string; count: number }>;
   }>;
   upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin>;
+
+  // Quiz Metrics
+  getQuizMetrics(studentId: string): Promise<{
+    quizzesCompletedLast7d: number;
+    avgQuizScoreLast7d: number;
+    bestQuizScoreLast7d: number;
+    retakesCountLast30d: number;
+    subjectsMostPracticedLast30d: Array<{ subject: string; count: number }>;
+  }>;
+
+  // Study Metrics
+  getStudyMetrics(studentId: string): Promise<{
+    vocabSessionsLast7d: number;
+    vocabWordsReviewedLast7d: number;
+    studySessionsLast7d: number;
+  }>;
+
+  // Usage Metrics
+  getUsageMetrics(studentId: string): Promise<{
+    loginsLast7d: number;
+    activeDaysLast7d: number;
+    lastActiveAt: string | null;
+    dailyActivityLast30d: Array<{ date: string; count: number }>;
+  }>;
+  createAppEvent(event: InsertAppEvent): Promise<AppEvent>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -440,9 +467,190 @@ export class PostgresStorage implements IStorage {
   }
 
   async upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin> {
-    const { data, error } = await supabase
+    const { data, error} = await supabase
       .from("mental_checkins")
       .upsert(checkin, { onConflict: 'student_id,date' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
+  }
+
+  // Quiz Metrics
+  async getQuizMetrics(studentId: string): Promise<{
+    quizzesCompletedLast7d: number;
+    avgQuizScoreLast7d: number;
+    bestQuizScoreLast7d: number;
+    retakesCountLast30d: number;
+    subjectsMostPracticedLast30d: Array<{ subject: string; count: number }>;
+  }> {
+    // Get quiz results from last 30 days
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const { data: quizzes30d, error } = await supabase
+      .from("quiz_results")
+      .select("*, courses(name)")
+      .eq("user_id", studentId)
+      .gte("created_at", thirtyDaysAgo.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    const results = quizzes30d || [];
+
+    // Filter last 7 days
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const quizzes7d = results.filter((q: any) => new Date(q.created_at) >= sevenDaysAgo);
+
+    // Calculate metrics
+    const quizzesCompletedLast7d = quizzes7d.length;
+
+    const scoresLast7d = quizzes7d.filter((q: any) => q.score !== null).map((q: any) => q.score);
+    const avgQuizScoreLast7d = scoresLast7d.length > 0
+      ? Math.round((scoresLast7d.reduce((sum: number, score: number) => sum + score, 0) / scoresLast7d.length) * 10) / 10
+      : 0;
+
+    const bestQuizScoreLast7d = scoresLast7d.length > 0 ? Math.max(...scoresLast7d) : 0;
+
+    // Count retakes (same course_id + material_id combination)
+    const quizKeys = new Set<string>();
+    let retakesCountLast30d = 0;
+    results.forEach((q: any) => {
+      const key = `${q.course_id || 'none'}-${q.material_id || 'none'}`;
+      if (quizKeys.has(key)) {
+        retakesCountLast30d++;
+      } else {
+        quizKeys.add(key);
+      }
+    });
+
+    // Subject frequency
+    const subjectCounts: Record<string, number> = {};
+    results.forEach((q: any) => {
+      const courseName = q.courses?.name || 'Onbekend';
+      subjectCounts[courseName] = (subjectCounts[courseName] || 0) + 1;
+    });
+
+    const subjectsMostPracticedLast30d = Object.entries(subjectCounts)
+      .map(([subject, count]) => ({ subject, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5); // Top 5
+
+    return {
+      quizzesCompletedLast7d,
+      avgQuizScoreLast7d,
+      bestQuizScoreLast7d,
+      retakesCountLast30d,
+      subjectsMostPracticedLast30d,
+    };
+  }
+
+  // Study Metrics
+  async getStudyMetrics(studentId: string): Promise<{
+    vocabSessionsLast7d: number;
+    vocabWordsReviewedLast7d: number;
+    studySessionsLast7d: number;
+  }> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    // Get sessions from last 7 days
+    const { data: sessions, error } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("user_id", studentId)
+      .gte("happened_at", sevenDaysAgo.toISOString());
+
+    if (error) throw error;
+
+    const studySessionsLast7d = sessions?.length || 0;
+
+    // For vocab, we would need a separate vocab table
+    // For now, return placeholder values
+    // TODO: Implement vocab tracking when vocab table is created
+    const vocabSessionsLast7d = 0;
+    const vocabWordsReviewedLast7d = 0;
+
+    return {
+      vocabSessionsLast7d,
+      vocabWordsReviewedLast7d,
+      studySessionsLast7d,
+    };
+  }
+
+  // Usage Metrics
+  async getUsageMetrics(studentId: string): Promise<{
+    loginsLast7d: number;
+    activeDaysLast7d: number;
+    lastActiveAt: string | null;
+    dailyActivityLast30d: Array<{ date: string; count: number }>;
+  }> {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Get app events from last 30 days
+    const { data: events, error } = await supabase
+      .from("app_events")
+      .select("*")
+      .eq("user_id", studentId)
+      .gte("created_at", thirtyDaysAgo.toISOString())
+      .order("created_at", { ascending: false });
+
+    if (error && error.code !== "PGRST116") throw error;
+
+    const allEvents = events || [];
+
+    // Count logins in last 7 days
+    const events7d = allEvents.filter((e: any) => new Date(e.created_at) >= sevenDaysAgo);
+    const loginsLast7d = events7d.filter((e: any) => e.event_type === 'login').length;
+
+    // Count unique active days in last 7 days
+    const activeDates7d = new Set<string>();
+    events7d.forEach((e: any) => {
+      const dateStr = new Date(e.created_at).toISOString().split('T')[0];
+      activeDates7d.add(dateStr);
+    });
+    const activeDaysLast7d = activeDates7d.size;
+
+    // Get last active timestamp
+    const lastActiveAt = allEvents.length > 0 ? allEvents[0].created_at : null;
+
+    // Build daily activity array for last 30 days
+    const dailyCountsMap: Record<string, number> = {};
+    allEvents.forEach((e: any) => {
+      const dateStr = new Date(e.created_at).toISOString().split('T')[0];
+      dailyCountsMap[dateStr] = (dailyCountsMap[dateStr] || 0) + 1;
+    });
+
+    // Fill in all 30 days (including zeros)
+    const dailyActivityLast30d: Array<{ date: string; count: number }> = [];
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date();
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      dailyActivityLast30d.push({
+        date: dateStr,
+        count: dailyCountsMap[dateStr] || 0,
+      });
+    }
+
+    return {
+      loginsLast7d,
+      activeDaysLast7d,
+      lastActiveAt,
+      dailyActivityLast30d,
+    };
+  }
+
+  async createAppEvent(event: InsertAppEvent): Promise<AppEvent> {
+    const { data, error } = await supabase
+      .from("app_events")
+      .insert(event)
       .select()
       .single();
 

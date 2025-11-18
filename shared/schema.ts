@@ -74,6 +74,7 @@ export const quiz_results = pgTable("quiz_results", {
   material_id: uuid("material_id").references(() => materials.id),
   score: integer("score"),
   weak_points: text("weak_points"),
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
 export const parent_child_relationships = pgTable("parent_child_relationships", {
@@ -121,6 +122,16 @@ export const mental_checkins = pgTable("mental_checkins", {
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
+export const app_events = pgTable("app_events", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  user_id: uuid("user_id").references(() => users.id).notNull(),
+  event_type: text("event_type", {
+    enum: ["login", "logout", "task_completed", "quiz_completed", "mental_checkin", "study_session", "chat_session"]
+  }).notNull(),
+  metadata: text("metadata"), // JSON string for additional event data
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   created_at: true,
@@ -151,6 +162,7 @@ export const insertMaterialSchema = createInsertSchema(materials).omit({
 
 export const insertQuizResultSchema = createInsertSchema(quiz_results).omit({
   id: true,
+  created_at: true,
 });
 
 export const insertParentChildRelationshipSchema = createInsertSchema(parent_child_relationships).omit({
@@ -169,6 +181,11 @@ export const insertImportedEventSchema = createInsertSchema(imported_events).omi
 });
 
 export const insertMentalCheckinSchema = createInsertSchema(mental_checkins).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertAppEventSchema = createInsertSchema(app_events).omit({
   id: true,
   created_at: true,
 });
@@ -196,3 +213,5 @@ export type ImportedEvent = typeof imported_events.$inferSelect;
 export type InsertImportedEvent = z.infer<typeof insertImportedEventSchema>;
 export type MentalCheckin = typeof mental_checkins.$inferSelect;
 export type InsertMentalCheckin = z.infer<typeof insertMentalCheckinSchema>;
+export type AppEvent = typeof app_events.$inferSelect;
+export type InsertAppEvent = z.infer<typeof insertAppEventSchema>;

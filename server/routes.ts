@@ -1076,6 +1076,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Parent Quiz Metrics Endpoint
+  app.get("/api/parent/child/:childId/quiz-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getQuizMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child quiz metrics error:", error);
+      res.status(500).json({ error: "Failed to get quiz metrics" });
+    }
+  });
+
+  // Parent Study Metrics Endpoint
+  app.get("/api/parent/child/:childId/study-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getStudyMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child study metrics error:", error);
+      res.status(500).json({ error: "Failed to get study metrics" });
+    }
+  });
+
+  // Parent Usage Metrics Endpoint
+  app.get("/api/parent/child/:childId/usage-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getUsageMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child usage metrics error:", error);
+      res.status(500).json({ error: "Failed to get usage metrics" });
+    }
+  });
+
   app.get("/api/student/:studentId/parent-requests", async (req, res) => {
     try {
       const { studentId } = req.params;
