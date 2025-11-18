@@ -19,6 +19,7 @@ import {
 } from "./services/supabase";
 import { processScheduleScreenshot, validateLesson } from "./scheduleOcr";
 import { setupComplimentsRoutes } from "./compliments-routes-improved";
+import { setupFriendsRoutes } from "./friends-routes";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
@@ -1145,6 +1146,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   /** ========= COMPLIMENTS ========= */
   // Use improved compliments routes with JWT authentication
   setupComplimentsRoutes(app);
+
+  /** ========= FRIENDS + INVITE SYSTEM ========= */
+  // Friends and invite code routes with JWT authentication
+  setupFriendsRoutes(app);
 
   /** ========= GOOGLE CALENDAR (DISABLED) ========= */
   // DISABLED: All Google Calendar routes have been commented out

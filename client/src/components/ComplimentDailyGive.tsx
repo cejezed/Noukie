@@ -8,25 +8,28 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Heart, Send, Flame, Trophy, Star } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Heart, Send, Flame, Trophy, Star, Users, School } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 /**
  * ComplimentDailyGive Component
- * Allows students to send one anonymous compliment per day to a classmate
+ * Allows students to send one anonymous compliment per day to a classmate or friend
  * Features:
  * - Shows current streak
  * - Preset compliment templates
  * - Custom message option
  * - Daily limit enforcement
  * - Badge display
+ * - Tabs for classmates and friends
  */
 export default function ComplimentDailyGive() {
   const { user, getAuthHeaders } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [selectedClassmate, setSelectedClassmate] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"classmates" | "friends">("classmates");
+  const [selectedRecipient, setSelectedRecipient] = useState<string>("");
   const [message, setMessage] = useState<string>("");
   const [usePreset, setUsePreset] = useState<boolean>(true);
 
@@ -55,6 +58,23 @@ export default function ComplimentDailyGive() {
     },
     enabled: !!user?.id && open,
   });
+
+  // Fetch friends
+  const { data: friends = [] } = useQuery<any[]>({
+    queryKey: ["friends", user?.id],
+    queryFn: async () => {
+      const headers = await getAuthHeaders();
+      const response = await fetch("/api/friends", { headers });
+      if (!response.ok) throw new Error("Failed to fetch friends");
+      return response.json();
+    },
+    enabled: !!user?.id && open,
+  });
+
+  // Determine which list to use based on active tab
+  const recipients = activeTab === "friends" ? friends : classmates;
+  const hasClassroom = classmates.length > 0;
+  const hasFriends = friends.length > 0;
 
   // Fetch streak data
   const { data: streak } = useQuery<any>({
@@ -89,11 +109,13 @@ export default function ComplimentDailyGive() {
     onSuccess: () => {
       toast({
         title: "Compliment verzonden! 💌",
-        description: "Je klasgenoot zal blij zijn met deze mooie woorden!",
+        description: activeTab === "friends"
+          ? "Je vriend zal blij zijn met deze mooie woorden!"
+          : "Je klasgenoot zal blij zijn met deze mooie woorden!",
       });
       queryClient.invalidateQueries({ queryKey: ["compliment-streak"] });
       setOpen(false);
-      setSelectedClassmate("");
+      setSelectedRecipient("");
       setMessage("");
       setUsePreset(true);
     },
@@ -107,9 +129,9 @@ export default function ComplimentDailyGive() {
   });
 
   const handleSend = () => {
-    if (!selectedClassmate) {
+    if (!selectedRecipient) {
       toast({
-        title: "Selecteer een klasgenoot",
+        title: activeTab === "friends" ? "Selecteer een vriend" : "Selecteer een klasgenoot",
         description: "Kies iemand om een compliment te geven",
         variant: "destructive",
       });
@@ -126,7 +148,7 @@ export default function ComplimentDailyGive() {
     }
 
     sendCompliment.mutate({
-      to_user: selectedClassmate,
+      to_user: selectedRecipient,
       message: message.trim(),
     });
   };
@@ -223,26 +245,70 @@ export default function ComplimentDailyGive() {
             <DialogHeader>
               <DialogTitle>Stuur een Compliment 💌</DialogTitle>
               <DialogDescription>
-                Kies een klasgenoot en stuur een positief bericht. Je kunt één compliment per dag versturen!
+                Kies {activeTab === "friends" ? "een vriend" : "een klasgenoot"} en stuur een positief bericht. Je kunt één compliment per dag versturen!
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              {/* Select classmate */}
-              <div>
-                <Label>Aan wie?</Label>
-                <Select value={selectedClassmate} onValueChange={setSelectedClassmate}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Kies een klasgenoot" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {classmates.map((classmate) => (
-                      <SelectItem key={classmate.id} value={classmate.id}>
-                        {classmate.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* Tabs for classmates and friends */}
+              {hasClassroom && hasFriends && (
+                <Tabs value={activeTab} onValueChange={(v) => {
+                  setActiveTab(v as "classmates" | "friends");
+                  setSelectedRecipient(""); // Reset selection when switching tabs
+                }}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="classmates" className="flex items-center gap-2">
+                      <School className="w-4 h-4" />
+                      Klasgenoten
+                    </TabsTrigger>
+                    <TabsTrigger value="friends" className="flex items-center gap-2">
+                      <Users className="w-4 h-4" />
+                      Vrienden
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
+
+              {/* Show message if no classmates AND no friends */}
+              {!hasClassroom && !hasFriends && (
+                <div className="text-center py-4 px-2 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <p className="text-sm text-yellow-800 mb-2">
+                    Je bent nog alleen hier 😄
+                  </p>
+                  <p className="text-xs text-yellow-700">
+                    Nodig een vriendin uit om complimentjes uit te wisselen!
+                  </p>
+                </div>
+              )}
+
+              {/* Show message if no friends (but has classmates) */}
+              {!hasClassroom && hasFriends && (
+                <p className="text-xs text-muted-foreground text-center py-2">
+                  Je zit nog niet in een klas, maar je kunt wel complimenten naar vrienden sturen!
+                </p>
+              )}
+
+              {/* Select recipient */}
+              {(hasClassroom || hasFriends) && (
+                <div>
+                  <Label>Aan wie?</Label>
+                  <Select value={selectedRecipient} onValueChange={setSelectedRecipient}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={
+                        activeTab === "friends"
+                          ? "Kies een vriend"
+                          : "Kies een klasgenoot"
+                      } />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recipients.map((recipient) => (
+                        <SelectItem key={recipient.id} value={recipient.id}>
+                          {recipient.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* Preset or custom toggle */}
               <div className="flex gap-2">
@@ -298,20 +364,22 @@ export default function ComplimentDailyGive() {
               )}
 
               {/* Send button */}
-              <Button
-                onClick={handleSend}
-                disabled={sendCompliment.isPending || !selectedClassmate || !message}
-                className="w-full"
-              >
-                {sendCompliment.isPending ? (
-                  "Versturen..."
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" />
-                    Verzenden
-                  </>
-                )}
-              </Button>
+              {(hasClassroom || hasFriends) && (
+                <Button
+                  onClick={handleSend}
+                  disabled={sendCompliment.isPending || !selectedRecipient || !message}
+                  className="w-full"
+                >
+                  {sendCompliment.isPending ? (
+                    "Versturen..."
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Verzenden
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </DialogContent>
         </Dialog>

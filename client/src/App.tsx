@@ -26,6 +26,7 @@ import StudyPlay from "./pages/study/StudyPlay";
 import AdminQuiz from "./pages/study/AdminQuiz";
 import { ErrorBoundary } from "./components/dev/ErrorBoundary";
 import Compliments from "./pages/Compliments";
+import Friends from "./pages/Friends";
 
 // Vocab trainer (WRTS-style)
 import StudyWordsOverview from "./pages/study/vocab/StudyWordsOverview";
@@ -121,6 +122,9 @@ function AuthenticatedApp() {
 
         {/* Compliments feature */}
         <Route path="/compliments" component={Compliments} />
+
+        {/* Friends + Invite System */}
+        <Route path="/friends" component={Friends} />
 
         {/* 6) Instellingen */}
         <Route path="/instellingen" component={Instellingen} />
