@@ -243,9 +243,9 @@ export default function ComplimentDailyGive() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle>Stuur een Compliment 💌</DialogTitle>
-              <DialogDescription>
-                Kies {activeTab === "friends" ? "een vriend" : "een klasgenoot"} en stuur een positief bericht. Je kunt één compliment per dag versturen!
+              <DialogTitle>💌 Stuur een compliment</DialogTitle>
+              <DialogDescription className="text-sm">
+                Kies iemand en maak hun dag een beetje mooier!
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -256,13 +256,11 @@ export default function ComplimentDailyGive() {
                   setSelectedRecipient(""); // Reset selection when switching tabs
                 }}>
                   <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="classmates" className="flex items-center gap-2">
-                      <School className="w-4 h-4" />
-                      Klasgenoten
+                    <TabsTrigger value="classmates" className="flex items-center gap-1.5">
+                      🏫 Klasgenoten
                     </TabsTrigger>
-                    <TabsTrigger value="friends" className="flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      Vrienden
+                    <TabsTrigger value="friends" className="flex items-center gap-1.5">
+                      👥 Vrienden
                     </TabsTrigger>
                   </TabsList>
                 </Tabs>
@@ -270,33 +268,44 @@ export default function ComplimentDailyGive() {
 
               {/* Show message if no classmates AND no friends */}
               {!hasClassroom && !hasFriends && (
-                <div className="text-center py-4 px-2 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <p className="text-sm text-yellow-800 mb-2">
-                    Je bent nog alleen hier 😄
+                <div className="text-center py-6 px-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-lg border border-yellow-200">
+                  <div className="text-4xl mb-3">👋</div>
+                  <p className="text-sm font-medium text-yellow-900 mb-2">
+                    Je bent nog alleen hier!
                   </p>
-                  <p className="text-xs text-yellow-700">
-                    Nodig een vriendin uit om complimentjes uit te wisselen!
+                  <p className="text-xs text-yellow-800 mb-3">
+                    Nodig een vriend(in) uit om complimentjes uit te wisselen.
                   </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.location.href = '/friends'}
+                    className="bg-white hover:bg-yellow-50"
+                  >
+                    👥 Naar Vrienden
+                  </Button>
                 </div>
               )}
 
-              {/* Show message if no friends (but has classmates) */}
+              {/* Show message if no classroom but has friends */}
               {!hasClassroom && hasFriends && (
-                <p className="text-xs text-muted-foreground text-center py-2">
-                  Je zit nog niet in een klas, maar je kunt wel complimenten naar vrienden sturen!
-                </p>
+                <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
+                  <p className="text-xs text-blue-800 text-center">
+                    💡 Je zit nog niet in een klas, maar je kunt wel complimenten naar je vrienden sturen!
+                  </p>
+                </div>
               )}
 
               {/* Select recipient */}
               {(hasClassroom || hasFriends) && (
                 <div>
-                  <Label>Aan wie?</Label>
+                  <Label className="text-sm font-medium">💌 Aan wie is je compliment?</Label>
                   <Select value={selectedRecipient} onValueChange={setSelectedRecipient}>
-                    <SelectTrigger>
+                    <SelectTrigger className="mt-1.5">
                       <SelectValue placeholder={
                         activeTab === "friends"
-                          ? "Kies een vriend"
-                          : "Kies een klasgenoot"
+                          ? "Kies een vriend..."
+                          : "Kies een klasgenoot..."
                       } />
                     </SelectTrigger>
                     <SelectContent>
@@ -311,32 +320,34 @@ export default function ComplimentDailyGive() {
               )}
 
               {/* Preset or custom toggle */}
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant={usePreset ? "default" : "outline"}
-                  onClick={() => setUsePreset(true)}
-                  className="flex-1"
-                >
-                  Voorbeelden
-                </Button>
-                <Button
-                  type="button"
-                  variant={!usePreset ? "default" : "outline"}
-                  onClick={() => setUsePreset(false)}
-                  className="flex-1"
-                >
-                  Eigen tekst
-                </Button>
-              </div>
+              {(hasClassroom || hasFriends) && (
+                <>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant={usePreset ? "default" : "outline"}
+                      onClick={() => setUsePreset(true)}
+                      className="flex-1"
+                    >
+                      ✨ Kies een compliment
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={!usePreset ? "default" : "outline"}
+                      onClick={() => setUsePreset(false)}
+                      className="flex-1"
+                    >
+                      ✏️ Zelf schrijven
+                    </Button>
+                  </div>
 
-              {/* Message input */}
-              {usePreset ? (
-                <div>
-                  <Label>Kies een compliment</Label>
-                  <Select value={message} onValueChange={setMessage}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecteer een compliment" />
+                  {/* Message input */}
+                  {usePreset ? (
+                    <div>
+                      <Label className="text-sm">Kies een compliment</Label>
+                      <Select value={message} onValueChange={setMessage}>
+                        <SelectTrigger className="mt-1.5">
+                          <SelectValue placeholder="Selecteer een compliment..." />
                     </SelectTrigger>
                     <SelectContent>
                       {presetCompliments.map((compliment, index) => (
@@ -348,37 +359,37 @@ export default function ComplimentDailyGive() {
                   </Select>
                 </div>
               ) : (
-                <div>
-                  <Label>Jouw compliment</Label>
-                  <Textarea
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Schrijf een vriendelijk en positief bericht..."
-                    maxLength={500}
-                    rows={4}
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {message.length}/500 tekens
-                  </p>
-                </div>
-              )}
-
-              {/* Send button */}
-              {(hasClassroom || hasFriends) && (
-                <Button
-                  onClick={handleSend}
-                  disabled={sendCompliment.isPending || !selectedRecipient || !message}
-                  className="w-full"
-                >
-                  {sendCompliment.isPending ? (
-                    "Versturen..."
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4 mr-2" />
-                      Verzenden
-                    </>
+                    <div>
+                      <Label className="text-sm">Schrijf je eigen compliment</Label>
+                      <Textarea
+                        value={message}
+                        onChange={(e) => setMessage(e.target.value)}
+                        placeholder="Typ hier iets aardigs... Bijvoorbeeld: 'Je bent altijd vrolijk en dat werkt aanstekelijk!'"
+                        maxLength={200}
+                        rows={4}
+                        className="mt-1.5"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {message.length}/200 tekens
+                      </p>
+                    </div>
                   )}
-                </Button>
+
+                  {/* Send button */}
+                  <Button
+                    onClick={handleSend}
+                    disabled={sendCompliment.isPending || !selectedRecipient || !message}
+                    className="w-full bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600"
+                  >
+                    {sendCompliment.isPending ? (
+                      "Versturen..."
+                    ) : (
+                      <>
+                        💌 Compliment versturen
+                      </>
+                    )}
+                  </Button>
+                </>
               )}
             </div>
           </DialogContent>

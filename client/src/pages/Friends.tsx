@@ -8,23 +8,24 @@ import { Heart } from "lucide-react";
 
 /**
  * Friends Page
- * Main page for the friends and invite system
+ * Kid-friendly interface for managing friends in Noukie
  *
- * Layout:
- * - Top: Page header with link to compliments
- * - Row 1: InviteCodeCard | AddFriendForm (side by side)
- * - Row 2: FriendsList (full width)
+ * Layout (3 blocks):
+ * 1. "Samen Noukie spelen" - Invite code to share
+ * 2. "Vriend toevoegen" - Enter friend's code
+ * 3. "Mijn vrienden" - Friends list
  */
 export default function Friends() {
   const navigate = useNavigate();
 
   return (
-    <div className="container max-w-6xl mx-auto p-4 space-y-6">
+    <div className="container max-w-6xl mx-auto p-4 space-y-6 pb-8">
       {/* Page Header */}
-      <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold text-foreground">Vrienden 👥</h1>
-        <p className="text-muted-foreground">
-          Voeg vrienden toe en wissel complimenten uit, zelfs als jullie niet in dezelfde klas zitten
+      <div className="text-center space-y-3 py-4">
+        <div className="text-5xl">👥</div>
+        <h1 className="text-2xl font-bold text-foreground">Samen Noukie spelen</h1>
+        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+          Voeg vrienden toe en stuur complimenten naar elkaar, ook als jullie niet in dezelfde klas zitten!
         </p>
       </div>
 
@@ -33,20 +34,19 @@ export default function Friends() {
         <Button
           onClick={() => navigate("/compliments")}
           variant="outline"
-          className="gap-2"
+          className="gap-2 bg-gradient-to-r from-pink-50 to-purple-50 border-pink-200 hover:bg-pink-100"
         >
-          <Heart className="w-4 h-4" />
-          Naar Complimenten
+          💌 Naar Complimenten
         </Button>
       </div>
 
-      {/* Invite and Add Friend Cards (side by side on desktop) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Blok 1 & 2: Invite and Add Friend Cards (side by side on desktop) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <InviteCodeCard />
         <AddFriendForm />
       </div>
 
-      {/* Friends List */}
+      {/* Blok 3: Friends List */}
       <FriendsList />
     </div>
   );
