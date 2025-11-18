@@ -20,6 +20,8 @@ import {
   type InsertCalendarIntegration,
   type ImportedEvent,
   type InsertImportedEvent,
+  type MentalCheckin,
+  type InsertMentalCheckin,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -76,6 +78,19 @@ export interface IStorage {
   getImportedEvent(userId: string, externalId: string): Promise<ImportedEvent | undefined>;
   createImportedEvent(event: InsertImportedEvent): Promise<ImportedEvent>;
   getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]>;
+
+  // Mental Checkins
+  getMentalCheckinsByStudentId(studentId: string, days?: number): Promise<MentalCheckin[]>;
+  getMentalMetrics(studentId: string): Promise<{
+    checkinsLast7d: number;
+    avgSleepLast7d: number;
+    avgStressLast7d: number;
+    avgEnergyLast7d: number;
+    daysNotFeelingWellLast30d: number;
+    helpNowCountLast30d: number;
+    funWithTopList: Array<{ label: string; count: number }>;
+  }>;
+  upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin>;
 }
 
 export class PostgresStorage implements IStorage {
@@ -345,6 +360,94 @@ export class PostgresStorage implements IStorage {
     const { data, error } = await supabase.from("imported_events").select("*").eq("user_id", userId);
     if (error) throw error;
     return data || [];
+  }
+
+  // Mental Checkins
+  async getMentalCheckinsByStudentId(studentId: string, days: number = 30): Promise<MentalCheckin[]> {
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - days);
+
+    const { data, error } = await supabase
+      .from("mental_checkins")
+      .select("*")
+      .eq("student_id", studentId)
+      .gte("date", startDate.toISOString().split('T')[0])
+      .order("date", { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+  }
+
+  async getMentalMetrics(studentId: string): Promise<{
+    checkinsLast7d: number;
+    avgSleepLast7d: number;
+    avgStressLast7d: number;
+    avgEnergyLast7d: number;
+    daysNotFeelingWellLast30d: number;
+    helpNowCountLast30d: number;
+    funWithTopList: Array<{ label: string; count: number }>;
+  }> {
+    // Get last 30 days of checkins
+    const checkins30d = await this.getMentalCheckinsByStudentId(studentId, 30);
+
+    // Get last 7 days of checkins
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const checkins7d = checkins30d.filter(c => new Date(c.date) >= sevenDaysAgo);
+
+    // Calculate averages for last 7 days
+    const avgSleepLast7d = checkins7d.length > 0
+      ? checkins7d.reduce((sum, c) => sum + (c.sleep_score || 0), 0) / checkins7d.length
+      : 0;
+
+    const avgStressLast7d = checkins7d.length > 0
+      ? checkins7d.reduce((sum, c) => sum + (c.stress_score || 0), 0) / checkins7d.length
+      : 0;
+
+    const avgEnergyLast7d = checkins7d.length > 0
+      ? checkins7d.reduce((sum, c) => sum + (c.energy_score || 0), 0) / checkins7d.length
+      : 0;
+
+    // Count "niet lekker" and "hulp nu" in last 30 days
+    const daysNotFeelingWellLast30d = checkins30d.filter(c => c.mood === 'niet_lekker').length;
+    const helpNowCountLast30d = checkins30d.filter(c => c.mood === 'hulp_nu').length;
+
+    // Build fun_with frequency list
+    const funWithCounts: Record<string, number> = {};
+    checkins30d.forEach(c => {
+      if (c.fun_with && c.fun_with.trim()) {
+        const items = c.fun_with.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+        items.forEach((item: string) => {
+          funWithCounts[item] = (funWithCounts[item] || 0) + 1;
+        });
+      }
+    });
+
+    const funWithTopList = Object.entries(funWithCounts)
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10); // Top 10
+
+    return {
+      checkinsLast7d: checkins7d.length,
+      avgSleepLast7d: Math.round(avgSleepLast7d * 10) / 10,
+      avgStressLast7d: Math.round(avgStressLast7d * 10) / 10,
+      avgEnergyLast7d: Math.round(avgEnergyLast7d * 10) / 10,
+      daysNotFeelingWellLast30d,
+      helpNowCountLast30d,
+      funWithTopList,
+    };
+  }
+
+  async upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin> {
+    const { data, error } = await supabase
+      .from("mental_checkins")
+      .upsert(checkin, { onConflict: 'student_id,date' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data!;
   }
 }
 

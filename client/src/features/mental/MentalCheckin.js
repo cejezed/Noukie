@@ -1,5 +1,5 @@
 import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
-import { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 const DEFAULT_TIERS = [
     { points: 25, label: "Samen shoppen" },
@@ -36,6 +36,7 @@ function parseYyyyMmDd(s) {
 }
 // ---- Database helpers --------------------------------------------------------
 async function saveToSupabase(payload, userId) {
+    // Save to old checkins table for backwards compatibility
     const { error } = await supabase
         .from("checkins")
         .upsert({
@@ -50,6 +51,7 @@ async function saveToSupabase(payload, userId) {
     }, { onConflict: "user_id,date" });
     if (error)
         throw error;
+    // Save to positives table
     if (payload.positives?.length) {
         const rows = payload.positives.map((p) => ({
             user_id: userId,
@@ -61,6 +63,34 @@ async function saveToSupabase(payload, userId) {
         if (ep)
             throw ep;
     }
+    // Also save to new mental_checkins table for parent view
+    // Convert mood (1-5) to categorical: 1-2 = niet_lekker, 3 = niet_lekker, 4-5 = ok
+    let moodCategory = 'ok';
+    if (payload.mood <= 2) {
+        moodCategory = 'niet_lekker';
+    }
+    else if (payload.mood === 3) {
+        moodCategory = 'niet_lekker';
+    }
+    else {
+        moodCategory = 'ok';
+    }
+    // Extract fun_with from positives
+    const funWithPositive = payload.positives?.find((p) => p.category === 'FUN_WITH_SOMEONE');
+    const funWith = funWithPositive?.text || null;
+    const { error: mcError } = await supabase
+        .from("mental_checkins")
+        .upsert({
+        student_id: userId,
+        date: payload.date,
+        mood: moodCategory,
+        sleep_score: payload.sleep ?? null,
+        stress_score: payload.tension ?? null,
+        energy_score: payload.eating ?? null, // Note: 'eating' is actually 'energy' in the UI
+        fun_with: funWith,
+    }, { onConflict: "student_id,date" });
+    if (mcError)
+        throw mcError;
 }
 async function getCheckinCount(userId) {
     const { count, error } = await supabase
@@ -287,6 +317,16 @@ export default function MentalCheckin({ userId, webhookUrl, helpWebhookUrl, rewa
             ]);
             if (helpErr)
                 throw helpErr;
+            // Also update mental_checkins table with appropriate mood
+            const todayDate = yyyyMmDd(new Date());
+            const moodValue = now ? 'hulp_nu' : 'niet_lekker';
+            await supabase
+                .from("mental_checkins")
+                .upsert({
+                student_id: userId,
+                date: todayDate,
+                mood: moodValue,
+            }, { onConflict: "student_id,date" });
             alert("We hebben je melding opgeslagen.");
         }
         catch (e) {

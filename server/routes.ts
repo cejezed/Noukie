@@ -1020,6 +1020,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Parent Mental Checkins Endpoints
+  app.get("/api/parent/child/:childId/mental-checkins", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const checkins = await storage.getMentalCheckinsByStudentId(childId, 30);
+
+      // Transform to camelCase and ensure complete time series
+      const endDate = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const checkinsMap = new Map(
+        checkins.map(c => [c.date, {
+          date: c.date,
+          mood: c.mood,
+          sleepScore: c.sleep_score,
+          stressScore: c.stress_score,
+          energyScore: c.energy_score,
+          funWith: c.fun_with,
+        }])
+      );
+
+      // Fill in missing dates
+      const completeSeries = [];
+      const currentDate = new Date(startDate);
+      while (currentDate <= endDate) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        completeSeries.push(checkinsMap.get(dateStr) || {
+          date: dateStr,
+          mood: null,
+          sleepScore: null,
+          stressScore: null,
+          energyScore: null,
+          funWith: null,
+        });
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      res.json(completeSeries);
+    } catch (error) {
+      console.error("Get child mental checkins error:", error);
+      res.status(500).json({ error: "Failed to get mental checkins" });
+    }
+  });
+
+  app.get("/api/parent/child/:childId/mental-metrics", async (req, res) => {
+    try {
+      const { childId } = req.params;
+      const metrics = await storage.getMentalMetrics(childId);
+      res.json(metrics);
+    } catch (error) {
+      console.error("Get child mental metrics error:", error);
+      res.status(500).json({ error: "Failed to get mental metrics" });
+    }
+  });
+
   app.get("/api/student/:studentId/parent-requests", async (req, res) => {
     try {
       const { studentId } = req.params;

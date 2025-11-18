@@ -109,6 +109,18 @@ export const imported_events = pgTable("imported_events", {
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
+export const mental_checkins = pgTable("mental_checkins", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  student_id: uuid("student_id").references(() => users.id).notNull(),
+  date: date("date").notNull(),
+  mood: text("mood", { enum: ["ok", "niet_lekker", "hulp_nu"] }).notNull(),
+  sleep_score: integer("sleep_score"), // 1-5
+  stress_score: integer("stress_score"), // 1-5
+  energy_score: integer("energy_score"), // 1-5
+  fun_with: text("fun_with"), // Vrije tekst: met wie had je vandaag lol
+  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+});
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   created_at: true,
@@ -156,6 +168,11 @@ export const insertImportedEventSchema = createInsertSchema(imported_events).omi
   created_at: true,
 });
 
+export const insertMentalCheckinSchema = createInsertSchema(mental_checkins).omit({
+  id: true,
+  created_at: true,
+});
+
 // Types
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -177,3 +194,5 @@ export type CalendarIntegration = typeof calendar_integrations.$inferSelect;
 export type InsertCalendarIntegration = z.infer<typeof insertCalendarIntegrationSchema>;
 export type ImportedEvent = typeof imported_events.$inferSelect;
 export type InsertImportedEvent = z.infer<typeof insertImportedEventSchema>;
+export type MentalCheckin = typeof mental_checkins.$inferSelect;
+export type InsertMentalCheckin = z.infer<typeof insertMentalCheckinSchema>;
