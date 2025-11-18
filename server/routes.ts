@@ -1299,6 +1299,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const result = await storage.awardXp(userId, delta, reason, meta);
+
+      // Update streak for all XP-earning activities
+      await storage.updateStreak(userId);
+
+      // If it's a quiz/test completion, increment tests_completed counter
+      if (reason === 'quiz_completed' || reason === 'test_completed') {
+        await storage.incrementTestsCompleted(userId);
+      }
+
       const profile = await storage.getProfile(userId);
 
       res.json({

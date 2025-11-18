@@ -48,6 +48,12 @@ export default function StudyPlay() {
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
   const [uiError, setUiError] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<{
+    xpAwarded: number;
+    playtimeAwarded: number;
+    leveledUp: boolean;
+    newLevel: number;
+  } | null>(null);
 
   // Feedback state
   const [showFb, setShowFb] = useState(false);
@@ -109,7 +115,16 @@ export default function StudyPlay() {
       finishedRef.current = true;
       play.mutate(
         { action: "finish", result_id: resultId },
-        { onSuccess: () => setDone(true), onError: () => setDone(true) }
+        {
+          onSuccess: (data) => {
+            setDone(true);
+            // Save rewards data if available
+            if (data?.rewards) {
+              setRewards(data.rewards);
+            }
+          },
+          onError: () => setDone(true)
+        }
       );
     }
   }, [index, list.length, resultId, play]);
@@ -180,9 +195,58 @@ export default function StudyPlay() {
     const pctDone = list.length ? Math.round((correctCount / list.length) * 100) : 0;
     return (
       <main className="mx-auto max-w-[800px] px-6 py-8">
-        <h1 className="text-2xl font-semibold mb-4">Klaar!</h1>
+        <h1 className="text-2xl font-semibold mb-4">Klaar! 🎉</h1>
         <p className="mb-2">Je antwoorden zijn opgeslagen.</p>
         <p className="mb-6">Score: <b>{correctCount}</b> / {list.length} ({pctDone}%)</p>
+
+        {/* StudyPlay Rewards Display */}
+        {rewards && (rewards.xpAwarded > 0 || rewards.playtimeAwarded > 0) && (
+          <div className="bg-gradient-to-r from-purple-50 to-blue-50 border-2 border-purple-200 rounded-lg p-6 mb-6">
+            <h2 className="text-xl font-bold text-purple-900 mb-4">✨ Beloningen verdiend!</h2>
+
+            {rewards.xpAwarded > 0 && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">⭐</span>
+                <div>
+                  <p className="font-semibold text-purple-800">+{rewards.xpAwarded} XP</p>
+                  <p className="text-sm text-gray-600">Ervaring verdiend!</p>
+                </div>
+              </div>
+            )}
+
+            {rewards.playtimeAwarded > 0 && (
+              <div className="flex items-center gap-3 mb-3">
+                <span className="text-3xl">🎮</span>
+                <div>
+                  <p className="font-semibold text-blue-800">+{rewards.playtimeAwarded} minuten</p>
+                  <p className="text-sm text-gray-600">Speeltijd verdiend!</p>
+                </div>
+              </div>
+            )}
+
+            {rewards.leveledUp && (
+              <div className="mt-4 bg-gradient-to-r from-yellow-100 to-yellow-200 border-2 border-yellow-400 rounded-lg p-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-4xl">🎊</span>
+                  <div>
+                    <p className="font-bold text-yellow-900 text-lg">Level Up!</p>
+                    <p className="text-yellow-800">Je bent nu level {rewards.newLevel}!</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 pt-4 border-t border-purple-200">
+              <a
+                className="inline-block bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold px-6 py-3 rounded-lg transition-all"
+                href="/study/games"
+              >
+                🎮 Ga naar Games →
+              </a>
+            </div>
+          </div>
+        )}
+
         <a className="text-sky-700 underline" href="/toets">Terug naar Toetsen</a>
       </main>
     );

@@ -64,7 +64,72 @@ const { data, error } = await admin
 .select('*')
 .single();
 if (error) return res.status(400).json({ error: error.message });
-return res.status(200).json({ result: data });
+
+// ✅ STUDYPLAY INTEGRATION: Award XP and Playtime
+let xpAwarded = 0;
+let playtimeAwarded = 0;
+let leveledUp = false;
+let newLevel = 1;
+
+try {
+  // Get the base URL for the Express server
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : (req.headers.origin || 'http://localhost:5000');
+
+  // Award XP (50 XP for quiz completion)
+  const xpResponse = await fetch(`${baseUrl}/api/profile/xp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userId,
+      delta: 50,
+      reason: 'quiz_completed',
+      meta: { quizId: body.quiz_id, resultId: body.result_id, score: percent }
+    })
+  });
+
+  if (xpResponse.ok) {
+    const xpData = await xpResponse.json();
+    xpAwarded = 50;
+    leveledUp = xpData.leveledUp || false;
+    newLevel = xpData.newLevel || 1;
+  }
+
+  // Award Playtime (3 minutes for quiz completion)
+  const playtimeResponse = await fetch(`${baseUrl}/api/playtime/add`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      userId,
+      delta: 3,
+      reason: 'quiz_completed',
+      meta: { quizId: body.quiz_id, resultId: body.result_id }
+    })
+  });
+
+  if (playtimeResponse.ok) {
+    playtimeAwarded = 3;
+  }
+
+  // Note: Streak update and tests_completed increment happen automatically
+  // in the storage.awardXp() and storage.addPlaytime() methods via updateStreak()
+  // and incrementTestsCompleted() calls in the Express route handlers
+
+} catch (err) {
+  // Log error but don't fail the quiz completion
+  console.error('Failed to award XP/playtime:', err);
+}
+
+return res.status(200).json({
+  result: data,
+  rewards: {
+    xpAwarded,
+    playtimeAwarded,
+    leveledUp,
+    newLevel
+  }
+});
 }
 }
 
