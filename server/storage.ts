@@ -20,14 +20,8 @@ import {
   type InsertCalendarIntegration,
   type ImportedEvent,
   type InsertImportedEvent,
-  type MentalCheckin,
-  type InsertMentalCheckin,
-  type AppEvent,
-  type InsertAppEvent,
-  type RewardPoints,
-  type InsertRewardPoints,
-  type Reward,
-  type InsertReward,
+  type Checkin,
+  type InsertCheckin,
   type StudyPlaytime,
   type InsertStudyPlaytime,
   type StudyPlaytimeLog,
@@ -39,6 +33,19 @@ import {
   type StudyScore,
   type InsertStudyScore,
 } from "@shared/schema";
+
+// Mapped checkin type for parent view (with calculated fields)
+interface MappedCheckin {
+  id: string;
+  user_id: string;
+  date: string;
+  mood: 'ok' | 'niet_lekker' | 'hulp_nu';
+  sleep_score: number | null;
+  stress_score: number | null;
+  energy_score: number | null;
+  notes: string | null;
+  created_at: Date | null;
+}
 
 export interface IStorage {
   // Users
@@ -96,18 +103,16 @@ export interface IStorage {
   createImportedEvent(event: InsertImportedEvent): Promise<ImportedEvent>;
   getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]>;
 
-  // Mental Checkins
-  getMentalCheckinsByStudentId(studentId: string, days?: number): Promise<MentalCheckin[]>;
-  getMentalMetrics(studentId: string): Promise<{
+  // Checkins (Mental Check-ins)
+  getCheckinsByStudentId(studentId: string, days?: number): Promise<MappedCheckin[]>;
+  getCheckinMetrics(studentId: string): Promise<{
     checkinsLast7d: number;
     avgSleepLast7d: number;
     avgStressLast7d: number;
     avgEnergyLast7d: number;
     daysNotFeelingWellLast30d: number;
     helpNowCountLast30d: number;
-    funWithTopList: Array<{ label: string; count: number }>;
   }>;
-  upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin>;
 
   // Quiz Metrics
   getQuizMetrics(studentId: string): Promise<{
@@ -132,26 +137,6 @@ export interface IStorage {
     lastActiveAt: string | null;
     dailyActivityLast30d: Array<{ date: string; count: number }>;
   }>;
-  createAppEvent(event: InsertAppEvent): Promise<AppEvent>;
-
-  // Rewards & Points
-  getRewardPoints(studentId: string): Promise<RewardPoints | undefined>;
-  upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints>;
-  getRewardsByParentId(parentId: string): Promise<Reward[]>;
-  getRewardsOverview(studentId: string, parentId: string): Promise<{
-    pointsTotal: number;
-    nextReward: { id: string; label: string; pointsRequired: number } | null;
-    rewards: Array<{
-      id: string;
-      label: string;
-      pointsRequired: number;
-      progressPercent: number;
-      isActive: boolean;
-    }>;
-  }>;
-  createReward(reward: InsertReward): Promise<Reward>;
-  updateReward(rewardId: string, updates: Partial<Reward>): Promise<void>;
-  deleteReward(rewardId: string): Promise<void>;
 
   // StudyPlay Playtime System
   getPlaytime(userId: string): Promise<StudyPlaytime | undefined>;
@@ -454,8 +439,8 @@ export class PostgresStorage implements IStorage {
     return data || [];
   }
 
-  // Mental Checkins - uses 'checkins' table
-  async getMentalCheckinsByStudentId(studentId: string, days: number = 30): Promise<any[]> {
+  // Checkins - uses 'checkins' table
+  async getCheckinsByStudentId(studentId: string, days: number = 30): Promise<MappedCheckin[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
@@ -484,17 +469,16 @@ export class PostgresStorage implements IStorage {
     }));
   }
 
-  async getMentalMetrics(studentId: string): Promise<{
+  async getCheckinMetrics(studentId: string): Promise<{
     checkinsLast7d: number;
     avgSleepLast7d: number;
     avgStressLast7d: number;
     avgEnergyLast7d: number;
     daysNotFeelingWellLast30d: number;
     helpNowCountLast30d: number;
-    funWithTopList: Array<{ label: string; count: number }>;
   }> {
     // Get last 30 days of checkins
-    const checkins30d = await this.getMentalCheckinsByStudentId(studentId, 30);
+    const checkins30d = await this.getCheckinsByStudentId(studentId, 30);
 
     // Get last 7 days of checkins
     const sevenDaysAgo = new Date();
@@ -518,22 +502,6 @@ export class PostgresStorage implements IStorage {
     const daysNotFeelingWellLast30d = checkins30d.filter(c => c.mood === 'niet_lekker').length;
     const helpNowCountLast30d = checkins30d.filter(c => c.mood === 'hulp_nu').length;
 
-    // Build fun_with frequency list
-    const funWithCounts: Record<string, number> = {};
-    checkins30d.forEach(c => {
-      if (c.fun_with && c.fun_with.trim()) {
-        const items = c.fun_with.split(',').map((s: string) => s.trim()).filter((s: string) => s);
-        items.forEach((item: string) => {
-          funWithCounts[item] = (funWithCounts[item] || 0) + 1;
-        });
-      }
-    });
-
-    const funWithTopList = Object.entries(funWithCounts)
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10); // Top 10
-
     return {
       checkinsLast7d: checkins7d.length,
       avgSleepLast7d: Math.round(avgSleepLast7d * 10) / 10,
@@ -541,19 +509,7 @@ export class PostgresStorage implements IStorage {
       avgEnergyLast7d: Math.round(avgEnergyLast7d * 10) / 10,
       daysNotFeelingWellLast30d,
       helpNowCountLast30d,
-      funWithTopList,
     };
-  }
-
-  async upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin> {
-    const { data, error} = await supabase
-      .from("mental_checkins")
-      .upsert(checkin, { onConflict: 'student_id,date' })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data!;
   }
 
   // Quiz Metrics

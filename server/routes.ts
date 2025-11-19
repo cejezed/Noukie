@@ -1135,7 +1135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/parent/child/:childId/mental-checkins", async (req, res) => {
     try {
       const { childId } = req.params;
-      const checkins = await storage.getMentalCheckinsByStudentId(childId, 30);
+      const checkins = await storage.getCheckinsByStudentId(childId, 30);
 
       // Transform to camelCase and ensure complete time series
       const endDate = new Date();
@@ -1179,7 +1179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/parent/child/:childId/mental-metrics", async (req, res) => {
     try {
       const { childId } = req.params;
-      const metrics = await storage.getMentalMetrics(childId);
+      const metrics = await storage.getCheckinMetrics(childId);
       res.json(metrics);
     } catch (error) {
       console.error("Get child mental metrics error:", error);
@@ -1452,6 +1452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user_id: userId,
         game_id: gameId,
         score,
+        level_reached: levelReached || undefined,
       });
 
       // Increment games played
