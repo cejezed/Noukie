@@ -278,7 +278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       try {
         const userData = {
-          id: supabaseResult.user?.id || `user-${Date.now()}`,
+          id: supabaseResult.data.user?.id || `user-${Date.now()}`,
           email,
           name,
           role,

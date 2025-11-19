@@ -331,3 +331,29 @@ export type Compliment = typeof compliments.$inferSelect;
 export type InsertCompliment = z.infer<typeof insertComplimentSchema>;
 export type ComplimentStreak = typeof compliment_streaks.$inferSelect;
 export type InsertComplimentStreak = z.infer<typeof insertComplimentStreakSchema>;
+
+// Mental check-ins types
+export type MentalCheckin = typeof mental_checkins.$inferSelect;
+export type InsertMentalCheckin = z.infer<typeof insertMentalCheckinSchema>;
+
+// Rewards types
+export type RewardPoints = typeof reward_points.$inferSelect;
+export type InsertRewardPoints = z.infer<typeof insertRewardPointsSchema>;
+export type Reward = typeof rewards.$inferSelect;
+export type InsertReward = z.infer<typeof insertRewardSchema>;
+
+// StudyPlay types
+export type StudyPlaytime = typeof study_playtime.$inferSelect;
+export type InsertStudyPlaytime = z.infer<typeof insertStudyPlaytimeSchema>;
+export type StudyProfile = typeof study_profile.$inferSelect;
+export type InsertStudyProfile = z.infer<typeof insertStudyProfileSchema>;
+export type StudyScore = typeof study_scores.$inferSelect;
+export type InsertStudyScore = z.infer<typeof insertStudyScoreSchema>;
+
+// Log types (used by storage but not in Drizzle tables - define as any for now)
+export type AppEvent = any;
+export type InsertAppEvent = any;
+export type StudyPlaytimeLog = any;
+export type InsertStudyPlaytimeLog = any;
+export type StudyXpLog = any;
+export type InsertStudyXpLog = any;

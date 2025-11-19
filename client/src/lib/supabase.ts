@@ -90,7 +90,7 @@ export const supabase = createClient(
   supabaseAnonKey,
   {
     global: {
-      fetch: async (input: RequestInfo, init?: RequestInit) => {
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === "string" ? input : input.toString();
 
         if (init?.body) {

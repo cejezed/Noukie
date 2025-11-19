@@ -8,8 +8,17 @@ export async function signIn(email: string, password: string) {
   return supabase.auth.signInWithPassword({ email, password });
 }
 
-export async function signUp(email: string, password: string) {
-  return supabase.auth.signUp({ email, password });
+export async function signUp(email: string, password: string, name?: string, role?: string) {
+  return supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        name: name || '',
+        role: role || 'student'
+      }
+    }
+  });
 }
 
 export async function signOut() {
