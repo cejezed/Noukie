@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '../../hooks/useAuth';
+import { useAuth } from '@/lib/auth';
 import { usePlaytime } from '../../hooks/usePlaytime';
 import { useProfile } from '../../hooks/useProfile';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
