@@ -342,8 +342,31 @@ export default function MentalCheckin({
       const newPoints = await syncPointsWithCheckins(userId);
       setPoints(newPoints);
 
+      // Award playtime for new check-ins
+      let playtimeAwarded = 0;
       if (!hasAlreadyCheckedIn) {
-        setOkMsg("Bedankt! Je check-in is opgeslagen en je hebt een punt verdiend! ✨");
+        try {
+          const response = await fetch('/api/playtime/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              delta: 2,
+              reason: 'daily_checkin',
+              meta: { date: payload.date }
+            }),
+          });
+          if (response.ok) {
+            playtimeAwarded = 2;
+          }
+        } catch (err) {
+          console.error('Failed to award playtime:', err);
+        }
+      }
+
+      if (!hasAlreadyCheckedIn) {
+        const playtimeMsg = playtimeAwarded > 0 ? ` en ${playtimeAwarded} speelminuten` : '';
+        setOkMsg(`Bedankt! Je check-in is opgeslagen en je hebt een punt${playtimeMsg} verdiend! ✨`);
       } else {
         setOkMsg("Je check-in is bijgewerkt. Je hebt vandaag al een punt verdiend. 🌟");
       }
