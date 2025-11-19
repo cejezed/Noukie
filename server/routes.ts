@@ -1143,7 +1143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       startDate.setDate(startDate.getDate() - 30);
 
       const checkinsMap = new Map(
-        checkins.map(c => [c.date, {
+        checkins.map((c: any) => [c.date, {
           date: c.date,
           mood: c.mood,
           sleepScore: c.sleep_score,
@@ -1243,17 +1243,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/parent/rewards", async (req, res) => {
     try {
-      const { parentId, label, pointsRequired, sortOrder } = req.body;
+      const { parentId, childId, label, pointsRequired } = req.body;
 
-      if (!parentId || !label || !pointsRequired) {
+      if (!parentId || !childId || !label || !pointsRequired) {
         return res.status(400).json({ error: "Missing required fields" });
       }
 
       const reward = await storage.createReward({
         parent_id: parentId,
-        label,
-        points_required: pointsRequired,
-        sort_order: sortOrder || 0,
+        child_id: childId,
+        name: label,
+        point_cost: pointsRequired,
         is_active: true,
       });
 
@@ -1452,7 +1452,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user_id: userId,
         game_id: gameId,
         score,
-        level_reached: levelReached || null,
       });
 
       // Increment games played

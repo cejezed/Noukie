@@ -454,20 +454,34 @@ export class PostgresStorage implements IStorage {
     return data || [];
   }
 
-  // Mental Checkins
-  async getMentalCheckinsByStudentId(studentId: string, days: number = 30): Promise<MentalCheckin[]> {
+  // Mental Checkins - uses 'checkins' table
+  async getMentalCheckinsByStudentId(studentId: string, days: number = 30): Promise<any[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
     const { data, error } = await supabase
-      .from("mental_checkins")
+      .from("checkins")
       .select("*")
-      .eq("student_id", studentId)
+      .eq("user_id", studentId)
       .gte("date", startDate.toISOString().split('T')[0])
       .order("date", { ascending: true });
 
     if (error) throw error;
-    return data || [];
+
+    // Map checkins columns to expected format
+    return (data || []).map(c => ({
+      id: c.id,
+      user_id: c.user_id,
+      date: c.date,
+      // Map mood_color (1-5) to categorical
+      mood: c.mood_color <= 2 ? 'niet_lekker' : (c.mood_color === 3 ? 'niet_lekker' : 'ok'),
+      sleep_score: c.sleep,
+      stress_score: c.tension,
+      energy_score: c.eating,
+      notes: c.notes,
+      fun_with: null, // Not in checkins table
+      created_at: c.created_at,
+    }));
   }
 
   async getMentalMetrics(studentId: string): Promise<{
@@ -724,15 +738,20 @@ export class PostgresStorage implements IStorage {
   }
 
   // Rewards & Points
-  async getRewardPoints(studentId: string): Promise<RewardPoints | undefined> {
+  async getRewardPoints(studentId: string): Promise<any | undefined> {
     const { data, error } = await supabase
       .from("reward_points")
       .select("*")
-      .eq("student_id", studentId)
+      .eq("user_id", studentId)
       .single();
 
     if (error && error.code !== "PGRST116") throw error;
-    return data || undefined;
+    if (!data) return undefined;
+    // Map to expected format - use balance as points_total
+    return {
+      ...data,
+      points_total: data.balance || 0,
+    };
   }
 
   async upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints> {
@@ -752,16 +771,21 @@ export class PostgresStorage implements IStorage {
     return data!;
   }
 
-  async getRewardsByParentId(parentId: string): Promise<Reward[]> {
+  async getRewardsByParentId(parentId: string): Promise<any[]> {
     const { data, error } = await supabase
       .from("rewards")
       .select("*")
       .eq("parent_id", parentId)
       .eq("is_active", true)
-      .order("sort_order", { ascending: true });
+      .order("created_at", { ascending: true });
 
     if (error) throw error;
-    return data || [];
+    // Map actual columns to expected names
+    return (data || []).map(r => ({
+      ...r,
+      label: r.name,
+      points_required: r.point_cost,
+    }));
   }
 
   async getRewardsOverview(studentId: string, parentId: string): Promise<{
@@ -1070,10 +1094,15 @@ export class PostgresStorage implements IStorage {
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-      if (lastActivityDate === yesterdayStr) {
+      // Convert lastActivityDate to string if it's a Date object
+      const lastDateStr = typeof lastActivityDate === 'string'
+        ? lastActivityDate.split('T')[0]
+        : new Date(lastActivityDate).toISOString().split('T')[0];
+
+      if (lastDateStr === yesterdayStr) {
         // Consecutive day
         newStreakDays += 1;
-      } else if (lastActivityDate !== today) {
+      } else if (lastDateStr !== today) {
         // Streak broken
         newStreakDays = 1;
       }
