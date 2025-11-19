@@ -20,14 +20,8 @@ import {
   type InsertCalendarIntegration,
   type ImportedEvent,
   type InsertImportedEvent,
-  type MentalCheckin,
-  type InsertMentalCheckin,
-  type AppEvent,
-  type InsertAppEvent,
-  type RewardPoints,
-  type InsertRewardPoints,
-  type Reward,
-  type InsertReward,
+  type Checkin,
+  type InsertCheckin,
   type StudyPlaytime,
   type InsertStudyPlaytime,
   type StudyPlaytimeLog,
@@ -39,6 +33,19 @@ import {
   type StudyScore,
   type InsertStudyScore,
 } from "@shared/schema";
+
+// Mapped checkin type for parent view (with calculated fields)
+interface MappedCheckin {
+  id: string;
+  user_id: string;
+  date: string;
+  mood: 'ok' | 'niet_lekker' | 'hulp_nu';
+  sleep_score: number | null;
+  stress_score: number | null;
+  energy_score: number | null;
+  notes: string | null;
+  created_at: Date | null;
+}
 
 export interface IStorage {
   // Users
@@ -96,18 +103,16 @@ export interface IStorage {
   createImportedEvent(event: InsertImportedEvent): Promise<ImportedEvent>;
   getImportedEventsByUserId(userId: string): Promise<ImportedEvent[]>;
 
-  // Mental Checkins
-  getMentalCheckinsByStudentId(studentId: string, days?: number): Promise<MentalCheckin[]>;
-  getMentalMetrics(studentId: string): Promise<{
+  // Checkins (Mental Check-ins)
+  getCheckinsByStudentId(studentId: string, days?: number): Promise<MappedCheckin[]>;
+  getCheckinMetrics(studentId: string): Promise<{
     checkinsLast7d: number;
     avgSleepLast7d: number;
     avgStressLast7d: number;
     avgEnergyLast7d: number;
     daysNotFeelingWellLast30d: number;
     helpNowCountLast30d: number;
-    funWithTopList: Array<{ label: string; count: number }>;
   }>;
-  upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin>;
 
   // Quiz Metrics
   getQuizMetrics(studentId: string): Promise<{
@@ -132,26 +137,6 @@ export interface IStorage {
     lastActiveAt: string | null;
     dailyActivityLast30d: Array<{ date: string; count: number }>;
   }>;
-  createAppEvent(event: InsertAppEvent): Promise<AppEvent>;
-
-  // Rewards & Points
-  getRewardPoints(studentId: string): Promise<RewardPoints | undefined>;
-  upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints>;
-  getRewardsByParentId(parentId: string): Promise<Reward[]>;
-  getRewardsOverview(studentId: string, parentId: string): Promise<{
-    pointsTotal: number;
-    nextReward: { id: string; label: string; pointsRequired: number } | null;
-    rewards: Array<{
-      id: string;
-      label: string;
-      pointsRequired: number;
-      progressPercent: number;
-      isActive: boolean;
-    }>;
-  }>;
-  createReward(reward: InsertReward): Promise<Reward>;
-  updateReward(rewardId: string, updates: Partial<Reward>): Promise<void>;
-  deleteReward(rewardId: string): Promise<void>;
 
   // StudyPlay Playtime System
   getPlaytime(userId: string): Promise<StudyPlaytime | undefined>;
@@ -454,33 +439,46 @@ export class PostgresStorage implements IStorage {
     return data || [];
   }
 
-  // Mental Checkins
-  async getMentalCheckinsByStudentId(studentId: string, days: number = 30): Promise<MentalCheckin[]> {
+  // Checkins - uses 'checkins' table
+  async getCheckinsByStudentId(studentId: string, days: number = 30): Promise<MappedCheckin[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
     const { data, error } = await supabase
-      .from("mental_checkins")
+      .from("checkins")
       .select("*")
-      .eq("student_id", studentId)
+      .eq("user_id", studentId)
       .gte("date", startDate.toISOString().split('T')[0])
       .order("date", { ascending: true });
 
     if (error) throw error;
-    return data || [];
+
+    // Map checkins columns to expected format
+    return (data || []).map(c => ({
+      id: c.id,
+      user_id: c.user_id,
+      date: c.date,
+      // Map mood_color (1-5) to categorical
+      mood: c.mood_color <= 2 ? 'niet_lekker' : (c.mood_color === 3 ? 'niet_lekker' : 'ok'),
+      sleep_score: c.sleep,
+      stress_score: c.tension,
+      energy_score: c.eating,
+      notes: c.notes,
+      fun_with: null, // Not in checkins table
+      created_at: c.created_at,
+    }));
   }
 
-  async getMentalMetrics(studentId: string): Promise<{
+  async getCheckinMetrics(studentId: string): Promise<{
     checkinsLast7d: number;
     avgSleepLast7d: number;
     avgStressLast7d: number;
     avgEnergyLast7d: number;
     daysNotFeelingWellLast30d: number;
     helpNowCountLast30d: number;
-    funWithTopList: Array<{ label: string; count: number }>;
   }> {
     // Get last 30 days of checkins
-    const checkins30d = await this.getMentalCheckinsByStudentId(studentId, 30);
+    const checkins30d = await this.getCheckinsByStudentId(studentId, 30);
 
     // Get last 7 days of checkins
     const sevenDaysAgo = new Date();
@@ -504,22 +502,6 @@ export class PostgresStorage implements IStorage {
     const daysNotFeelingWellLast30d = checkins30d.filter(c => c.mood === 'niet_lekker').length;
     const helpNowCountLast30d = checkins30d.filter(c => c.mood === 'hulp_nu').length;
 
-    // Build fun_with frequency list
-    const funWithCounts: Record<string, number> = {};
-    checkins30d.forEach(c => {
-      if (c.fun_with && c.fun_with.trim()) {
-        const items = c.fun_with.split(',').map((s: string) => s.trim()).filter((s: string) => s);
-        items.forEach((item: string) => {
-          funWithCounts[item] = (funWithCounts[item] || 0) + 1;
-        });
-      }
-    });
-
-    const funWithTopList = Object.entries(funWithCounts)
-      .map(([label, count]) => ({ label, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10); // Top 10
-
     return {
       checkinsLast7d: checkins7d.length,
       avgSleepLast7d: Math.round(avgSleepLast7d * 10) / 10,
@@ -527,19 +509,7 @@ export class PostgresStorage implements IStorage {
       avgEnergyLast7d: Math.round(avgEnergyLast7d * 10) / 10,
       daysNotFeelingWellLast30d,
       helpNowCountLast30d,
-      funWithTopList,
     };
-  }
-
-  async upsertMentalCheckin(checkin: InsertMentalCheckin): Promise<MentalCheckin> {
-    const { data, error} = await supabase
-      .from("mental_checkins")
-      .upsert(checkin, { onConflict: 'student_id,date' })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data!;
   }
 
   // Quiz Metrics
@@ -721,122 +691,6 @@ export class PostgresStorage implements IStorage {
 
     if (error) throw error;
     return data!;
-  }
-
-  // Rewards & Points
-  async getRewardPoints(studentId: string): Promise<RewardPoints | undefined> {
-    const { data, error } = await supabase
-      .from("reward_points")
-      .select("*")
-      .eq("student_id", studentId)
-      .single();
-
-    if (error && error.code !== "PGRST116") throw error;
-    return data || undefined;
-  }
-
-  async upsertRewardPoints(points: InsertRewardPoints): Promise<RewardPoints> {
-    const { data, error } = await supabase
-      .from("reward_points")
-      .upsert(
-        {
-          ...points,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'student_id' }
-      )
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data!;
-  }
-
-  async getRewardsByParentId(parentId: string): Promise<Reward[]> {
-    const { data, error } = await supabase
-      .from("rewards")
-      .select("*")
-      .eq("parent_id", parentId)
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true });
-
-    if (error) throw error;
-    return data || [];
-  }
-
-  async getRewardsOverview(studentId: string, parentId: string): Promise<{
-    pointsTotal: number;
-    nextReward: { id: string; label: string; pointsRequired: number } | null;
-    rewards: Array<{
-      id: string;
-      label: string;
-      pointsRequired: number;
-      progressPercent: number;
-      isActive: boolean;
-    }>;
-  }> {
-    // Get student's points
-    const pointsData = await this.getRewardPoints(studentId);
-    const pointsTotal = pointsData?.points_total || 0;
-
-    // Get parent's rewards
-    const rewardsData = await this.getRewardsByParentId(parentId);
-
-    // Calculate progress for each reward
-    const rewards = rewardsData.map((r) => ({
-      id: r.id,
-      label: r.label,
-      pointsRequired: r.points_required,
-      progressPercent: Math.min(100, Math.round((pointsTotal / r.points_required) * 100)),
-      isActive: r.is_active || false,
-    }));
-
-    // Find next achievable reward (lowest points required that student hasn't reached yet)
-    const nextReward = rewardsData
-      .filter((r) => r.points_required > pointsTotal && r.is_active)
-      .sort((a, b) => a.points_required - b.points_required)[0];
-
-    return {
-      pointsTotal,
-      nextReward: nextReward
-        ? {
-            id: nextReward.id,
-            label: nextReward.label,
-            pointsRequired: nextReward.points_required,
-          }
-        : null,
-      rewards,
-    };
-  }
-
-  async createReward(reward: InsertReward): Promise<Reward> {
-    const { data, error } = await supabase
-      .from("rewards")
-      .insert(reward)
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data!;
-  }
-
-  async updateReward(rewardId: string, updates: Partial<Reward>): Promise<void> {
-    const { error } = await supabase
-      .from("rewards")
-      .update(updates)
-      .eq("id", rewardId);
-
-    if (error) throw error;
-  }
-
-  async deleteReward(rewardId: string): Promise<void> {
-    // Soft delete by setting is_active to false
-    const { error } = await supabase
-      .from("rewards")
-      .update({ is_active: false })
-      .eq("id", rewardId);
-
-    if (error) throw error;
   }
 
   // ============================================================================
@@ -1070,10 +924,15 @@ export class PostgresStorage implements IStorage {
       yesterday.setDate(yesterday.getDate() - 1);
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-      if (lastActivityDate === yesterdayStr) {
+      // Convert lastActivityDate to string if it's a Date object
+      const lastDateStr = typeof lastActivityDate === 'string'
+        ? lastActivityDate.split('T')[0]
+        : new Date(lastActivityDate).toISOString().split('T')[0];
+
+      if (lastDateStr === yesterdayStr) {
         // Consecutive day
         newStreakDays += 1;
-      } else if (lastActivityDate !== today) {
+      } else if (lastDateStr !== today) {
         // Streak broken
         newStreakDays = 1;
       }

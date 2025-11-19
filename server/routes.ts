@@ -1135,7 +1135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/parent/child/:childId/mental-checkins", async (req, res) => {
     try {
       const { childId } = req.params;
-      const checkins = await storage.getMentalCheckinsByStudentId(childId, 30);
+      const checkins = await storage.getCheckinsByStudentId(childId, 30);
 
       // Transform to camelCase and ensure complete time series
       const endDate = new Date();
@@ -1143,7 +1143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       startDate.setDate(startDate.getDate() - 30);
 
       const checkinsMap = new Map(
-        checkins.map(c => [c.date, {
+        checkins.map((c: any) => [c.date, {
           date: c.date,
           mood: c.mood,
           sleepScore: c.sleep_score,
@@ -1179,7 +1179,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/parent/child/:childId/mental-metrics", async (req, res) => {
     try {
       const { childId } = req.params;
-      const metrics = await storage.getMentalMetrics(childId);
+      const metrics = await storage.getCheckinMetrics(childId);
       res.json(metrics);
     } catch (error) {
       console.error("Get child mental metrics error:", error);
@@ -1220,77 +1220,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get child usage metrics error:", error);
       res.status(500).json({ error: "Failed to get usage metrics" });
-    }
-  });
-
-  // Parent Rewards Endpoints
-  app.get("/api/parent/child/:childId/rewards-overview", async (req, res) => {
-    try {
-      const { childId } = req.params;
-      const { parentId } = req.query;
-
-      if (!parentId || typeof parentId !== 'string') {
-        return res.status(400).json({ error: "Parent ID required" });
-      }
-
-      const overview = await storage.getRewardsOverview(childId, parentId);
-      res.json(overview);
-    } catch (error) {
-      console.error("Get rewards overview error:", error);
-      res.status(500).json({ error: "Failed to get rewards overview" });
-    }
-  });
-
-  app.post("/api/parent/rewards", async (req, res) => {
-    try {
-      const { parentId, label, pointsRequired, sortOrder } = req.body;
-
-      if (!parentId || !label || !pointsRequired) {
-        return res.status(400).json({ error: "Missing required fields" });
-      }
-
-      const reward = await storage.createReward({
-        parent_id: parentId,
-        label,
-        points_required: pointsRequired,
-        sort_order: sortOrder || 0,
-        is_active: true,
-      });
-
-      res.json(reward);
-    } catch (error) {
-      console.error("Create reward error:", error);
-      res.status(500).json({ error: "Failed to create reward" });
-    }
-  });
-
-  app.put("/api/parent/rewards/:rewardId", async (req, res) => {
-    try {
-      const { rewardId } = req.params;
-      const { label, pointsRequired, sortOrder, isActive } = req.body;
-
-      const updates: any = {};
-      if (label !== undefined) updates.label = label;
-      if (pointsRequired !== undefined) updates.points_required = pointsRequired;
-      if (sortOrder !== undefined) updates.sort_order = sortOrder;
-      if (isActive !== undefined) updates.is_active = isActive;
-
-      await storage.updateReward(rewardId, updates);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Update reward error:", error);
-      res.status(500).json({ error: "Failed to update reward" });
-    }
-  });
-
-  app.delete("/api/parent/rewards/:rewardId", async (req, res) => {
-    try {
-      const { rewardId } = req.params;
-      await storage.deleteReward(rewardId);
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Delete reward error:", error);
-      res.status(500).json({ error: "Failed to delete reward" });
     }
   });
 
@@ -1452,7 +1381,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         user_id: userId,
         game_id: gameId,
         score,
-        level_reached: levelReached || null,
+        level_reached: levelReached || undefined,
       });
 
       // Increment games played

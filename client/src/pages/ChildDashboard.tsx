@@ -1,12 +1,10 @@
-import React, { useState } from "react";
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Brain, Calendar, TrendingUp, Frown, AlertCircle, Battery, Moon, Zap, Users, Trophy, BookOpen, Activity, LogIn, Target, Award, Gift, Plus, Edit, Trash2 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ArrowLeft, Brain, Calendar, TrendingUp, Frown, AlertCircle, Battery, Moon, Zap, Users, Trophy, BookOpen, Activity, LogIn, Target, Award } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from "recharts";
@@ -30,17 +28,6 @@ export default function ChildDashboard({ child, onBack }: ChildDashboardProps) {
   const { data: mentalMetrics, isLoading: metricsLoading } = useQuery({
     queryKey: ['/api/parent/child', childId, 'mental-metrics'],
     enabled: !!childId,
-  });
-
-  // Fetch rewards overview
-  const { data: rewardsOverview, isLoading: rewardsLoading } = useQuery({
-    queryKey: ['/api/parent/child', childId, 'rewards-overview', parentId],
-    queryFn: async () => {
-      const response = await fetch(`/api/parent/child/${childId}/rewards-overview?parentId=${parentId}`);
-      if (!response.ok) throw new Error('Failed to fetch rewards');
-      return response.json();
-    },
-    enabled: !!childId && !!parentId,
   });
 
   // Fetch progress data (quiz, study, usage)
@@ -84,14 +71,10 @@ export default function ChildDashboard({ child, onBack }: ChildDashboardProps) {
       </div>
 
       <Tabs defaultValue="voortgang" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="voortgang">
             <TrendingUp className="w-4 h-4 mr-2" />
             Voortgang
-          </TabsTrigger>
-          <TabsTrigger value="beloningen">
-            <Gift className="w-4 h-4 mr-2" />
-            Beloningen
           </TabsTrigger>
           <TabsTrigger value="rooster">
             <Calendar className="w-4 h-4 mr-2" />
@@ -388,29 +371,6 @@ export default function ChildDashboard({ child, onBack }: ChildDashboardProps) {
           </div>
         </TabsContent>
 
-        {/* BELONINGEN & PUNTEN TAB */}
-        <TabsContent value="beloningen" className="space-y-6">
-          {rewardsLoading ? (
-            <Card>
-              <CardContent className="p-6 text-center">
-                <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full mx-auto" />
-                <p className="text-muted-foreground mt-2">Beloningen laden...</p>
-              </CardContent>
-            </Card>
-          ) : rewardsOverview && parentId ? (
-            <RewardsTab
-              rewardsOverview={rewardsOverview}
-              parentId={parentId}
-              childId={childId}
-            />
-          ) : (
-            <Card>
-              <CardContent className="p-6 text-center">
-                <p className="text-muted-foreground">Geen beloningen beschikbaar</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
 
         {/* ROOSTER TAB */}
         <TabsContent value="rooster" className="space-y-4">
@@ -677,300 +637,6 @@ function MentalTab({ metrics, checkins, loading }: MentalTabProps) {
   );
 }
 
-// Rewards Tab Component
-interface RewardsTabProps {
-  rewardsOverview: any;
-  parentId: string;
-  childId: string;
-}
-
-function RewardsTab({ rewardsOverview, parentId, childId }: RewardsTabProps) {
-  const queryClient = useQueryClient();
-  const [showAddReward, setShowAddReward] = useState(false);
-  const [editingReward, setEditingReward] = useState<any>(null);
-  const [newReward, setNewReward] = useState({ label: "", pointsRequired: "" });
-
-  // Create reward mutation
-  const createRewardMutation = useMutation({
-    mutationFn: async (data: { label: string; pointsRequired: number }) => {
-      const response = await fetch('/api/parent/rewards', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          parentId,
-          label: data.label,
-          pointsRequired: data.pointsRequired,
-          sortOrder: rewardsOverview.rewards.length + 1,
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to create reward');
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/parent/child', childId, 'rewards-overview'] });
-      setShowAddReward(false);
-      setNewReward({ label: "", pointsRequired: "" });
-    },
-  });
-
-  // Update reward mutation
-  const updateRewardMutation = useMutation({
-    mutationFn: async (data: { id: string; label: string; pointsRequired: number }) => {
-      const response = await fetch(`/api/parent/rewards/${data.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          label: data.label,
-          pointsRequired: data.pointsRequired,
-        }),
-      });
-      if (!response.ok) throw new Error('Failed to update reward');
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/parent/child', childId, 'rewards-overview'] });
-      setEditingReward(null);
-    },
-  });
-
-  // Delete reward mutation
-  const deleteRewardMutation = useMutation({
-    mutationFn: async (rewardId: string) => {
-      const response = await fetch(`/api/parent/rewards/${rewardId}`, {
-        method: 'DELETE',
-      });
-      if (!response.ok) throw new Error('Failed to delete reward');
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/parent/child', childId, 'rewards-overview'] });
-    },
-  });
-
-  const handleCreateReward = () => {
-    const points = parseInt(newReward.pointsRequired);
-    if (!newReward.label || isNaN(points) || points <= 0) {
-      alert('Vul een geldige naam en punten in');
-      return;
-    }
-    createRewardMutation.mutate({ label: newReward.label, pointsRequired: points });
-  };
-
-  const handleUpdateReward = () => {
-    if (!editingReward) return;
-    const points = parseInt(editingReward.pointsRequired);
-    if (!editingReward.label || isNaN(points) || points <= 0) {
-      alert('Vul een geldige naam en punten in');
-      return;
-    }
-    updateRewardMutation.mutate({
-      id: editingReward.id,
-      label: editingReward.label,
-      pointsRequired: points,
-    });
-  };
-
-  const handleDeleteReward = (rewardId: string, label: string) => {
-    if (confirm(`Weet je zeker dat je "${label}" wilt verwijderen?`)) {
-      deleteRewardMutation.mutate(rewardId);
-    }
-  };
-
-  return (
-    <>
-      {/* A. Header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-2xl font-bold flex items-center gap-3">
-                <Trophy className="w-8 h-8 text-yellow-500" />
-                Punten: {rewardsOverview.pointsTotal}
-              </CardTitle>
-              {rewardsOverview.nextReward && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Volgende beloning: <span className="font-semibold">{rewardsOverview.nextReward.label}</span> bij {rewardsOverview.nextReward.pointsRequired} punten
-                </p>
-              )}
-            </div>
-            <div className="p-4 bg-gradient-to-br from-yellow-50 to-amber-50 rounded-lg">
-              <Gift className="w-12 h-12 text-amber-600" />
-            </div>
-          </div>
-        </CardHeader>
-      </Card>
-
-      {/* B. Rewards List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Beschikbare beloningen</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {rewardsOverview.rewards && rewardsOverview.rewards.length > 0 ? (
-            <div className="space-y-4">
-              {rewardsOverview.rewards.map((reward: any) => (
-                <div key={reward.id} className="p-4 rounded-lg bg-muted/30 border">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Trophy className={`w-5 h-5 ${reward.progressPercent >= 100 ? 'text-yellow-500' : 'text-gray-400'}`} />
-                      <span className="font-semibold">{reward.label}</span>
-                    </div>
-                    <span className="text-sm text-muted-foreground">
-                      {reward.pointsRequired} punten
-                    </span>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between text-xs">
-                      <span>{reward.progressPercent}%</span>
-                      <span>{rewardsOverview.pointsTotal} / {reward.pointsRequired}</span>
-                    </div>
-                    <Progress value={reward.progressPercent} className="h-2" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-center py-8">Nog geen beloningen ingesteld</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* C. Manage Rewards (for parents) */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Beloningen beheren (ouder)</CardTitle>
-            <Button
-              size="sm"
-              onClick={() => setShowAddReward(!showAddReward)}
-              disabled={createRewardMutation.isPending}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Nieuwe beloning
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Add new reward form */}
-          {showAddReward && (
-            <div className="p-4 rounded-lg bg-blue-50 border border-blue-200 space-y-3">
-              <h4 className="font-semibold text-sm">Nieuwe beloning toevoegen</h4>
-              <div className="space-y-2">
-                <div>
-                  <Label htmlFor="new-reward-label">Naam</Label>
-                  <Input
-                    id="new-reward-label"
-                    value={newReward.label}
-                    onChange={(e) => setNewReward({ ...newReward, label: e.target.value })}
-                    placeholder="Bijv. Samen shoppen"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="new-reward-points">Benodigde punten</Label>
-                  <Input
-                    id="new-reward-points"
-                    type="number"
-                    value={newReward.pointsRequired}
-                    onChange={(e) => setNewReward({ ...newReward, pointsRequired: e.target.value })}
-                    placeholder="Bijv. 25"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleCreateReward}
-                  disabled={createRewardMutation.isPending}
-                >
-                  {createRewardMutation.isPending ? 'Bezig...' : 'Toevoegen'}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    setShowAddReward(false);
-                    setNewReward({ label: "", pointsRequired: "" });
-                  }}
-                >
-                  Annuleren
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Existing rewards management */}
-          <div className="space-y-2">
-            {rewardsOverview.rewards && rewardsOverview.rewards.length > 0 ? (
-              rewardsOverview.rewards.map((reward: any) => (
-                <div key={reward.id} className="p-3 rounded-lg bg-muted/50 flex items-center justify-between">
-                  {editingReward?.id === reward.id ? (
-                    <div className="flex-1 flex items-center gap-2">
-                      <Input
-                        value={editingReward.label}
-                        onChange={(e) => setEditingReward({ ...editingReward, label: e.target.value })}
-                        className="h-8"
-                      />
-                      <Input
-                        type="number"
-                        value={editingReward.pointsRequired}
-                        onChange={(e) => setEditingReward({ ...editingReward, pointsRequired: e.target.value })}
-                        className="h-8 w-24"
-                      />
-                      <Button
-                        size="sm"
-                        onClick={handleUpdateReward}
-                        disabled={updateRewardMutation.isPending}
-                      >
-                        Opslaan
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setEditingReward(null)}
-                      >
-                        Annuleren
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <div>
-                        <span className="font-medium">{reward.label}</span>
-                        <span className="text-sm text-muted-foreground ml-2">
-                          ({reward.pointsRequired} punten)
-                        </span>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setEditingReward({ ...reward, pointsRequired: reward.pointsRequired.toString() })}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDeleteReward(reward.id, reward.label)}
-                          disabled={deleteRewardMutation.isPending}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                Nog geen beloningen. Voeg je eerste beloning toe!
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </>
-  );
-}
 
 // Missing icon imports fix
 import { CheckSquare } from "lucide-react";

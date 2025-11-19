@@ -143,61 +143,47 @@ export const compliment_streaks = pgTable("compliment_streaks", {
   updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
 });
 
-// Mental check-ins table
-export const mental_checkins = pgTable("mental_checkins", {
+// Checkins table (daily mental check-ins)
+export const checkins = pgTable("checkins", {
   id: uuid("id").defaultRandom().primaryKey(),
   user_id: uuid("user_id").notNull().references(() => users.id),
-  mood_score: integer("mood_score"),
-  energy_level: integer("energy_level"),
-  stress_level: integer("stress_level"),
+  date: date("date").notNull(),
+  mood_color: integer("mood_color").notNull(),
+  sleep: integer("sleep"),
+  tension: integer("tension"),
+  eating: integer("eating"),
+  medication: boolean("medication"),
   notes: text("notes"),
   created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
-});
-
-// Rewards system tables
-export const reward_points = pgTable("reward_points", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  user_id: uuid("user_id").notNull().references(() => users.id),
-  balance: integer("balance").default(0),
-  total_earned: integer("total_earned").default(0),
-  total_spent: integer("total_spent").default(0),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
   updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
-});
-
-export const rewards = pgTable("rewards", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  parent_id: uuid("parent_id").notNull().references(() => users.id),
-  child_id: uuid("child_id").notNull().references(() => users.id),
-  name: text("name").notNull(),
-  description: text("description"),
-  point_cost: integer("point_cost").notNull(),
-  is_active: boolean("is_active").default(true),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
 });
 
 // StudyPlay game platform tables
 export const study_playtime = pgTable("study_playtime", {
+  user_id: uuid("user_id").primaryKey().references(() => users.id),
+  balance_minutes: integer("balance_minutes").notNull().default(0),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
+});
+
+export const study_playtime_log = pgTable("study_playtime_log", {
   id: uuid("id").defaultRandom().primaryKey(),
   user_id: uuid("user_id").notNull().references(() => users.id),
-  balance_minutes: integer("balance_minutes").default(0),
-  earned_today: integer("earned_today").default(0),
-  last_earned_date: timestamp("last_earned_date", { withTimezone: true }),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
-  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+  delta: integer("delta").notNull(),
+  reason: text("reason").notNull(),
+  meta: jsonb("meta"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
 });
 
 export const study_profile = pgTable("study_profile", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  user_id: uuid("user_id").notNull().references(() => users.id),
-  xp_total: integer("xp_total").default(0),
-  level: integer("level").default(1),
-  streak_days: integer("streak_days").default(0),
-  last_activity_date: timestamp("last_activity_date", { withTimezone: true }),
-  tests_completed: integer("tests_completed").default(0),
-  games_played: integer("games_played").default(0),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
-  updated_at: timestamp("updated_at", { withTimezone: true }).default(sql`now()`),
+  user_id: uuid("user_id").primaryKey().references(() => users.id),
+  xp_total: integer("xp_total").notNull().default(0),
+  level: integer("level").notNull().default(1),
+  games_played: integer("games_played").notNull().default(0),
+  tests_completed: integer("tests_completed").notNull().default(0),
+  streak_days: integer("streak_days").notNull().default(0),
+  last_activity_date: date("last_activity_date"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+  updated_at: timestamp("updated_at", { withTimezone: true }).notNull().default(sql`now()`),
 });
 
 export const study_scores = pgTable("study_scores", {
@@ -205,7 +191,17 @@ export const study_scores = pgTable("study_scores", {
   user_id: uuid("user_id").notNull().references(() => users.id),
   game_id: text("game_id").notNull(),
   score: integer("score").notNull(),
-  created_at: timestamp("created_at", { withTimezone: true }).default(sql`now()`),
+  level_reached: integer("level_reached"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
+});
+
+export const study_xp_log = pgTable("study_xp_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  user_id: uuid("user_id").notNull().references(() => users.id),
+  delta: integer("delta").notNull(),
+  reason: text("reason").notNull(),
+  meta: jsonb("meta"),
+  created_at: timestamp("created_at", { withTimezone: true }).notNull().default(sql`now()`),
 });
 
 // Insert schemas
@@ -271,35 +267,32 @@ export const insertComplimentStreakSchema = createInsertSchema(compliment_streak
   updated_at: true,
 });
 
-export const insertMentalCheckinSchema = createInsertSchema(mental_checkins).omit({
-  id: true,
-  created_at: true,
-});
-
-export const insertRewardPointsSchema = createInsertSchema(reward_points).omit({
+export const insertCheckinSchema = createInsertSchema(checkins).omit({
   id: true,
   created_at: true,
   updated_at: true,
-});
-
-export const insertRewardSchema = createInsertSchema(rewards).omit({
-  id: true,
-  created_at: true,
 });
 
 export const insertStudyPlaytimeSchema = createInsertSchema(study_playtime).omit({
-  id: true,
-  created_at: true,
   updated_at: true,
 });
 
-export const insertStudyProfileSchema = createInsertSchema(study_profile).omit({
+export const insertStudyPlaytimeLogSchema = createInsertSchema(study_playtime_log).omit({
   id: true,
+  created_at: true,
+});
+
+export const insertStudyProfileSchema = createInsertSchema(study_profile).omit({
   created_at: true,
   updated_at: true,
 });
 
 export const insertStudyScoreSchema = createInsertSchema(study_scores).omit({
+  id: true,
+  created_at: true,
+});
+
+export const insertStudyXpLogSchema = createInsertSchema(study_xp_log).omit({
   id: true,
   created_at: true,
 });
@@ -332,28 +325,18 @@ export type InsertCompliment = z.infer<typeof insertComplimentSchema>;
 export type ComplimentStreak = typeof compliment_streaks.$inferSelect;
 export type InsertComplimentStreak = z.infer<typeof insertComplimentStreakSchema>;
 
-// Mental check-ins types
-export type MentalCheckin = typeof mental_checkins.$inferSelect;
-export type InsertMentalCheckin = z.infer<typeof insertMentalCheckinSchema>;
-
-// Rewards types
-export type RewardPoints = typeof reward_points.$inferSelect;
-export type InsertRewardPoints = z.infer<typeof insertRewardPointsSchema>;
-export type Reward = typeof rewards.$inferSelect;
-export type InsertReward = z.infer<typeof insertRewardSchema>;
+// Checkin types
+export type Checkin = typeof checkins.$inferSelect;
+export type InsertCheckin = z.infer<typeof insertCheckinSchema>;
 
 // StudyPlay types
 export type StudyPlaytime = typeof study_playtime.$inferSelect;
 export type InsertStudyPlaytime = z.infer<typeof insertStudyPlaytimeSchema>;
+export type StudyPlaytimeLog = typeof study_playtime_log.$inferSelect;
+export type InsertStudyPlaytimeLog = z.infer<typeof insertStudyPlaytimeLogSchema>;
 export type StudyProfile = typeof study_profile.$inferSelect;
 export type InsertStudyProfile = z.infer<typeof insertStudyProfileSchema>;
 export type StudyScore = typeof study_scores.$inferSelect;
 export type InsertStudyScore = z.infer<typeof insertStudyScoreSchema>;
-
-// Log types (used by storage but not in Drizzle tables - define as any for now)
-export type AppEvent = any;
-export type InsertAppEvent = any;
-export type StudyPlaytimeLog = any;
-export type InsertStudyPlaytimeLog = any;
-export type StudyXpLog = any;
-export type InsertStudyXpLog = any;
+export type StudyXpLog = typeof study_xp_log.$inferSelect;
+export type InsertStudyXpLog = z.infer<typeof insertStudyXpLogSchema>;
