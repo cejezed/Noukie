@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         user_id: userId,
         delta: -costMinutes,
         reason: "game_play",
-        balance_after: newBalance,
+        meta: { balance_after: newBalance },
       });
 
       return res.status(200).json({
@@ -141,8 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         user_id: targetUserId,
         delta: delta,
         reason: reason || "manual_add",
-        balance_after: newBalance,
-        meta: meta ? JSON.stringify(meta) : null,
+        meta: { ...(meta || {}), balance_after: newBalance },
       });
 
       return res.status(200).json({
