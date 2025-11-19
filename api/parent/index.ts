@@ -21,10 +21,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).end();
   }
 
-  // Determine route from path parameter
-  const pathParam = req.query.path;
-  const pathArray = Array.isArray(pathParam) ? pathParam : (pathParam ? [pathParam] : []);
-  const path = pathArray.join("/");
+  // Determine route from URL path
+  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  const pathParts = url.pathname.replace(/^\/api\/parent\/?/, "").split("/").filter(Boolean);
+  const path = pathParts.join("/");
 
   // Route: /api/parent/add-child
   if (path === "add-child") {

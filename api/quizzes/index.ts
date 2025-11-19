@@ -174,9 +174,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = (req.headers["x-user-id"] as string) || null;
   if (!userId) return res.status(401).json({ error: "Missing x-user-id" });
 
-  // Determine route from path parameter
-  const pathParam = req.query.path;
-  const path = Array.isArray(pathParam) ? pathParam.join("/") : (pathParam || "");
+  // Determine route from URL path
+  const url = new URL(req.url || "", `http://${req.headers.host}`);
+  const pathParts = url.pathname.replace(/^\/api\/quizzes\/?/, "").split("/").filter(Boolean);
+  const path = pathParts.join("/");
 
   // Route: /api/quizzes/questions
   if (path === "questions") {
