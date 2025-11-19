@@ -82,6 +82,7 @@ export default function Layout({ children }: LayoutProps) {
         <nav
           className="fixed bottom-0 left-0 right-0 bg-card border-t border-border"
           data-testid="bottom-navigation"
+          data-tabbar
         >
           <div className={`${containerWidths}`}>
             <div className="grid grid-cols-8 gap-0">
