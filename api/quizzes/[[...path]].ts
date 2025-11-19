@@ -301,7 +301,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: "Geen vragen gedetecteerd in de invoer." });
       }
 
-      const { data: quiz, error: qErr } = await admin.from("study_quizzes").insert({ title, subject, chapter, description: description || null, owner_id: userId, is_published: false }).select("*").single();
+      const { data: quiz, error: qErr } = await admin.from("study_quizzes").insert({ title, subject, chapter, description: description || null, user_id: userId, is_published: false }).select("*").single();
       if (qErr || !quiz) return res.status(400).json({ error: qErr?.message || "quiz insert failed" });
 
       const items: any[] = [];
