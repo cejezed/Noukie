@@ -6,9 +6,15 @@
   "functions": {
     "api/**": { "runtime": "@vercel/node@5.3.21" }
   },
+  "rewrites": [
+    { "source": "/api/quizzes/:path*", "destination": "/api/quizzes/[[...path]]" },
+    { "source": "/api/playtime/:path*", "destination": "/api/playtime/[[...path]]" },
+    { "source": "/api/parent/:path*", "destination": "/api/parent/[[...path]]" },
+    { "source": "/api/profile/:path*", "destination": "/api/index" },
+    { "source": "/api/:path*", "destination": "/api/index" }
+  ],
   "routes": [
     { "handle": "filesystem" },
-    { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/(.*)", "dest": "/index.html" }
   ]
 }

@@ -33,13 +33,14 @@ export default function Toets() {
     queryKey: ["quizzes", userId],
     enabled: !!userId,
     queryFn: async () => {
-      const res = await fetch("/api/quizzes", {
-        headers: { "x-user-id": userId! },
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const json = await res.json();
-      // Alleen gepubliceerde tonen in lijst
-      return (json.data as Array<any>).filter((q) => q.is_published);
+      const { data, error } = await supabase
+        .from("study_quizzes")
+        .select("*")
+        .eq("is_published", true)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return data || [];
     },
   });
 

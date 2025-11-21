@@ -13,8 +13,6 @@ import { useToast } from "@/components/ui/use-toast";
 import { useAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import type { Schedule, Course, Task } from "@shared/schema";
-import CoachChat, { type CoachChatHandle } from "@/features/chat/CoachChat";
-import SmartVoiceInput from "@/features/chat/SmartVoiceInput";
 
 const fmtTime = (t?: string | null) => (t ? t.slice(0, 5) : "");
 
@@ -24,11 +22,6 @@ function getLocalDayBounds(dateLike: Date | string) {
   const end = new Date(start); end.setDate(end.getDate() + 1);
   return { startISO: start.toISOString(), endISO: end.toISOString() };
 }
-
-type CoachMemory = {
-  id: string; user_id: string; course: string;
-  status: string | null; note: string | null; last_update: string | null;
-};
 
 export default function Vandaag() {
   const { user } = useAuth();
@@ -95,15 +88,6 @@ export default function Vandaag() {
     },
   });
 
-  const { data: coachMemory = [] } = useQuery<CoachMemory[]>({
-    queryKey: ["coach-memory", userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data, error } = await supabase.from("coach_memory").select("*").eq("user_id", userId);
-      if (error) throw new Error(error.message);
-      return data as CoachMemory[];
-    },
-  });
 
   const qcKey = ["tasks-today", userId, today.iso] as const;
 
@@ -150,44 +134,74 @@ export default function Vandaag() {
   };
 
   // --- Coach chat ---
-  const coachRef = useRef<CoachChatHandle>(null);
+  type ChatMessage = { id: number; sender: "user" | "ai"; text: string };
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [msg, setMsg] = useState("");
   const [sending, setSending] = useState(false);
+  const chatViewportRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll chat to bottom
+  React.useEffect(() => {
+    if (chatViewportRef.current) {
+      chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
+    }
+  }, [messages]);
 
   async function handleSend(e?: React.FormEvent) {
     if (e) e.preventDefault();
     const text = msg.trim();
     if (!text) return toast({ title: "Leeg bericht", description: "Typ eerst je bericht.", variant: "destructive" });
-    if (!coachRef.current?.sendMessage) return toast({ title: "Chat niet klaar", description: "CoachChat is nog niet geladen.", variant: "destructive" });
+
+    const userMessage: ChatMessage = { id: Date.now(), sender: "user", text };
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
+    setMsg("");
+    setSending(true);
+
     try {
-      setSending(true);
-      const p = coachRef.current.sendMessage(text);
-      if (p && typeof (p as any).then === "function") await (p as Promise<any>);
-      setMsg("");
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const history = newMessages.map(m => ({
+        role: m.sender === "user" ? "user" : "assistant",
+        content: m.text
+      }));
+
+      const context = {
+        todayDate: today.iso,
+        todaySchedule: todayItems.map((i) => ({
+          kind: i.kind,
+          course: getCourseById(i.course_id)?.name ?? i.title ?? "Activiteit",
+          start: i.start_time, end: i.end_time,
+        })),
+        openTasks: tasksToday.map((t) => ({ id: t.id, title: t.title, status: t.status })),
+      };
+
+      const systemHint = `Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het Nederlands.
+- Gebruik context (rooster/taken) alleen als het helpt; noem het niet expliciet tenzij relevant.
+- Max 2-3 zinnen. Hoogstens 1 vraag terug als dat nodig is.
+- Vier kleine successen. Als de gebruiker planning vraagt: doe 1-2 concrete vervolgstappen.`;
+
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ mode: "chat", message: text, history, context, systemHint }),
+      });
+
+      const rawText = await resp.text();
+      if (!resp.ok) throw new Error(rawText || `HTTP ${resp.status}`);
+      const data = rawText ? JSON.parse(rawText) : {};
+      const reply: string = data?.reply ?? "Oké, vertel me meer.";
+
+      const aiMessage: ChatMessage = { id: Date.now() + 1, sender: "ai", text: reply };
+      setMessages([...newMessages, aiMessage]);
     } catch (err: any) {
       toast({ title: "Versturen mislukt", description: err?.message ?? "Onbekende fout", variant: "destructive" });
+      setMessages(messages);
     } finally {
       setSending(false);
     }
   }
-
-  const coachContext = {
-    todayDate: today.iso,
-    todaySchedule: todayItems.map((i) => ({
-      kind: i.kind,
-      course: getCourseById(i.course_id)?.name ?? i.title ?? "Activiteit",
-      start: i.start_time, end: i.end_time,
-    })),
-    openTasks: tasksToday.map((t) => ({ id: t.id, title: t.title, status: t.status, courseId: t.course_id })),
-    difficulties: coachMemory.map((m) => ({ course: m.course, status: m.status, note: m.note, lastUpdate: m.last_update })),
-  };
-
-  const coachSystemHint = `
-Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het Nederlands.
-- Gebruik context (rooster/taken/memory) alleen als het helpt; noem het niet expliciet tenzij relevant.
-- Max 2-3 zinnen. Hoogstens 1 vraag terug als dat nodig is.
-- Vier kleine successen. Als de gebruiker planning vraagt: doe 1-2 concrete vervolgstappen.
-`.trim();
 
   return (
     <div className="min-h-screen">
@@ -214,16 +228,44 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
             </Dialog>
           </div>
 
-          {/* CoachChat op volle breedte */}
-          <div className="w-full">
-            <CoachChat
-              ref={coachRef}
-              systemHint={coachSystemHint}
-              context={coachContext}
-              size="large"
-              hideComposer
-              threadKey={`today:${userId || "anon"}`}
-            />
+          {/* Chat messages */}
+          <div
+            ref={chatViewportRef}
+            className="h-64 overflow-y-auto space-y-2 rounded-xl bg-white/5 p-3"
+          >
+            {messages.length === 0 ? (
+              <div className="text-center text-white/60 py-10">
+                <p className="text-sm">Nog geen gesprek. Zeg hallo! 👋</p>
+              </div>
+            ) : (
+              messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-xl p-3 text-sm ${
+                      m.sender === "user"
+                        ? "bg-accent text-white"
+                        : "bg-white/10 text-white"
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))
+            )}
+            {sending && (
+              <div className="flex justify-start">
+                <div className="bg-white/10 rounded-xl p-3">
+                  <div className="flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-white/60 animate-bounce" />
+                    <span className="w-2 h-2 rounded-full bg-white/60 animate-bounce delay-150" />
+                    <span className="w-2 h-2 rounded-full bg-white/60 animate-bounce delay-300" />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Composer compact */}
@@ -235,16 +277,10 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
               rows={2}
               className="min-h-[44px] text-base bg-white/5 border-white/10 focus:border-accent focus:ring-accent/50 rounded-xl text-white placeholder:text-white/40"
             />
-            <div className="flex flex-col sm:flex-row gap-2">
-              <SmartVoiceInput
-                onTranscript={(text) => { setMsg(text); handleSend(); }}
-                lang="nl-NL"
-              />
-              <Button type="submit" disabled={sending} className="voice-button rounded-xl text-white">
-                {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {sending ? "Versturen..." : "Stuur"}
-              </Button>
-            </div>
+            <Button type="submit" disabled={sending} className="voice-button rounded-xl text-white w-full">
+              {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {sending ? "Versturen..." : "Stuur"}
+            </Button>
           </form>
         </section>
 
