@@ -6,6 +6,16 @@
   "functions": {
     "api/**": { "runtime": "@vercel/node@5.3.21" }
   },
+  "rewrites": [
+    { "source": "/api/quizzes/:path*", "destination": "/api/quizzes/index" },
+    { "source": "/api/quizzes", "destination": "/api/quizzes/index" },
+    { "source": "/api/playtime/:path*", "destination": "/api/playtime/index" },
+    { "source": "/api/playtime", "destination": "/api/playtime/index" },
+    { "source": "/api/profile/:path*", "destination": "/api/profile/index" },
+    { "source": "/api/profile", "destination": "/api/profile/index" },
+    { "source": "/api/parent/:path*", "destination": "/api/parent/index" },
+    { "source": "/api/parent", "destination": "/api/parent/index" }
+  ],
   "routes": [
     { "handle": "filesystem" },
     { "src": "/(.*)", "dest": "/index.html" }
