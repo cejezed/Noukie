@@ -226,10 +226,12 @@ Als je een kleur wilt wijzigen voor de hele app, pas deze aan in `/client/src/in
 ```css
 :root {
   /* Bijvoorbeeld: Game mode kleur aanpassen */
-  --quiz-game: hsl(280, 85%, 60%);  /* Paars */
-  --quiz-game-secondary: hsl(330, 85%, 60%);  /* Roze */
+  --quiz-game: 280 85% 60%;  /* Paars (H S L zonder hsl()) */
+  --quiz-game-secondary: 330 85% 60%;  /* Roze */
 }
 ```
+
+**Let op:** CSS variabelen bevatten alleen de HSL waardes (bijv. `280 85% 60%`), zonder `hsl()`. Tailwind voegt automatisch `hsl()` toe.
 
 Dan worden automatisch alle `btn-quiz-game`, `bg-quiz-game`, etc. aangepast in de hele app!
 
