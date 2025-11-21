@@ -6,48 +6,48 @@
 
 :root {
   /* Base colors */
-  --background: hsl(210, 40%, 98%);
-  --foreground: hsl(222.2, 84%, 4.9%);
-  --card: hsl(0, 0%, 100%);
-  --card-foreground: hsl(222.2, 84%, 4.9%);
-  --popover: hsl(0, 0%, 100%);
-  --popover-foreground: hsl(222.2, 84%, 4.9%);
+  --background: 210 40% 98%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
 
   /* Brand colors */
-  --primary: hsl(217.2, 91.2%, 59.8%);
-  --primary-foreground: hsl(210, 40%, 98%);
-  --secondary: hsl(210, 40%, 96%);
-  --secondary-foreground: hsl(222.2, 84%, 4.9%);
-  --muted: hsl(210, 40%, 96%);
-  --muted-foreground: hsl(215.4, 16.3%, 46.9%);
-  --accent: hsl(45.4, 93.4%, 47.5%);
-  --accent-foreground: hsl(210, 40%, 98%);
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222.2 84% 4.9%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 45.4 93.4% 47.5%;
+  --accent-foreground: 210 40% 98%;
 
   /* Semantic colors */
-  --destructive: hsl(0, 84.2%, 60.2%);
-  --destructive-foreground: hsl(210, 40%, 98%);
-  --success: hsl(142, 71%, 45%);
-  --success-foreground: hsl(0, 0%, 100%);
-  --warning: hsl(38, 92%, 50%);
-  --warning-foreground: hsl(0, 0%, 100%);
-  --info: hsl(199, 89%, 48%);
-  --info-foreground: hsl(0, 0%, 100%);
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --success: 142 71% 45%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 0 0% 100%;
+  --info: 199 89% 48%;
+  --info-foreground: 0 0% 100%;
 
   /* Feature-specific colors */
-  --quiz-practice: hsl(217.2, 91.2%, 59.8%);
-  --quiz-game: hsl(280, 85%, 60%);
-  --quiz-game-secondary: hsl(330, 85%, 60%);
-  --mental-ok: hsl(142, 71%, 45%);
-  --mental-warning: hsl(38, 92%, 50%);
-  --mental-alert: hsl(0, 84.2%, 60.2%);
-  --games-primary: hsl(280, 85%, 60%);
-  --compliments-primary: hsl(330, 85%, 60%);
-  --leerchat-primary: hsl(217.2, 91.2%, 59.8%);
+  --quiz-practice: 217.2 91.2% 59.8%;
+  --quiz-game: 280 85% 60%;
+  --quiz-game-secondary: 330 85% 60%;
+  --mental-ok: 142 71% 45%;
+  --mental-warning: 38 92% 50%;
+  --mental-alert: 0 84.2% 60.2%;
+  --games-primary: 280 85% 60%;
+  --compliments-primary: 330 85% 60%;
+  --leerchat-primary: 217.2 91.2% 59.8%;
 
   /* UI elements */
-  --border: hsl(214.3, 31.8%, 91.4%);
-  --input: hsl(214.3, 31.8%, 91.4%);
-  --ring: hsl(217.2, 91.2%, 59.8%);
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 217.2 91.2% 59.8%;
 
   /* Typography */
   --font-sans: 'Inter', system-ui, sans-serif;
@@ -87,25 +87,25 @@
 }
 
 .dark {
-  --background: hsl(0, 0%, 0%);
-  --foreground: hsl(200, 6.6667%, 91.1765%);
-  --card: hsl(228, 9.8039%, 10%);
-  --card-foreground: hsl(0, 0%, 85.0980%);
-  --popover: hsl(0, 0%, 0%);
-  --popover-foreground: hsl(200, 6.6667%, 91.1765%);
-  --primary: hsl(217.2, 91.2%, 59.8%);
-  --primary-foreground: hsl(210, 40%, 98%);
-  --secondary: hsl(195, 15.3846%, 94.9020%);
-  --secondary-foreground: hsl(222.2, 84%, 4.9%);
-  --muted: hsl(0, 0%, 9.4118%);
-  --muted-foreground: hsl(215.4, 16.3%, 46.9%);
-  --accent: hsl(45.4, 93.4%, 47.5%);
-  --accent-foreground: hsl(210, 40%, 98%);
-  --destructive: hsl(0, 84.2%, 60.2%);
-  --destructive-foreground: hsl(210, 40%, 98%);
-  --border: hsl(214.3, 31.8%, 91.4%);
-  --input: hsl(214.3, 31.8%, 91.4%);
-  --ring: hsl(217.2, 91.2%, 59.8%);
+  --background: 0 0% 0%;
+  --foreground: 200 6.6667% 91.1765%;
+  --card: 228 9.8039% 10%;
+  --card-foreground: 0 0% 85.0980%;
+  --popover: 0 0% 0%;
+  --popover-foreground: 200 6.6667% 91.1765%;
+  --primary: 217.2 91.2% 59.8%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 195 15.3846% 94.9020%;
+  --secondary-foreground: 222.2 84% 4.9%;
+  --muted: 0 0% 9.4118%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 45.4 93.4% 47.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 217.2 91.2% 59.8%;
 }
 
 @layer base {
@@ -129,7 +129,7 @@
     transition: var(--transition-base);
   }
   .btn-quiz-practice:hover {
-    background-color: hsl(217.2, 91.2%, 50%);
+    background-color: hsl(217.2 91.2% 50%);
   }
 
   .btn-quiz-game {
@@ -212,14 +212,14 @@
 
   /* Legacy components */
   .voice-button {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(217.2, 91.2%, 45%));
-    box-shadow: 0 4px 20px hsla(217.2, 91.2%, 59.8%, 0.3);
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(217.2 91.2% 45%));
+    box-shadow: 0 4px 20px hsl(217.2 91.2% 59.8% / 0.3);
     transition: var(--transition-base);
   }
 
   .voice-button:active {
     transform: scale(0.95);
-    box-shadow: 0 2px 10px hsla(217.2, 91.2%, 59.8%, 0.4);
+    box-shadow: 0 2px 10px hsl(217.2 91.2% 59.8% / 0.4);
   }
 
   .task-card {
