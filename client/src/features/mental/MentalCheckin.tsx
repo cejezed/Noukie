@@ -342,11 +342,28 @@ export default function MentalCheckin({
       const newPoints = await syncPointsWithCheckins(userId);
       setPoints(newPoints);
 
-      // Award playtime for new check-ins
+      // Award XP and playtime for new check-ins
+      let xpAwarded = 0;
       let playtimeAwarded = 0;
       if (!hasAlreadyCheckedIn) {
         try {
-          const response = await fetch('/api/playtime/add', {
+          // Award XP (25 points for daily checkin)
+          const xpResponse = await fetch('/api/profile/xp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId,
+              delta: 25,
+              reason: 'daily_checkin',
+              meta: { date: payload.date }
+            }),
+          });
+          if (xpResponse.ok) {
+            xpAwarded = 25;
+          }
+
+          // Award playtime
+          const playtimeResponse = await fetch('/api/playtime/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -356,17 +373,20 @@ export default function MentalCheckin({
               meta: { date: payload.date }
             }),
           });
-          if (response.ok) {
+          if (playtimeResponse.ok) {
             playtimeAwarded = 2;
           }
         } catch (err) {
-          console.error('Failed to award playtime:', err);
+          console.error('Failed to award XP/playtime:', err);
         }
       }
 
       if (!hasAlreadyCheckedIn) {
-        const playtimeMsg = playtimeAwarded > 0 ? ` en ${playtimeAwarded} speelminuten` : '';
-        setOkMsg(`Bedankt! Je check-in is opgeslagen en je hebt een punt${playtimeMsg} verdiend! ✨`);
+        const xpMsg = xpAwarded > 0 ? `${xpAwarded} XP` : '';
+        const playtimeMsg = playtimeAwarded > 0 ? `${playtimeAwarded} speelminuten` : '';
+        const rewards = [xpMsg, playtimeMsg].filter(Boolean).join(' en ');
+        const rewardsText = rewards ? ` en ${rewards}` : '';
+        setOkMsg(`Bedankt! Je check-in is opgeslagen en je hebt een punt${rewardsText} verdiend! ✨`);
       } else {
         setOkMsg("Je check-in is bijgewerkt. Je hebt vandaag al een punt verdiend. 🌟");
       }

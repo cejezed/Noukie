@@ -190,25 +190,23 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
 `.trim();
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen">
       {/* 👇 MAX 1600px, minimale zij-paddings voor maximale chatbreedte */}
       <div className="max-w-[1600px] mx-auto px-2 sm:px-3 md:px-4 py-3 md:py-4 space-y-4">
-        {/* (Versienummer helemaal verwijderd) */}
 
         {/* CHAT — zo breed mogelijk, compact UI */}
-        <section className="bg-white rounded-2xl border border-slate-200 p-3 md:p-4 space-y-3">
+        <section className="glass rounded-2xl p-3 md:p-4 space-y-3">
           <div className="flex items-center justify-between">
-            {/* Titel verwijderd voor meer ruimte; alleen een subtiele label + info-knop */}
-            <div className="text-sm text-slate-600">Praat met Noukie</div>
+            <div className="text-sm text-white/80">Praat met Noukie</div>
             <Dialog>
               <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-600">
+                <Button variant="ghost" size="icon" className="text-white/60 hover:text-white hover:bg-white/10">
                   <Info className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="rounded-2xl">
+              <DialogContent className="glass border-white/10 text-white">
                 <DialogHeader><DialogTitle>Tips</DialogTitle></DialogHeader>
-                <div className="space-y-3 text-sm text-slate-600 pt-1">
+                <div className="space-y-3 text-sm text-white/80 pt-1">
                   <div>Vraag om 1–2 concrete vervolgstappen.</div>
                   <div>Houd berichten kort; dan blijft de chat overzichtelijk.</div>
                 </div>
@@ -235,14 +233,14 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
               value={msg}
               onChange={(e) => setMsg(e.target.value)}
               rows={2}
-              className="min-h-[44px] text-base border-slate-200 focus:border-blue-300 focus:ring-blue-200 rounded-xl"
+              className="min-h-[44px] text-base bg-white/5 border-white/10 focus:border-accent focus:ring-accent/50 rounded-xl text-white placeholder:text-white/40"
             />
             <div className="flex flex-col sm:flex-row gap-2">
               <SmartVoiceInput
                 onTranscript={(text) => { setMsg(text); handleSend(); }}
                 lang="nl-NL"
               />
-              <Button type="submit" disabled={sending} className="bg-slate-800 hover:bg-slate-700 rounded-xl">
+              <Button type="submit" disabled={sending} className="voice-button rounded-xl text-white">
                 {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 {sending ? "Versturen..." : "Stuur"}
               </Button>
@@ -253,23 +251,23 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
         {/* ROOSTER & TAKEN — behoud, maar compacter en naast elkaar, volle breedte */}
         <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
           {/* Rooster */}
-          <section className="bg-white rounded-2xl border border-slate-200 p-4">
+          <section className="glass rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Clock className="w-5 h-5 text-slate-400" />
-              <h2 className="text-base font-medium text-slate-700">Je rooster</h2>
+              <Clock className="w-5 h-5 text-accent" />
+              <h2 className="text-base font-medium text-white">Je rooster</h2>
             </div>
             {scheduleLoading ? (
               <div className="text-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin inline-block text-slate-400" />
+                <Loader2 className="w-6 h-6 animate-spin inline-block text-white/40" />
               </div>
             ) : todayItems.length ? (
               <div className="space-y-2">
                 {todayItems.map((item) => {
                   const course = getCourseById(item.course_id);
                   return (
-                    <div key={item.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
-                      <div className="font-medium text-slate-700">{item.title || course?.name || "Activiteit"}</div>
-                      <div className="text-sm text-slate-500 mt-0.5">
+                    <div key={item.id} className="bg-white/5 rounded-xl p-3 border border-white/10 hover:bg-white/10 transition-colors">
+                      <div className="font-medium text-white">{item.title || course?.name || "Activiteit"}</div>
+                      <div className="text-sm text-white/60 mt-0.5">
                         {fmtTime(item.start_time)}{item.end_time ? ` - ${fmtTime(item.end_time)}` : ""}
                       </div>
                     </div>
@@ -277,7 +275,7 @@ Je bent Noukie, een vriendelijke studiecoach. Reageer kort, natuurlijk en in het
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-slate-400">Geen activiteiten gepland</div>
+              <div className="text-center py-8 text-white/40">Geen activiteiten gepland</div>
             )}
           </section>
 
@@ -319,31 +317,31 @@ function TasksPanel(props: {
   } = props;
 
   return (
-    <section className="bg-white rounded-2xl border border-slate-200 p-4">
-      <h2 className="text-base font-medium text-slate-700 mb-3">Je taken</h2>
+    <section className="glass rounded-2xl p-4">
+      <h2 className="text-base font-medium text-white mb-3">Je taken</h2>
       {tasksLoading ? (
-        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin inline-block text-slate-400" /></div>
+        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin inline-block text-white/40" /></div>
       ) : (
         <div className="space-y-2">
           {tasksToday.length === 0 ? (
-            <div className="text-center py-8 text-slate-400">Geen taken voor vandaag</div>
+            <div className="text-center py-8 text-white/40">Geen taken voor vandaag</div>
           ) : (
             tasksToday.map((task) => {
               const isDone = task.status === "done";
               return (
-                <div key={task.id} className="bg-slate-50 rounded-xl p-3 border border-slate-100 flex items-center justify-between gap-3">
-                  <div className={`flex-1 text-sm ${isDone ? "line-through text-slate-400" : "text-slate-700"}`}>{task.title}</div>
+                <div key={task.id} className="bg-white/5 rounded-xl p-3 border border-white/10 flex items-center justify-between gap-3 hover:bg-white/10 transition-colors">
+                  <div className={`flex-1 text-sm ${isDone ? "line-through text-white/40" : "text-white"}`}>{task.title}</div>
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost" size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-green-600 hover:bg-green-50"
+                      className="h-8 w-8 text-white/40 hover:text-green-400 hover:bg-green-500/20"
                       onClick={() => toggleDone.mutate(task)}
                     >
                       <Check className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost" size="icon"
-                      className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                      className="h-8 w-8 text-white/40 hover:text-red-400 hover:bg-red-500/20"
                       onClick={() => delTask.mutate(task.id)}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -358,38 +356,38 @@ function TasksPanel(props: {
 
       {/* Toevoegen */}
       <div className="mt-4">
-        <h3 className="text-sm font-medium text-slate-700 mb-2">Nieuwe taak toevoegen</h3>
+        <h3 className="text-sm font-medium text-white mb-2">Nieuwe taak toevoegen</h3>
         <form onSubmit={onAddTask} className="space-y-3">
           <div>
-            <Label htmlFor="t-title" className="text-slate-600">Wat moet je doen?</Label>
+            <Label htmlFor="t-title" className="text-white/80">Wat moet je doen?</Label>
             <Textarea
               id="t-title" rows={2}
               placeholder="Bijv. Wiskunde §2.3 oefenen, Engelse woordjes H2"
               value={title} onChange={(e) => setTitle(e.target.value)}
-              className="mt-1.5 border-slate-200 focus:border-blue-300 focus:ring-blue-200 rounded-xl"
+              className="mt-1.5 bg-white/5 border-white/10 focus:border-accent focus:ring-accent/50 rounded-xl text-white placeholder:text-white/40"
             />
           </div>
 
           <div className="grid sm:grid-cols-3 gap-3">
             <div>
-              <Label htmlFor="t-course" className="text-slate-600">Vak (optioneel)</Label>
+              <Label htmlFor="t-course" className="text-white/80">Vak (optioneel)</Label>
               <Select value={courseId ?? "none"} onValueChange={(v) => setCourseId(v === "none" ? null : v)}>
-                <SelectTrigger id="t-course" className="mt-1.5 border-slate-200 rounded-xl">
+                <SelectTrigger id="t-course" className="mt-1.5 bg-white/5 border-white/10 text-white rounded-xl">
                   <SelectValue placeholder="Kies vak" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Geen vak</SelectItem>
-                  {courses.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+                <SelectContent className="glass border-white/10 text-white">
+                  <SelectItem value="none" className="focus:bg-white/20">Geen vak</SelectItem>
+                  {courses.map((c) => (<SelectItem key={c.id} value={c.id} className="focus:bg-white/20">{c.name}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label htmlFor="t-min" className="text-slate-600">Duur (min)</Label>
+              <Label htmlFor="t-min" className="text-white/80">Duur (min)</Label>
               <Input
                 id="t-min" type="number" min={5} step={5} placeholder="30"
                 value={estMinutes} onChange={(e) => setEstMinutes(e.target.value)}
-                className="mt-1.5 border-slate-200 rounded-xl"
+                className="mt-1.5 bg-white/5 border-white/10 text-white rounded-xl placeholder:text-white/40"
               />
             </div>
 
@@ -397,7 +395,7 @@ function TasksPanel(props: {
               <Button
                 type="submit"
                 disabled={addTaskMutation.isPending}
-                className="w-full bg-slate-800 hover:bg-slate-700 rounded-xl"
+                className="w-full voice-button text-white rounded-xl"
               >
                 {addTaskMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 {addTaskMutation.isPending ? "Toevoegen..." : "Toevoegen"}
