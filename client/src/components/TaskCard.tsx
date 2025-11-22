@@ -79,48 +79,46 @@ export default function TaskCard({ task, course, onStart, isStarting }: TaskCard
 
   return (
     <>
-      <>
-        <div className={`glass-card p-4 ${isCompleted ? 'opacity-60' : ''}`} data-testid={`task-card-${task.id}`}>
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center space-x-2 mb-2">
-                <span className="text-xs font-medium text-white bg-white/20 px-2 py-1 rounded-full backdrop-blur-sm">
-                  {course?.name || "Algemeen"}
+      <div className={`task-card bg-card border border-border rounded-lg p-4 ${isCompleted ? 'opacity-70' : ''}`} data-testid={`task-card-${task.id}`}>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center space-x-2 mb-2">
+              <span className="text-xs font-medium text-primary bg-primary/10 px-2 py-1 rounded">
+                {course?.name || "Algemeen"}
+              </span>
+              {task.priority > 0 && (
+                <span className={`text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                  {getPriorityLabel(task.priority)}
                 </span>
-                {task.priority > 0 && (
-                  <span className={`text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                    {getPriorityLabel(task.priority)}
-                  </span>
-                )}
-              </div>
-              <h4 className={`font-medium mb-1 text-white ${isCompleted ? 'line-through text-white/50' : ''}`}>{task.title}</h4>
-              {task.est_minutes && (
-                <p className="text-sm text-white/60">± {task.est_minutes} minuten</p>
               )}
             </div>
-            <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="icon" className="text-white/60 hover:text-accent hover:bg-white/10 p-1" onClick={() => setShowHelpModal(true)} title="Ik snap dit niet">
-                <HelpCircle className="w-5 h-5" />
+            <h4 className={`font-medium mb-1 ${isCompleted ? 'line-through' : ''}`}>{task.title}</h4>
+            {task.est_minutes && (
+              <p className="text-sm text-muted-foreground">± {task.est_minutes} minuten</p>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent p-1" onClick={() => setShowHelpModal(true)} title="Ik snap dit niet">
+              <HelpCircle className="w-5 h-5" />
+            </Button>
+            {isCompleted && (
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive p-1" onClick={() => deleteTaskMutation.mutate()} disabled={deleteTaskMutation.isPending} title="Verwijder voltooide taak">
+                <Trash2 className="w-4 h-4" />
               </Button>
-              {isCompleted && (
-                <Button variant="ghost" size="icon" className="text-white/60 hover:text-destructive hover:bg-white/10 p-1" onClick={() => deleteTaskMutation.mutate()} disabled={deleteTaskMutation.isPending} title="Verwijder voltooide taak">
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="icon"
-                className={`w-6 h-6 border-2 rounded transition-colors ${isCompleted ? 'border-accent bg-accent text-white' : 'border-white/30 hover:border-accent bg-transparent text-transparent'}`}
-                onClick={() => toggleStatusMutation.mutate(isCompleted ? 'todo' : 'done')}
-                disabled={toggleStatusMutation.isPending}
-              >
-                {isCompleted && <Check className="w-3 h-3" />}
-              </Button>
-            </div>
+            )}
+            <Button
+              variant="outline"
+              size="icon"
+              className={`w-6 h-6 border-2 rounded transition-colors ${isCompleted ? 'border-primary bg-primary text-primary-foreground' : 'border-border hover:border-primary'}`}
+              onClick={() => toggleStatusMutation.mutate(isCompleted ? 'todo' : 'done')}
+              disabled={toggleStatusMutation.isPending}
+            >
+              {isCompleted && <Check className="w-3 h-3" />}
+            </Button>
           </div>
         </div>
-        <HelpModal open={showHelpModal} onOpenChange={setShowHelpModal} task={task} course={course} />
-      </>
-      );
+      </div>
+      <HelpModal open={showHelpModal} onOpenChange={setShowHelpModal} task={task} course={course} />
+    </>
+  );
 }
-

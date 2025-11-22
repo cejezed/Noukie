@@ -28,12 +28,12 @@ export default function Layout({ children }: LayoutProps) {
     "w-full mx-auto max-w-md sm:max-w-2xl lg:max-w-5xl xl:max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8";
 
   return (
-    <div className="min-h-screen">
-      {/* Header with Glass Effect */}
-      <header className="glass sticky top-0 z-50 border-b-0">
+    <div className="min-h-screen bg-slate-50">
+      {/* Header (full-width background); inhoud in dezelfde responsive container */}
+      <header className="bg-primary text-primary-foreground sticky top-0 z-50">
         <div className={`${containerWidths} py-3`}>
           <div className="flex items-center justify-between gap-3">
-            <div className="w-28 h-14 bg-white/90 backdrop-blur-sm rounded-xl flex items-center justify-center p-1 shrink-0 shadow-sm">
+            <div className="w-28 h-14 bg-white rounded-sm flex items-center justify-center p-1 shrink-0">
               <img
                 src="/noukie-logo.png"
                 alt="Noukie Logo"
@@ -42,93 +42,63 @@ export default function Layout({ children }: LayoutProps) {
             </div>
 
             <div className="text-center flex-1 mx-2">
-              <h1 className="text-lg font-semibold text-white">
+              <h1 className="text-lg font-semibold">
                 Hi {user?.user_metadata?.name || "Anouk"}! 👋
               </h1>
-              <p className="text-sm text-white/80">
+              <p className="text-sm text-primary-foreground/80">
                 {isParent ? "Ouder dashboard" : "Klaar voor vandaag?"}
               </p>
             </div>
 
-            <div className="flex gap-2">
-              {!isParent && (
-                <Link href="/instellingen">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-white hover:bg-white/20"
-                    data-testid="button-settings"
-                    title="Instellingen"
-                  >
-                    <Icons.Settings className="w-6 h-6" />
-                  </Button>
-                </Link>
-              )}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => signOut()}
-                className="text-white hover:bg-white/20"
-                data-testid="button-logout"
-                title="Uitloggen"
-              >
-                <Icons.LogOut className="w-6 h-6" />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => signOut()}
+              className="text-primary-foreground hover:bg-primary/20"
+              data-testid="button-logout"
+              title="Uitloggen"
+            >
+              <Icons.LogOut className="w-6 h-6" />
+            </Button>
           </div>
         </div>
       </header>
 
-      {/* Main content */}
-      <main className={`${containerWidths} pt-6 ${isParent ? "pb-6" : "pb-24"}`} data-testid="main-content">
+      {/* Main content in dezelfde responsive container */}
+      <main className={`${containerWidths} ${isParent ? "pb-6" : "pb-24"}`} data-testid="main-content">
         {children}
       </main>
 
-      {/* Bottom Navigation with Glass Effect */}
+      {/* Bottom Navigation - alleen voor studenten; volgt dezelfde containerbreedte */}
       {!isParent && (
         <nav
-          className="fixed bottom-4 left-4 right-4 glass rounded-2xl border border-white/10 shadow-lg z-50"
+          className="fixed bottom-0 left-0 right-0 bg-card border-t border-border"
           data-testid="bottom-navigation"
         >
-          <div className="max-w-md mx-auto px-2">
-            <div className="flex justify-between items-center">
+          <div className={`${containerWidths}`}>
+            <div className="grid grid-cols-8 gap-0">
               {tabs.map((tab) => {
-                // Show fewer tabs on mobile or handle overflow if needed. 
-                // For now, rendering all but checking overflow might be needed.
-                // Given the design, maybe we only show main ones? 
-                // The original code showed all in a grid. Let's keep the grid but make it fit.
-                // Actually, 8 tabs is a lot for a bottom bar. 
-                // Let's stick to the original grid logic but styled better.
-                return null;
-              })}
-              {/* Re-implementing the grid logic properly inside the glass container */}
-              <div className="grid grid-cols-8 gap-0 w-full">
-                {tabs.map((tab) => {
-                  const Icon = tab.icon;
-                  const isActive = location === tab.path;
+                const Icon = tab.icon;
+                const isActive = location === tab.path;
 
-                  return (
-                    <Link key={tab.id} href={tab.path}>
-                      <div className="w-full flex justify-center">
-                        <button
-                          className={`relative flex flex-col items-center justify-center py-3 px-1 transition-all duration-200 ${isActive ? "text-accent scale-110" : "text-white/60 hover:text-white/90"
-                            }`}
-                          data-testid={`tab-${tab.id}`}
-                          aria-current={isActive ? "page" : undefined}
-                          title={tab.label}
-                        >
-                          <Icon className="w-5 h-5 mb-1" />
-                          {/* Hide label on small screens if too crowded, or keep small */}
-                          {/* <span className="text-[10px] font-medium truncate max-w-full">{tab.label}</span> */}
-                          {isActive && (
-                            <div className="absolute -bottom-1 w-1 h-1 bg-accent rounded-full shadow-[0_0_8px_var(--accent)]" />
-                          )}
-                        </button>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+                return (
+                  <Link key={tab.id} href={tab.path}>
+                    <div className="w-full flex justify-center">
+                      <button
+                        className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"
+                          }`}
+                        data-testid={`tab-${tab.id}`}
+                        aria-current={isActive ? "page" : undefined}
+                        title={tab.label}
+                      >
+                        <Icon className="w-5 h-5 mb-1" />
+                        <span className="text-xs font-medium">{tab.label}</span>
+                        {isActive && <div className="tab-indicator" />}
+                      </button>
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
           </div>
         </nav>
