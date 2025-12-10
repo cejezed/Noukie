@@ -30,10 +30,10 @@ export default function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header (full-width background); inhoud in dezelfde responsive container */}
-      <header className="bg-primary text-primary-foreground sticky top-0 z-50">
+      <header className="bg-white border-b border-border sticky top-0 z-50 shadow-sm">
         <div className={`${containerWidths} py-3`}>
           <div className="flex items-center justify-between gap-3">
-            <div className="w-28 h-14 bg-white rounded-sm flex items-center justify-center p-1 shrink-0">
+            <div className="w-28 h-14 bg-slate-50 rounded-lg flex items-center justify-center p-1 shrink-0 border border-border">
               <img
                 src="/noukie-logo.png"
                 alt="Noukie Logo"
@@ -42,24 +42,39 @@ export default function Layout({ children }: LayoutProps) {
             </div>
 
             <div className="text-center flex-1 mx-2">
-              <h1 className="text-lg font-semibold">
+              <h1 className="text-lg font-semibold text-foreground">
                 Hi {user?.user_metadata?.name || "Anouk"}! 👋
               </h1>
-              <p className="text-sm text-primary-foreground/80">
+              <p className="text-sm text-muted-foreground">
                 {isParent ? "Ouder dashboard" : "Klaar voor vandaag?"}
               </p>
             </div>
 
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut()}
-              className="text-primary-foreground hover:bg-primary/20"
-              data-testid="button-logout"
-              title="Uitloggen"
-            >
-              <Icons.LogOut className="w-6 h-6" />
-            </Button>
+            <div className="flex gap-2">
+              {!isParent && (
+                <Link href="/instellingen">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-foreground hover:bg-accent"
+                    data-testid="button-settings"
+                    title="Instellingen"
+                  >
+                    <Icons.Settings className="w-6 h-6" />
+                  </Button>
+                </Link>
+              )}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => signOut()}
+                className="text-muted-foreground hover:text-foreground hover:bg-accent"
+                data-testid="button-logout"
+                title="Uitloggen"
+              >
+                <Icons.LogOut className="w-6 h-6" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -72,7 +87,7 @@ export default function Layout({ children }: LayoutProps) {
       {/* Bottom Navigation - alleen voor studenten; volgt dezelfde containerbreedte */}
       {!isParent && (
         <nav
-          className="fixed bottom-0 left-0 right-0 bg-card border-t border-border"
+          className="fixed bottom-0 left-0 right-0 bg-white border-t border-border shadow-lg"
           data-testid="bottom-navigation"
         >
           <div className={`${containerWidths}`}>
@@ -85,7 +100,7 @@ export default function Layout({ children }: LayoutProps) {
                   <Link key={tab.id} href={tab.path}>
                     <div className="w-full flex justify-center">
                       <button
-                        className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors ${isActive ? "text-primary" : "text-muted-foreground"
+                        className={`relative flex flex-col items-center justify-center py-3 px-2 transition-colors ${isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
                           }`}
                         data-testid={`tab-${tab.id}`}
                         aria-current={isActive ? "page" : undefined}

@@ -209,18 +209,18 @@ export default function Vandaag() {
       <div className="max-w-[1600px] mx-auto px-2 sm:px-3 md:px-4 py-3 md:py-4 space-y-4">
 
         {/* CHAT — zo breed mogelijk, compact UI */}
-        <section className="glass rounded-2xl p-3 md:p-4 space-y-3">
+        <section className="bg-white rounded-2xl shadow border border-border p-3 md:p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-white/80">Praat met Noukie</div>
+            <div className="text-sm font-medium text-foreground">Praat met Noukie</div>
             <Dialog>
               <DialogTrigger asChild>
-                <Button variant="ghost" size="icon" className="text-white/60 hover:text-white hover:bg-white/10">
+                <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
                   <Info className="h-5 w-5" />
                 </Button>
               </DialogTrigger>
-              <DialogContent className="glass border-white/10 text-white">
+              <DialogContent className="bg-white">
                 <DialogHeader><DialogTitle>Tips</DialogTitle></DialogHeader>
-                <div className="space-y-3 text-sm text-white/80 pt-1">
+                <div className="space-y-3 text-sm text-muted-foreground pt-1">
                   <div>Vraag om 1–2 concrete vervolgstappen.</div>
                   <div>Houd berichten kort; dan blijft de chat overzichtelijk.</div>
                 </div>
@@ -231,10 +231,10 @@ export default function Vandaag() {
           {/* Chat messages */}
           <div
             ref={chatViewportRef}
-            className="h-64 overflow-y-auto space-y-2 rounded-xl bg-white/5 p-3"
+            className="h-64 overflow-y-auto space-y-2 rounded-xl bg-slate-50 border border-border p-3"
           >
             {messages.length === 0 ? (
-              <div className="text-center text-white/60 py-10">
+              <div className="text-center text-muted-foreground py-10">
                 <p className="text-sm">Nog geen gesprek. Zeg hallo! 👋</p>
               </div>
             ) : (
@@ -246,8 +246,8 @@ export default function Vandaag() {
                   <div
                     className={`max-w-[80%] rounded-xl p-3 text-sm ${
                       m.sender === "user"
-                        ? "bg-accent text-white"
-                        : "bg-white/10 text-white"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-white border border-border text-foreground"
                     }`}
                   >
                     {m.text}
@@ -257,11 +257,11 @@ export default function Vandaag() {
             )}
             {sending && (
               <div className="flex justify-start">
-                <div className="bg-white/10 rounded-xl p-3">
+                <div className="bg-white border border-border rounded-xl p-3">
                   <div className="flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-white/60 animate-bounce" />
-                    <span className="w-2 h-2 rounded-full bg-white/60 animate-bounce delay-150" />
-                    <span className="w-2 h-2 rounded-full bg-white/60 animate-bounce delay-300" />
+                    <span className="w-2 h-2 rounded-full bg-primary animate-bounce" />
+                    <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-150" />
+                    <span className="w-2 h-2 rounded-full bg-primary animate-bounce delay-300" />
                   </div>
                 </div>
               </div>
@@ -275,9 +275,9 @@ export default function Vandaag() {
               value={msg}
               onChange={(e) => setMsg(e.target.value)}
               rows={2}
-              className="min-h-[44px] text-base bg-white/5 border-white/10 focus:border-accent focus:ring-accent/50 rounded-xl text-white placeholder:text-white/40"
+              className="min-h-[44px] text-base"
             />
-            <Button type="submit" disabled={sending} className="voice-button rounded-xl text-white w-full">
+            <Button type="submit" disabled={sending} className="voice-button rounded-xl w-full">
               {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
               {sending ? "Versturen..." : "Stuur"}
             </Button>
@@ -287,23 +287,23 @@ export default function Vandaag() {
         {/* ROOSTER & TAKEN — behoud, maar compacter en naast elkaar, volle breedte */}
         <div className="grid lg:grid-cols-2 gap-4 md:gap-6">
           {/* Rooster */}
-          <section className="glass rounded-2xl p-4">
+          <section className="bg-white rounded-2xl shadow border border-border p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Clock className="w-5 h-5 text-accent" />
-              <h2 className="text-base font-medium text-white">Je rooster</h2>
+              <Clock className="w-5 h-5 text-primary" />
+              <h2 className="text-base font-medium text-foreground">Je rooster</h2>
             </div>
             {scheduleLoading ? (
               <div className="text-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin inline-block text-white/40" />
+                <Loader2 className="w-6 h-6 animate-spin inline-block text-muted-foreground" />
               </div>
             ) : todayItems.length ? (
               <div className="space-y-2">
                 {todayItems.map((item) => {
                   const course = getCourseById(item.course_id);
                   return (
-                    <div key={item.id} className="bg-white/5 rounded-xl p-3 border border-white/10 hover:bg-white/10 transition-colors">
-                      <div className="font-medium text-white">{item.title || course?.name || "Activiteit"}</div>
-                      <div className="text-sm text-white/60 mt-0.5">
+                    <div key={item.id} className="bg-slate-50 rounded-xl p-3 border border-border hover:bg-slate-100 transition-colors">
+                      <div className="font-medium text-foreground">{item.title || course?.name || "Activiteit"}</div>
+                      <div className="text-sm text-muted-foreground mt-0.5">
                         {fmtTime(item.start_time)}{item.end_time ? ` - ${fmtTime(item.end_time)}` : ""}
                       </div>
                     </div>
@@ -311,7 +311,7 @@ export default function Vandaag() {
                 })}
               </div>
             ) : (
-              <div className="text-center py-8 text-white/40">Geen activiteiten gepland</div>
+              <div className="text-center py-8 text-muted-foreground">Geen activiteiten gepland</div>
             )}
           </section>
 
@@ -353,31 +353,31 @@ function TasksPanel(props: {
   } = props;
 
   return (
-    <section className="glass rounded-2xl p-4">
-      <h2 className="text-base font-medium text-white mb-3">Je taken</h2>
+    <section className="bg-white rounded-2xl shadow border border-border p-4">
+      <h2 className="text-base font-medium text-foreground mb-3">Je taken</h2>
       {tasksLoading ? (
-        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin inline-block text-white/40" /></div>
+        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin inline-block text-muted-foreground" /></div>
       ) : (
         <div className="space-y-2">
           {tasksToday.length === 0 ? (
-            <div className="text-center py-8 text-white/40">Geen taken voor vandaag</div>
+            <div className="text-center py-8 text-muted-foreground">Geen taken voor vandaag</div>
           ) : (
             tasksToday.map((task) => {
               const isDone = task.status === "done";
               return (
-                <div key={task.id} className="bg-white/5 rounded-xl p-3 border border-white/10 flex items-center justify-between gap-3 hover:bg-white/10 transition-colors">
-                  <div className={`flex-1 text-sm ${isDone ? "line-through text-white/40" : "text-white"}`}>{task.title}</div>
+                <div key={task.id} className="bg-slate-50 rounded-xl p-3 border border-border flex items-center justify-between gap-3 hover:bg-slate-100 transition-colors">
+                  <div className={`flex-1 text-sm ${isDone ? "line-through text-muted-foreground" : "text-foreground"}`}>{task.title}</div>
                   <div className="flex items-center gap-1">
                     <Button
                       variant="ghost" size="icon"
-                      className="h-8 w-8 text-white/40 hover:text-green-400 hover:bg-green-500/20"
+                      className="h-8 w-8 text-muted-foreground hover:text-green-600 hover:bg-green-50"
                       onClick={() => toggleDone.mutate(task)}
                     >
                       <Check className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="ghost" size="icon"
-                      className="h-8 w-8 text-white/40 hover:text-red-400 hover:bg-red-500/20"
+                      className="h-8 w-8 text-muted-foreground hover:text-red-600 hover:bg-red-50"
                       onClick={() => delTask.mutate(task.id)}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -392,38 +392,38 @@ function TasksPanel(props: {
 
       {/* Toevoegen */}
       <div className="mt-4">
-        <h3 className="text-sm font-medium text-white mb-2">Nieuwe taak toevoegen</h3>
+        <h3 className="text-sm font-medium text-foreground mb-2">Nieuwe taak toevoegen</h3>
         <form onSubmit={onAddTask} className="space-y-3">
           <div>
-            <Label htmlFor="t-title" className="text-white/80">Wat moet je doen?</Label>
+            <Label htmlFor="t-title">Wat moet je doen?</Label>
             <Textarea
               id="t-title" rows={2}
               placeholder="Bijv. Wiskunde §2.3 oefenen, Engelse woordjes H2"
               value={title} onChange={(e) => setTitle(e.target.value)}
-              className="mt-1.5 bg-white/5 border-white/10 focus:border-accent focus:ring-accent/50 rounded-xl text-white placeholder:text-white/40"
+              className="mt-1.5"
             />
           </div>
 
           <div className="grid sm:grid-cols-3 gap-3">
             <div>
-              <Label htmlFor="t-course" className="text-white/80">Vak (optioneel)</Label>
+              <Label htmlFor="t-course">Vak (optioneel)</Label>
               <Select value={courseId ?? "none"} onValueChange={(v) => setCourseId(v === "none" ? null : v)}>
-                <SelectTrigger id="t-course" className="mt-1.5 bg-white/5 border-white/10 text-white rounded-xl">
+                <SelectTrigger id="t-course" className="mt-1.5">
                   <SelectValue placeholder="Kies vak" />
                 </SelectTrigger>
-                <SelectContent className="glass border-white/10 text-white">
-                  <SelectItem value="none" className="focus:bg-white/20">Geen vak</SelectItem>
-                  {courses.map((c) => (<SelectItem key={c.id} value={c.id} className="focus:bg-white/20">{c.name}</SelectItem>))}
+                <SelectContent>
+                  <SelectItem value="none">Geen vak</SelectItem>
+                  {courses.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
 
             <div>
-              <Label htmlFor="t-min" className="text-white/80">Duur (min)</Label>
+              <Label htmlFor="t-min">Duur (min)</Label>
               <Input
                 id="t-min" type="number" min={5} step={5} placeholder="30"
                 value={estMinutes} onChange={(e) => setEstMinutes(e.target.value)}
-                className="mt-1.5 bg-white/5 border-white/10 text-white rounded-xl placeholder:text-white/40"
+                className="mt-1.5"
               />
             </div>
 
@@ -431,7 +431,7 @@ function TasksPanel(props: {
               <Button
                 type="submit"
                 disabled={addTaskMutation.isPending}
-                className="w-full voice-button text-white rounded-xl"
+                className="w-full voice-button rounded-xl"
               >
                 {addTaskMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
                 {addTaskMutation.isPending ? "Toevoegen..." : "Toevoegen"}
