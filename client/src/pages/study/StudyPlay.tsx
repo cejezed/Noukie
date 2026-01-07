@@ -52,25 +52,6 @@ export default function StudyPlay() {
   // Check if this is a GeoGame subject (Aardrijkskunde with game mode)
   const isGeoGame = mode === "game" && subject && isGameEnabled(subject) && quizId;
 
-  // Loading state
-  if (!userId) {
-    return (
-      <main className="p-8">
-        <p className="text-sm text-gray-500">Inloggen vereist…</p>
-      </main>
-    );
-  }
-
-  // If GeoGame mode, render specialized game screen
-  if (isGeoGame) {
-    return (
-      <main className="p-8">
-        <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />
-      </main>
-    );
-  }
-
-  // Otherwise continue with standard quiz/timer mode
   const [resultId, setResultId] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
@@ -101,6 +82,25 @@ export default function StudyPlay() {
   const [timeRemaining, setTimeRemaining] = useState(GAME_DURATION_SECONDS);
   const [gameStarted, setGameStarted] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  // Loading state
+  if (!userId) {
+    return (
+      <main className="p-8">
+        <p className="text-sm text-gray-500">Inloggen vereist…</p>
+      </main>
+    );
+  }
+
+  // If GeoGame mode, render specialized game screen
+  if (isGeoGame) {
+    return (
+      <main className="p-8">
+        <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />
+      </main>
+    );
+  }
+
+  // Otherwise continue with standard quiz/timer mode
 
   const questions = useQuery({
     queryKey: ["quiz-questions", quizId, userId],
