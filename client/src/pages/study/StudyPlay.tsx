@@ -22,13 +22,15 @@ function getQueryParam(name: string) {
 
 function normalizeChoices(raw: unknown): string[] {
   if (!raw) return [];
-  if (Array.isArray(raw)) return raw.map(String);
+  if (Array.isArray(raw)) return raw.filter(v => v != null && v !== "").map(String);
   if (typeof raw === "string") {
     const s = raw.trim();
     if (!s) return [];
     try {
       const parsed = JSON.parse(s);
-      return Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
+      if (Array.isArray(parsed)) return parsed.filter(v => v != null && v !== "").map(String);
+      if (parsed == null) return [];
+      return [String(parsed)];
     } catch {
       if (s.includes("\n")) return s.split("\n").map(t => t.trim()).filter(Boolean);
       if (s.includes(";")) return s.split(";").map(t => t.trim()).filter(Boolean);

@@ -226,7 +226,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (body.action === "answer") {
       const { data: q, error: qerr } = await admin.from("study_questions").select("id,qtype,answer").eq("id", body.question_id!).single();
       if (qerr) return res.status(400).json({ error: qerr.message });
-      const isCorrect = q.qtype === "mc" || q.qtype === "open" ? (q.answer ? String(body.given_answer ?? "").trim().toLowerCase() === String(q.answer).trim().toLowerCase() : null) : null;
+      const givenNorm = String(body.given_answer ?? "").trim().toLowerCase();
+      const storedNorm = String(q.answer ?? "").trim().toLowerCase();
+      const isCorrect = (q.qtype === "mc" || q.qtype === "open") && storedNorm
+        ? givenNorm === storedNorm
+        : null;
 
       const { error } = await admin.from("study_answers").insert([{ result_id: body.result_id!, question_id: body.question_id!, given_answer: body.given_answer ?? null, is_correct: isCorrect }]);
       if (error) return res.status(400).json({ error: error.message });
@@ -308,16 +312,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let sort = 0;
 
       for (const b of mcBlocks) {
-        items.push({ quiz_id: quiz.id, qtype: "mc", prompt: b.question, choices: JSON.stringify(b.options), answer: b.answer, explanation: null, sort_order: sort++, is_published: true });
+        const opts = (b.options || []).filter((o: any) => o != null && o !== "");
+        items.push({ quiz_id: quiz.id, qtype: "mc", prompt: b.question, choices: JSON.stringify(opts), answer: b.answer || opts[0] || "", explanation: null, sort_order: sort++ });
       }
 
       for (const r of rows) {
+        const answer = r.answer || "";
         if (r.qtype === "mc" && r.choices && r.choices.length > 0) {
-          items.push({ quiz_id: quiz.id, qtype: "mc", prompt: r.prompt, choices: JSON.stringify(r.choices), answer: r.answer, explanation: null, sort_order: sort++, is_published: true });
+          const opts = r.choices.filter((c: any) => c != null && c !== "");
+          items.push({ quiz_id: quiz.id, qtype: "mc", prompt: r.prompt, choices: JSON.stringify(opts), answer, explanation: null, sort_order: sort++ });
         } else if (r.qtype === "mc") {
-          items.push({ quiz_id: quiz.id, qtype: "mc", prompt: r.prompt, choices: JSON.stringify([r.answer]), answer: r.answer, explanation: null, sort_order: sort++, is_published: true });
+          items.push({ quiz_id: quiz.id, qtype: "mc", prompt: r.prompt, choices: JSON.stringify(answer ? [answer] : []), answer, explanation: null, sort_order: sort++ });
         } else {
-          items.push({ quiz_id: quiz.id, qtype: "open", prompt: r.prompt, answer: r.answer, explanation: null, sort_order: sort++, is_published: true });
+          items.push({ quiz_id: quiz.id, qtype: "open", prompt: r.prompt, answer, explanation: null, sort_order: sort++ });
         }
       }
 
