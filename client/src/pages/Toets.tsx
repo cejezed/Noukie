@@ -96,17 +96,23 @@ export default function Toets() {
           <p className="text-red-600">Er ging iets mis bij het laden.</p>
         ) : quizzes.data?.length ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {quizzes.data.map((q: any) => (
+            {quizzes.data.map((q: any) => {
+              const subject = typeof q.subject === 'object' ? JSON.stringify(q.subject) : String(q.subject ?? "");
+              const chapter = typeof q.chapter === 'object' ? JSON.stringify(q.chapter) : String(q.chapter ?? "");
+              const qTitle = typeof q.title === 'object' ? JSON.stringify(q.title) : String(q.title ?? "");
+              const desc = typeof q.description === 'object' ? JSON.stringify(q.description) : (q.description ? String(q.description) : "");
+
+              return (
               <div
                 key={q.id}
                 className="bg-white border rounded-2xl p-4 hover:shadow"
               >
                 <div className="text-sm text-gray-500">
-                  {q.subject} · {q.chapter}
+                  {subject} · {chapter}
                 </div>
-                <div className="font-semibold mb-2">{q.title}</div>
-                {q.description && (
-                  <div className="text-sm text-gray-600 line-clamp-2 mb-3">{q.description}</div>
+                <div className="font-semibold mb-2">{qTitle}</div>
+                {desc && (
+                  <div className="text-sm text-gray-600 line-clamp-2 mb-3">{desc}</div>
                 )}
 
                 {/* Mode keuze knoppen */}
@@ -125,7 +131,8 @@ export default function Toets() {
                   </button>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-gray-600">Nog geen gepubliceerde toetsen.</p>

@@ -426,7 +426,7 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
             {currentQuestion.explanation && (
               <div className="border-t pt-3">
                 <p className="text-sm text-gray-500 mb-1">Uitleg:</p>
-                <p className="text-sm text-gray-700">{currentQuestion.explanation}</p>
+                <p className="text-sm text-gray-700">{typeof currentQuestion.explanation === 'object' ? JSON.stringify(currentQuestion.explanation) : String(currentQuestion.explanation)}</p>
               </div>
             )}
 
