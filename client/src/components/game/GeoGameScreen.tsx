@@ -40,7 +40,7 @@ function normalizeChoices(raw: unknown): string[] {
     if (!s) return [];
     try {
       const parsed = JSON.parse(s);
-      return Array.isArray(parsed) ? parsed.map(String) : [s];
+      return Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
     } catch {
       if (s.includes("\n")) return s.split("\n").map((t) => t.trim()).filter(Boolean);
       if (s.includes(";")) return s.split(";").map((t) => t.trim()).filter(Boolean);
@@ -48,11 +48,7 @@ function normalizeChoices(raw: unknown): string[] {
       return [s];
     }
   }
-  try {
-    return JSON.parse(String(raw));
-  } catch {
-    return [String(raw)];
-  }
+  return [String(raw)];
 }
 
 /**
@@ -312,9 +308,14 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   }
 
   const qtype: string = (currentQuestion.qtype ?? "mc").toLowerCase();
-  const prompt: string = currentQuestion.prompt ?? "";
+
+  const promptValue = currentQuestion.prompt;
+  const prompt: string = typeof promptValue === 'object' ? JSON.stringify(promptValue) : String(promptValue ?? "");
+
   const choices = normalizeChoices(currentQuestion.choices);
-  const correctAnswer = currentQuestion.answer ?? "";
+
+  const answerValue = currentQuestion.answer;
+  const correctAnswer = typeof answerValue === 'object' ? JSON.stringify(answerValue) : String(answerValue ?? "");
 
   return (
     <main>

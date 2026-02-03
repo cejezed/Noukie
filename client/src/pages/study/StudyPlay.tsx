@@ -28,15 +28,15 @@ function normalizeChoices(raw: unknown): string[] {
     if (!s) return [];
     try {
       const parsed = JSON.parse(s);
-      return Array.isArray(parsed) ? parsed.map(String) : [s];
+      return Array.isArray(parsed) ? parsed.map(String) : [String(parsed)];
     } catch {
-      if (s.includes("\n")) return s.split("\n").map(t=>t.trim()).filter(Boolean);
-      if (s.includes(";")) return s.split(";").map(t=>t.trim()).filter(Boolean);
-      if (s.includes(",")) return s.split(",").map(t=>t.trim()).filter(Boolean);
+      if (s.includes("\n")) return s.split("\n").map(t => t.trim()).filter(Boolean);
+      if (s.includes(";")) return s.split(";").map(t => t.trim()).filter(Boolean);
+      if (s.includes(",")) return s.split(",").map(t => t.trim()).filter(Boolean);
       return [s];
     }
   }
-  try { return JSON.parse(String(raw)); } catch { return [String(raw)]; }
+  return [String(raw)];
 }
 
 function eq(a?: string | null, b?: string | null) {
@@ -398,19 +398,23 @@ export default function StudyPlay() {
     );
   }
 
-  const prompt: string = q.prompt ?? "";
+  // Safely handle potentially object-like values to prevent React crashes
+  const promptValue = q.prompt;
+  const prompt: string = typeof promptValue === 'object' ? JSON.stringify(promptValue) : String(promptValue ?? "");
+
   const choices = normalizeChoices(q.choices);
-  const explanation: string = q.explanation ?? "";
+
+  const explValue = q.explanation;
+  const explanation: string = typeof explValue === 'object' ? JSON.stringify(explValue) : String(explValue ?? "");
 
   return (
     <main className="mx-auto max-w-[800px] px-6 py-8">
       {/* Game Mode Header */}
       {isGameMode && (
-        <div className={`mb-4 rounded-xl p-4 transition-all ${
-          timeRemaining <= 30
-            ? 'bg-gradient-to-r from-red-500 to-orange-500 animate-pulse'
-            : 'bg-gradient-to-r from-purple-500 to-pink-500'
-        } text-white`}>
+        <div className={`mb-4 rounded-xl p-4 transition-all ${timeRemaining <= 30
+          ? 'bg-gradient-to-r from-red-500 to-orange-500 animate-pulse'
+          : 'bg-gradient-to-r from-purple-500 to-pink-500'
+          } text-white`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-2xl">{timeRemaining <= 30 ? '⏰' : '🎮'}</span>
