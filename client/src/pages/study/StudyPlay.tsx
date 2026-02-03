@@ -43,15 +43,24 @@ function eq(a?: string | null, b?: string | null) {
   return String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 }
 
-export default function StudyPlay() {
-  const userId = useUserId();
-  const quizId = getQueryParam("quiz");
-  const mode = getQueryParam("mode") || "practice"; // 'practice' or 'game'
-  const subject = getQueryParam("subject");
-
-  // Check if this is a GeoGame subject (Aardrijkskunde with game mode)
-  const isGeoGame = mode === "game" && subject && isGameEnabled(subject) && quizId;
-
+/**
+ * StandardQuizPlayer
+ *
+ * Bevat alle logica voor:
+ * - Oefenmodus (practice)
+ * - Standaard gamemodus (time rush)
+ */
+function StandardQuizPlayer({
+  userId,
+  quizId,
+  mode,
+  subject
+}: {
+  userId: string,
+  quizId: string,
+  mode: string,
+  subject: string | null
+}) {
   const [resultId, setResultId] = useState<string | null>(null);
   const [index, setIndex] = useState(0);
   const [done, setDone] = useState(false);
@@ -78,29 +87,10 @@ export default function StudyPlay() {
   const isGameMode = mode === "game";
   const GAME_COST_MINUTES = 2;
   const GAME_DURATION_SECONDS = 120;
-  const { balanceMinutes, usePlaytime: deductPlaytime, isUsing } = usePlaytime();
+  const { balanceMinutes, usePlaytime: deductPlaytime } = usePlaytime();
   const [timeRemaining, setTimeRemaining] = useState(GAME_DURATION_SECONDS);
   const [gameStarted, setGameStarted] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
-  // Loading state
-  if (!userId) {
-    return (
-      <main className="p-8">
-        <p className="text-sm text-gray-500">Inloggen vereist…</p>
-      </main>
-    );
-  }
-
-  // If GeoGame mode, render specialized game screen
-  if (isGeoGame) {
-    return (
-      <main className="p-8">
-        <GeoGameScreen quizId={quizId} subject={subject as any} userId={userId} />
-      </main>
-    );
-  }
-
-  // Otherwise continue with standard quiz/timer mode
 
   const questions = useQuery({
     queryKey: ["quiz-questions", quizId, userId],
@@ -130,7 +120,6 @@ export default function StudyPlay() {
 
   // Start quiz (with playtime deduction for game mode)
   useEffect(() => {
-    if (!userId || !quizId) return;
     let cancelled = false;
 
     const startQuiz = async () => {
@@ -162,7 +151,7 @@ export default function StudyPlay() {
     startQuiz();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, quizId]);
+  }, []);
 
   // Timer countdown for game mode
   useEffect(() => {
@@ -252,6 +241,13 @@ export default function StudyPlay() {
 
   const pct = list.length ? Math.round((index / list.length) * 100) : 0;
 
+  // Format timer display
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   // Error states
   if (uiError) {
     return (
@@ -262,15 +258,6 @@ export default function StudyPlay() {
             Terug naar toetsen
           </a>
         </div>
-      </main>
-    );
-  }
-
-  if (!quizId) {
-    return (
-      <main className="p-8">
-        <p className="text-red-600">Geen quiz geselecteerd.</p>
-        <a className="text-blue-600 underline" href="/toets">Ga naar Toetsen</a>
       </main>
     );
   }
@@ -290,13 +277,6 @@ export default function StudyPlay() {
       </main>
     );
   }
-
-  // Format timer display
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
 
   // Klaar scherm
   if (done || (list.length > 0 && index >= list.length)) {
@@ -412,8 +392,8 @@ export default function StudyPlay() {
       {/* Game Mode Header */}
       {isGameMode && (
         <div className={`mb-4 rounded-xl p-4 transition-all ${timeRemaining <= 30
-          ? 'bg-gradient-to-r from-red-500 to-orange-500 animate-pulse'
-          : 'bg-gradient-to-r from-purple-500 to-pink-500'
+            ? 'bg-gradient-to-r from-red-500 to-orange-500 animate-pulse'
+            : 'bg-gradient-to-r from-purple-500 to-pink-500'
           } text-white`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -518,5 +498,50 @@ export default function StudyPlay() {
         </div>
       )}
     </main>
+  );
+}
+
+export default function StudyPlay() {
+  const userId = useUserId();
+  const quizId = getQueryParam("quiz");
+  const mode = getQueryParam("mode") || "practice";
+  const subject = getQueryParam("subject");
+
+  // Check if this is a GeoGame subject (Aardrijkskunde with game mode)
+  const isGeoGame = mode === "game" && subject && isGameEnabled(subject) && quizId;
+
+  if (!userId) {
+    return (
+      <main className="p-8">
+        <p className="text-sm text-gray-500">Inloggen vereist…</p>
+      </main>
+    );
+  }
+
+  if (isGeoGame) {
+    return (
+      <main className="p-8">
+        <GeoGameScreen quizId={quizId!} subject={subject as any} userId={userId} />
+      </main>
+    );
+  }
+
+  // For standard mode, ensure we have a quizId
+  if (!quizId) {
+    return (
+      <main className="p-8">
+        <p className="text-red-600">Geen quiz geselecteerd.</p>
+        <a className="text-blue-600 underline" href="/toets">Ga naar Toetsen</a>
+      </main>
+    );
+  }
+
+  return (
+    <StandardQuizPlayer
+      userId={userId}
+      quizId={quizId}
+      mode={mode}
+      subject={subject}
+    />
   );
 }

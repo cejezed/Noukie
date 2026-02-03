@@ -72,14 +72,8 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   const { quizId, subject, userId } = props;
 
   // Get subject config
+  // Get subject config
   const config = getSubjectConfig(subject);
-  if (!config) {
-    return (
-      <div className="p-8 text-center">
-        <p className="text-red-600">Subject "{subject}" is niet geconfigureerd voor game mode.</p>
-      </div>
-    );
-  }
 
   // Fetch quiz questions (reuse existing API)
   const questionsQuery = useQuery({
@@ -102,9 +96,12 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
   const [xpEarned, setXpEarned] = useState(0);
 
   // Initialize game engine
+  // Safely provide a fallback config if missing so hook doesn't crash before we return
+  const safeConfig = config || { primaryColor: '', secondaryColor: '', icon: '' };
+
   const engine = useGameQuizEngine({
     questions: questionsQuery.data || [],
-    config,
+    config: safeConfig as any,
     questionsPerLevel: 4,
     onLevelComplete: (level, stats) => {
       console.log("Level complete:", level, stats);
@@ -136,6 +133,15 @@ export default function GeoGameScreen(props: GeoGameScreenProps) {
       return () => clearTimeout(timer);
     }
   }, [isLevelComplete, isQuizComplete, nextLevel]);
+
+  // Early return if config is missing - NOW SAFE after hooks
+  if (!config) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-red-600">Subject "{subject}" is niet geconfigureerd voor game mode.</p>
+      </div>
+    );
+  }
 
   // ============================================
   // HANDLERS
