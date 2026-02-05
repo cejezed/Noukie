@@ -25,6 +25,7 @@ export default function Leren() {
         .select("*")
         .eq("is_published", true)
         .order("subject", { ascending: true })
+        .order("sort_order", { ascending: true })
         .order("chapter_title", { ascending: true });
       if (error) throw error;
       return (data ?? []) as Chapter[];
