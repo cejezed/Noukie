@@ -203,6 +203,8 @@ export default function LerenAdmin() {
 
   // ─── Mutations ───
 
+  const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
   const upsert = useMutation({
     mutationFn: async () => {
       const subj = form.subject.trim();
@@ -239,6 +241,12 @@ export default function LerenAdmin() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["chapters-admin", me] });
       resetForm();
+      setSaveMsg({ type: "ok", text: form.id ? "Opgeslagen!" : "Hoofdstuk aangemaakt!" });
+      setTimeout(() => setSaveMsg(null), 3000);
+    },
+    onError: (err: Error) => {
+      setSaveMsg({ type: "err", text: `Opslaan mislukt: ${err.message}` });
+      setTimeout(() => setSaveMsg(null), 6000);
     },
   });
 
@@ -454,14 +462,19 @@ export default function LerenAdmin() {
           <button
             className="px-4 py-2 rounded bg-emerald-600 text-white disabled:opacity-50"
             onClick={() => upsert.mutate()}
-            disabled={!form.subject.trim() || !form.chapter_title.trim()}
+            disabled={!form.subject.trim() || !form.chapter_title.trim() || upsert.isPending}
           >
-            {form.id ? "Opslaan" : "Aanmaken"}
+            {upsert.isPending ? "Bezig…" : form.id ? "Opslaan" : "Aanmaken"}
           </button>
           {form.id && (
             <button className="px-3 py-2 rounded border" onClick={resetForm}>
               Reset
             </button>
+          )}
+          {saveMsg && (
+            <span className={`text-sm ${saveMsg.type === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+              {saveMsg.text}
+            </span>
           )}
         </div>
       </section>
