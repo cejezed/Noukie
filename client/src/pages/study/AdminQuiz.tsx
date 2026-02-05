@@ -153,13 +153,16 @@ export default function AdminQuiz() {
   }
 
   // ----- Mutations -----
+  const [saveMsg, setSaveMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+
   const createQuiz = useMutation({
     mutationFn: async () => {
+      if (!me) throw new Error("Niet ingelogd.");
       const payload = {
         subject: form.subject.trim(),
         chapter: form.chapter.trim(),
         title: form.title.trim(),
-        description: form.description.trim() || undefined,
+        description: form.description.trim() || null,
         is_published: form.is_published,
         assigned_to: form.assigned_to.trim() || null,
         available_from: form.available_from || null,
@@ -167,10 +170,13 @@ export default function AdminQuiz() {
       };
       const res = await fetch("/api/quizzes", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-id": me! },
+        headers: { "Content-Type": "application/json", "x-user-id": me },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Fout ${res.status}`);
+      }
       return res.json();
     },
     onSuccess: (r) => {
@@ -181,18 +187,25 @@ export default function AdminQuiz() {
         setMode("EDIT");
       }
       setIsDirty(false);
+      setSaveMsg({ type: "ok", text: "Toets aangemaakt!" });
+      setTimeout(() => setSaveMsg(null), 3000);
+    },
+    onError: (err: Error) => {
+      setSaveMsg({ type: "err", text: `Aanmaken mislukt: ${err.message}` });
+      setTimeout(() => setSaveMsg(null), 6000);
     },
   });
 
   const updateQuiz = useMutation({
     mutationFn: async () => {
       if (!selectedId) throw new Error("Geen geselecteerde toets.");
+      if (!me) throw new Error("Niet ingelogd.");
       const payload = {
         id: selectedId,
         subject: form.subject.trim(),
         chapter: form.chapter.trim(),
         title: form.title.trim(),
-        description: form.description.trim() || undefined,
+        description: form.description.trim() || null,
         is_published: form.is_published,
         assigned_to: form.assigned_to.trim() || null,
         available_from: form.available_from || null,
@@ -200,15 +213,24 @@ export default function AdminQuiz() {
       };
       const res = await fetch("/api/quizzes", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-user-id": me! },
+        headers: { "Content-Type": "application/json", "x-user-id": me },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `Fout ${res.status}`);
+      }
       return res.json();
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["quizzes-admin", me] });
       setIsDirty(false);
+      setSaveMsg({ type: "ok", text: "Opgeslagen!" });
+      setTimeout(() => setSaveMsg(null), 3000);
+    },
+    onError: (err: Error) => {
+      setSaveMsg({ type: "err", text: `Opslaan mislukt: ${err.message}` });
+      setTimeout(() => setSaveMsg(null), 6000);
     },
   });
 
@@ -676,13 +698,19 @@ export default function AdminQuiz() {
                   </button>
                 ) : (
                   <button
-                    className="bg-emerald-600 text-white px-4 py-2 rounded"
+                    className="bg-emerald-600 text-white px-4 py-2 rounded disabled:opacity-50"
                     onClick={() => updateQuiz.mutate()}
-                    disabled={!isDirty}
+                    disabled={!isDirty || updateQuiz.isPending}
                     title={isDirty ? "Wijzigingen bewaren" : "Geen wijzigingen"}
                   >
-                    Bewaren (bijwerken)
+                    {updateQuiz.isPending ? "Bezig…" : "Bewaren (bijwerken)"}
                   </button>
+                )}
+
+                {saveMsg && (
+                  <span className={`text-sm ${saveMsg.type === "ok" ? "text-emerald-600" : "text-red-600"}`}>
+                    {saveMsg.text}
+                  </span>
                 )}
 
                 <button

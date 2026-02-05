@@ -16,7 +16,7 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, ChevronRight, FolderClosed, FolderOpen } from "lucide-react";
 
 type CheatItem = { term: string; uitleg: string };
 type Chapter = {
@@ -155,6 +155,7 @@ export default function LerenAdmin() {
   });
 
   const [newSubject, setNewSubject] = useState("");
+  const [openTopics, setOpenTopics] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!form.id) return;
@@ -511,51 +512,83 @@ export default function LerenAdmin() {
                 {topicKeys.map((topic) => {
                   const items = topicGroups[topic] ?? [];
                   const dragKey = `${subject}::${topic}`;
+                  const topicKey = `${subject}::${topic}`;
+                  const isOpen = !topic || openTopics.has(topicKey);
 
-                  return (
-                    <div key={topic || "__no_topic__"}>
-                      {/* Topic header — only shown when there's a topic name */}
-                      {topic && (
-                        <div className="border-b bg-gray-50 px-5 py-2 flex items-center justify-between">
-                          <h4 className="text-sm font-semibold text-gray-700">{topic}</h4>
-                          <button
-                            className="text-xs px-2 py-1 rounded bg-sky-100 text-sky-700 hover:bg-sky-200"
-                            onClick={() => {
-                              resetForm();
-                              setForm((f) => ({ ...f, subject, topic }));
-                              document
-                                .getElementById("chapter-form")
-                                ?.scrollIntoView({ behavior: "smooth" });
-                            }}
-                          >
-                            + Hoofdstuk in {topic}
-                          </button>
-                        </div>
-                      )}
-
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={(e) => handleDragEnd(dragKey, e)}
+                  const dndContent = (
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={(e) => handleDragEnd(dragKey, e)}
+                    >
+                      <SortableContext
+                        items={items.map((c) => c.id)}
+                        strategy={verticalListSortingStrategy}
                       >
-                        <SortableContext
-                          items={items.map((c) => c.id)}
-                          strategy={verticalListSortingStrategy}
+                        <ul className="p-3 space-y-2">
+                          {items.map((ch) => (
+                            <SortableChapterRow
+                              key={ch.id}
+                              ch={ch}
+                              onEdit={() => setForm((f) => ({ ...f, id: ch.id }))}
+                              onDelete={() => {
+                                if (confirm("Hoofdstuk verwijderen?")) del.mutate(ch.id);
+                              }}
+                            />
+                          ))}
+                        </ul>
+                      </SortableContext>
+                    </DndContext>
+                  );
+
+                  // Chapters without a topic: show directly (no folder)
+                  if (!topic) {
+                    return <div key="__no_topic__">{dndContent}</div>;
+                  }
+
+                  // Topics: collapsible folder
+                  return (
+                    <div key={topic}>
+                      <div className="border-b bg-gray-50 px-5 py-2 flex items-center justify-between">
+                        <button
+                          className="flex items-center gap-2 hover:text-gray-900"
+                          onClick={() => {
+                            setOpenTopics((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(topicKey)) next.delete(topicKey);
+                              else next.add(topicKey);
+                              return next;
+                            });
+                          }}
                         >
-                          <ul className="p-3 space-y-2">
-                            {items.map((ch) => (
-                              <SortableChapterRow
-                                key={ch.id}
-                                ch={ch}
-                                onEdit={() => setForm((f) => ({ ...f, id: ch.id }))}
-                                onDelete={() => {
-                                  if (confirm("Hoofdstuk verwijderen?")) del.mutate(ch.id);
-                                }}
-                              />
-                            ))}
-                          </ul>
-                        </SortableContext>
-                      </DndContext>
+                          <ChevronRight
+                            className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                          />
+                          {isOpen ? (
+                            <FolderOpen className="w-4 h-4 text-sky-600" />
+                          ) : (
+                            <FolderClosed className="w-4 h-4 text-gray-500" />
+                          )}
+                          <h4 className="text-sm font-semibold text-gray-700">{topic}</h4>
+                          <span className="text-xs text-gray-400">
+                            {items.length} hoofdstuk{items.length !== 1 ? "ken" : ""}
+                          </span>
+                        </button>
+                        <button
+                          className="text-xs px-2 py-1 rounded bg-sky-100 text-sky-700 hover:bg-sky-200"
+                          onClick={() => {
+                            resetForm();
+                            setForm((f) => ({ ...f, subject, topic }));
+                            document
+                              .getElementById("chapter-form")
+                              ?.scrollIntoView({ behavior: "smooth" });
+                          }}
+                        >
+                          + Hoofdstuk in {topic}
+                        </button>
+                      </div>
+
+                      {isOpen && dndContent}
                     </div>
                   );
                 })}
