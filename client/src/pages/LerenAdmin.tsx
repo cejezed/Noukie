@@ -22,6 +22,7 @@ type CheatItem = { term: string; uitleg: string };
 type Chapter = {
   id: string;
   subject: string;
+  topic?: string | null;
   chapter_title: string;
   summary?: string | null;
   cheat_sheet?: CheatItem[] | null;
@@ -126,13 +127,17 @@ export default function LerenAdmin() {
     },
   });
 
-  // ─── Group by subject ───
+  // ─── Group by subject → topic ───
 
-  const grouped: Record<string, Chapter[]> = {};
+  type TopicGroup = Record<string, Chapter[]>; // topic → chapters
+  const grouped: Record<string, TopicGroup> = {}; // subject → topic → chapters
+
   for (const ch of chapters.data ?? []) {
-    const key = ch.subject || "Overig";
-    if (!grouped[key]) grouped[key] = [];
-    grouped[key].push(ch);
+    const subj = ch.subject || "Overig";
+    const topic = ch.topic || "";
+    if (!grouped[subj]) grouped[subj] = {};
+    if (!grouped[subj][topic]) grouped[subj][topic] = [];
+    grouped[subj][topic].push(ch);
   }
   const subjects = Object.keys(grouped).sort();
 
@@ -141,6 +146,7 @@ export default function LerenAdmin() {
   const [form, setForm] = useState({
     id: "" as string | "",
     subject: "",
+    topic: "",
     chapter_title: "",
     summary: "",
     cheatSheetText: "",
@@ -157,6 +163,7 @@ export default function LerenAdmin() {
     setForm((f) => ({
       ...f,
       subject: found.subject,
+      topic: found.topic ?? "",
       chapter_title: found.chapter_title,
       summary: found.summary ?? "",
       cheatSheetText: Array.isArray(found.cheat_sheet)
@@ -184,6 +191,7 @@ export default function LerenAdmin() {
     setForm({
       id: "",
       subject: "",
+      topic: "",
       chapter_title: "",
       summary: "",
       cheatSheetText: "",
@@ -197,8 +205,10 @@ export default function LerenAdmin() {
   const upsert = useMutation({
     mutationFn: async () => {
       const subj = form.subject.trim();
+      const topic = form.topic.trim() || null;
       const payload = {
         subject: subj,
+        topic,
         chapter_title: form.chapter_title.trim(),
         summary: form.summary,
         cheat_sheet: parseCheat(form.cheatSheetText),
@@ -212,8 +222,10 @@ export default function LerenAdmin() {
           .eq("id", form.id);
         if (error) throw error;
       } else {
-        // New chapter: set sort_order to end of its subject group
-        const existing = (chapters.data ?? []).filter((c) => c.subject === subj);
+        // New chapter: set sort_order to end of its subject+topic group
+        const existing = (chapters.data ?? []).filter(
+          (c) => c.subject === subj && (c.topic || "") === (topic || "")
+        );
         const maxSort = existing.length
           ? Math.max(...existing.map((c) => c.sort_order ?? 0))
           : -1;
@@ -243,11 +255,13 @@ export default function LerenAdmin() {
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  async function handleDragEnd(subject: string, event: DragEndEvent) {
+  // dragKey = "subject::topic" to identify the group
+  async function handleDragEnd(dragKey: string, event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const items = grouped[subject];
+    const [subject, topic] = dragKey.split("::");
+    const items = grouped[subject]?.[topic ?? ""];
     if (!items) return;
 
     const oldIndex = items.findIndex((c) => c.id === active.id);
@@ -260,7 +274,7 @@ export default function LerenAdmin() {
     qc.setQueryData(["chapters-admin", me], (old: Chapter[] | undefined) => {
       if (!old) return old;
       const updated = old.map((ch) => {
-        if (ch.subject !== subject) return ch;
+        if (ch.subject !== subject || (ch.topic || "") !== (topic ?? "")) return ch;
         const idx = reordered.findIndex((r) => r.id === ch.id);
         return idx >= 0 ? { ...ch, sort_order: idx } : ch;
       });
@@ -272,11 +286,7 @@ export default function LerenAdmin() {
     });
 
     // Persist to database
-    const updates = reordered.map((ch, idx) => ({
-      id: ch.id,
-      sort_order: idx,
-    }));
-
+    const updates = reordered.map((ch, idx) => ({ id: ch.id, sort_order: idx }));
     for (const u of updates) {
       await supabase
         .from("study_chapters")
@@ -285,11 +295,16 @@ export default function LerenAdmin() {
     }
   }
 
-  // ─── Collect all known subjects (existing + form) ───
+  // ─── Collect all known subjects and topics ───
 
   const allSubjects = Array.from(
     new Set([...subjects, ...(form.subject.trim() ? [form.subject.trim()] : [])])
   ).sort();
+
+  // Topics for the currently selected subject
+  const topicsForSubject = form.subject.trim() && grouped[form.subject.trim()]
+    ? Object.keys(grouped[form.subject.trim()]).filter(Boolean).sort()
+    : [];
 
   // ─── Render ───
 
@@ -313,7 +328,6 @@ export default function LerenAdmin() {
             onClick={() => {
               setForm((f) => ({ ...f, subject: newSubject.trim() }));
               setNewSubject("");
-              // Scroll to form
               document.getElementById("chapter-form")?.scrollIntoView({ behavior: "smooth" });
             }}
           >
@@ -330,14 +344,14 @@ export default function LerenAdmin() {
         <h2 className="text-lg font-semibold">
           {form.id ? "Hoofdstuk bewerken" : "Nieuw hoofdstuk"}
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-gray-600 mb-1">Vak</label>
             {allSubjects.length > 0 ? (
               <select
                 className="border rounded p-2 w-full"
                 value={form.subject}
-                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                onChange={(e) => setForm({ ...form, subject: e.target.value, topic: "" })}
               >
                 <option value="">— kies een vak —</option>
                 {allSubjects.map((s) => (
@@ -356,6 +370,25 @@ export default function LerenAdmin() {
             )}
           </div>
           <div>
+            <label className="block text-sm text-gray-600 mb-1">
+              Onderwerp <span className="text-gray-400">(optioneel)</span>
+            </label>
+            <input
+              className="border rounded p-2 w-full"
+              placeholder="bijv. Brazilië"
+              value={form.topic}
+              onChange={(e) => setForm({ ...form, topic: e.target.value })}
+              list="topic-suggestions"
+            />
+            {topicsForSubject.length > 0 && (
+              <datalist id="topic-suggestions">
+                {topicsForSubject.map((t) => (
+                  <option key={t} value={t} />
+                ))}
+              </datalist>
+            )}
+          </div>
+          <div>
             <label className="block text-sm text-gray-600 mb-1">Hoofdstuk-titel</label>
             <input
               className="border rounded p-2 w-full"
@@ -364,7 +397,7 @@ export default function LerenAdmin() {
               onChange={(e) => setForm({ ...form, chapter_title: e.target.value })}
             />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-3">
             <label className="block text-sm text-gray-600 mb-1">Samenvatting</label>
             <textarea
               className="border rounded p-2 w-full min-h-[140px]"
@@ -432,7 +465,7 @@ export default function LerenAdmin() {
         </div>
       </section>
 
-      {/* ── Overzicht per vak ── */}
+      {/* ── Overzicht per vak → onderwerp ── */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Hoofdstukken per vak</h2>
         <p className="text-sm text-gray-500">Sleep hoofdstukken om de volgorde te wijzigen.</p>
@@ -443,14 +476,22 @@ export default function LerenAdmin() {
           <p className="text-gray-500">Nog geen hoofdstukken. Maak eerst een vak en hoofdstuk aan.</p>
         ) : (
           subjects.map((subject) => {
-            const items = grouped[subject] ?? [];
+            const topicGroups = grouped[subject] ?? {};
+            const topicKeys = Object.keys(topicGroups).sort((a, b) => {
+              // Empty topic (no topic) last
+              if (!a && b) return 1;
+              if (a && !b) return -1;
+              return a.localeCompare(b);
+            });
+            const totalChapters = Object.values(topicGroups).reduce((s, arr) => s + arr.length, 0);
+
             return (
               <div key={subject} className="bg-white rounded-2xl shadow overflow-hidden">
                 <div className="border-b px-5 py-4 flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-semibold">{subject}</h3>
                     <p className="text-xs text-gray-500">
-                      {items.length} hoofdstuk{items.length !== 1 ? "ken" : ""}
+                      {totalChapters} hoofdstuk{totalChapters !== 1 ? "ken" : ""}
                     </p>
                   </div>
                   <button
@@ -467,29 +508,57 @@ export default function LerenAdmin() {
                   </button>
                 </div>
 
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={(e) => handleDragEnd(subject, e)}
-                >
-                  <SortableContext
-                    items={items.map((c) => c.id)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    <ul className="p-3 space-y-2">
-                      {items.map((ch) => (
-                        <SortableChapterRow
-                          key={ch.id}
-                          ch={ch}
-                          onEdit={() => setForm((f) => ({ ...f, id: ch.id }))}
-                          onDelete={() => {
-                            if (confirm("Hoofdstuk verwijderen?")) del.mutate(ch.id);
-                          }}
-                        />
-                      ))}
-                    </ul>
-                  </SortableContext>
-                </DndContext>
+                {topicKeys.map((topic) => {
+                  const items = topicGroups[topic] ?? [];
+                  const dragKey = `${subject}::${topic}`;
+
+                  return (
+                    <div key={topic || "__no_topic__"}>
+                      {/* Topic header — only shown when there's a topic name */}
+                      {topic && (
+                        <div className="border-b bg-gray-50 px-5 py-2 flex items-center justify-between">
+                          <h4 className="text-sm font-semibold text-gray-700">{topic}</h4>
+                          <button
+                            className="text-xs px-2 py-1 rounded bg-sky-100 text-sky-700 hover:bg-sky-200"
+                            onClick={() => {
+                              resetForm();
+                              setForm((f) => ({ ...f, subject, topic }));
+                              document
+                                .getElementById("chapter-form")
+                                ?.scrollIntoView({ behavior: "smooth" });
+                            }}
+                          >
+                            + Hoofdstuk in {topic}
+                          </button>
+                        </div>
+                      )}
+
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={(e) => handleDragEnd(dragKey, e)}
+                      >
+                        <SortableContext
+                          items={items.map((c) => c.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          <ul className="p-3 space-y-2">
+                            {items.map((ch) => (
+                              <SortableChapterRow
+                                key={ch.id}
+                                ch={ch}
+                                onEdit={() => setForm((f) => ({ ...f, id: ch.id }))}
+                                onDelete={() => {
+                                  if (confirm("Hoofdstuk verwijderen?")) del.mutate(ch.id);
+                                }}
+                              />
+                            ))}
+                          </ul>
+                        </SortableContext>
+                      </DndContext>
+                    </div>
+                  );
+                })}
               </div>
             );
           })
