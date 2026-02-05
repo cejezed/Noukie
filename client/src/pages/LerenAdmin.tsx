@@ -221,7 +221,7 @@ export default function LerenAdmin() {
       if (form.id) {
         const { error } = await supabase
           .from("study_chapters")
-          .update({ ...payload, updated_at: new Date().toISOString() })
+          .update(payload)
           .eq("id", form.id);
         if (error) throw error;
       } else {
