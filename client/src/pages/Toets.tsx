@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { ChevronRight, FolderClosed, FolderOpen } from "lucide-react";
 
 /** Hulpje om huidige userId op te halen */
 async function getUid() {
@@ -9,9 +10,16 @@ async function getUid() {
   return data.user?.id ?? null;
 }
 
+function safe(v: unknown): string {
+  if (v == null) return "";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+
 export default function Toets() {
   const [, navigate] = useLocation();
   const [userId, setUserId] = useState<string | null>(null);
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set());
 
   // --- Import formulier state ---
   const [subject, setSubject] = useState("");
@@ -37,12 +45,35 @@ export default function Toets() {
         .from("study_quizzes")
         .select("*")
         .eq("is_published", true)
+        .order("subject", { ascending: true })
+        .order("chapter", { ascending: true })
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
     },
   });
+
+  // --- Group by subject → chapter ---
+  type ChapterGroup = Record<string, any[]>;
+  const grouped: Record<string, ChapterGroup> = {};
+  for (const q of quizzes.data ?? []) {
+    const subj = safe(q.subject) || "Overig";
+    const ch = safe(q.chapter) || "";
+    if (!grouped[subj]) grouped[subj] = {};
+    if (!grouped[subj][ch]) grouped[subj][ch] = [];
+    grouped[subj][ch].push(q);
+  }
+  const subjectKeys = Object.keys(grouped).sort();
+
+  function toggleFolder(key: string) {
+    setOpenFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const canImport = subject.trim() && chapter.trim() && title.trim() && text.trim();
 
@@ -85,8 +116,8 @@ export default function Toets() {
       <h1 className="text-2xl font-semibold mb-6">Toetsen</h1>
 
       {/* Lijst met gepubliceerde toetsen */}
-      <section className="mb-8 bg-white rounded-2xl shadow p-6">
-        <h2 className="text-lg font-semibold mb-4">Beschikbare toetsen</h2>
+      <section className="mb-8 space-y-4">
+        <h2 className="text-lg font-semibold">Beschikbare toetsen</h2>
 
         {!userId ? (
           <p className="text-sm text-gray-500">Inloggen vereist…</p>
@@ -94,48 +125,77 @@ export default function Toets() {
           <p>Laden…</p>
         ) : quizzes.isError ? (
           <p className="text-red-600">Er ging iets mis bij het laden.</p>
-        ) : quizzes.data?.length ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {quizzes.data.map((q: any) => {
-              const subject = typeof q.subject === 'object' ? JSON.stringify(q.subject) : String(q.subject ?? "");
-              const chapter = typeof q.chapter === 'object' ? JSON.stringify(q.chapter) : String(q.chapter ?? "");
-              const qTitle = typeof q.title === 'object' ? JSON.stringify(q.title) : String(q.title ?? "");
-              const desc = typeof q.description === 'object' ? JSON.stringify(q.description) : (q.description ? String(q.description) : "");
-
-              return (
-              <div
-                key={q.id}
-                className="bg-white border rounded-2xl p-4 hover:shadow"
-              >
-                <div className="text-sm text-gray-500">
-                  {subject} · {chapter}
-                </div>
-                <div className="font-semibold mb-2">{qTitle}</div>
-                {desc && (
-                  <div className="text-sm text-gray-600 line-clamp-2 mb-3">{desc}</div>
-                )}
-
-                {/* Mode keuze knoppen */}
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => navigate(`/toets/spelen?quiz=${q.id}&mode=practice`)}
-                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    📚 Oefenen
-                  </button>
-                  <button
-                    onClick={() => navigate(`/toets/spelen?quiz=${q.id}&mode=game`)}
-                    className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                  >
-                    🎮 Game (2 min)
-                  </button>
-                </div>
-              </div>
-              );
-            })}
-          </div>
-        ) : (
+        ) : subjectKeys.length === 0 ? (
           <p className="text-gray-600">Nog geen gepubliceerde toetsen.</p>
+        ) : (
+          subjectKeys.map((subj) => {
+            const chapterGroups = grouped[subj];
+            const chapterKeys = Object.keys(chapterGroups).sort((a, b) => {
+              if (!a && b) return 1;
+              if (a && !b) return -1;
+              return a.localeCompare(b);
+            });
+            const totalQuizzes = Object.values(chapterGroups).reduce((s, arr) => s + arr.length, 0);
+
+            return (
+              <div key={subj} className="bg-white rounded-2xl shadow overflow-hidden">
+                <div className="border-b px-5 py-4">
+                  <h3 className="text-lg font-semibold">{subj}</h3>
+                  <p className="text-xs text-gray-500">
+                    {totalQuizzes} toets{totalQuizzes !== 1 ? "en" : ""}
+                  </p>
+                </div>
+
+                {chapterKeys.map((ch) => {
+                  const quizList = chapterGroups[ch];
+                  const folderKey = `${subj}::${ch}`;
+                  const isOpen = !ch || openFolders.has(folderKey);
+
+                  // Quizzes without a chapter: show directly
+                  if (!ch) {
+                    return (
+                      <div key="__no_chapter__" className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {quizList.map((q: any) => (
+                          <QuizCard key={q.id} q={q} navigate={navigate} />
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  // Chapters: collapsible folder
+                  return (
+                    <div key={ch}>
+                      <button
+                        className="w-full text-left bg-gray-50 border-b px-5 py-3 flex items-center gap-3 hover:bg-gray-100 transition-colors"
+                        onClick={() => toggleFolder(folderKey)}
+                      >
+                        <ChevronRight
+                          className={`w-4 h-4 text-gray-500 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                        />
+                        {isOpen ? (
+                          <FolderOpen className="w-4 h-4 text-sky-600" />
+                        ) : (
+                          <FolderClosed className="w-4 h-4 text-gray-500" />
+                        )}
+                        <span className="text-sm font-semibold text-gray-700">{ch}</span>
+                        <span className="text-xs text-gray-400 ml-auto">
+                          {quizList.length} toets{quizList.length !== 1 ? "en" : ""}
+                        </span>
+                      </button>
+
+                      {isOpen && (
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {quizList.map((q: any) => (
+                            <QuizCard key={q.id} q={q} navigate={navigate} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })
         )}
       </section>
 
@@ -201,7 +261,7 @@ export default function Toets() {
 
           <div>
             <label className="block text-sm mb-1">
-              Lijst (bijv. “term[TAB]definitie” per regel):
+              Lijst (bijv. "term[TAB]definitie" per regel):
             </label>
             <textarea
               className="w-full border rounded p-3 min-h-[200px]"
@@ -233,5 +293,34 @@ export default function Toets() {
         </form>
       </section>
     </main>
+  );
+}
+
+function QuizCard({ q, navigate }: { q: any; navigate: (path: string) => void }) {
+  const qTitle = safe(q.title);
+  const desc = safe(q.description);
+
+  return (
+    <div className="bg-white border rounded-2xl p-4 hover:shadow">
+      <div className="font-semibold mb-1">{qTitle}</div>
+      {desc && (
+        <div className="text-sm text-gray-600 line-clamp-2 mb-3">{desc}</div>
+      )}
+
+      <div className="flex gap-2 mt-3">
+        <button
+          onClick={() => navigate(`/toets/spelen?quiz=${q.id}&mode=practice`)}
+          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          Oefenen
+        </button>
+        <button
+          onClick={() => navigate(`/toets/spelen?quiz=${q.id}&mode=game`)}
+          className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          Game (2 min)
+        </button>
+      </div>
+    </div>
   );
 }
